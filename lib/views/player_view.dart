@@ -156,7 +156,68 @@ class PlayerView extends ConsumerWidget {
                         const SizedBox(height: 10),
                         _field(lastnameC, "По батькові"),
                         const SizedBox(height: 10),
-                        _field(dobC, "Дата народження (дд.мм.рррр)"),
+                        TextField(
+                          controller: dobC,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: "Дата народження",
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.calendar_today),
+                              onPressed: () async {
+                                DateTime initial = DateTime(2000);
+                                if (dobC.text.isNotEmpty && dobC.text.contains('.')) {
+                                  final parts = dobC.text.split('.');
+                                  if (parts.length == 3) {
+                                    final parsed = DateTime.tryParse(
+                                      '${parts[2]}-${parts[1]}-${parts[0]}',
+                                    );
+                                    if (parsed != null) initial = parsed;
+                                  }
+                                }
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: initial,
+                                  firstDate: DateTime(1920),
+                                  lastDate: DateTime.now(),
+                                  locale: const Locale('uk'),
+                                );
+                                if (picked != null) {
+                                  final day = picked.day.toString().padLeft(2, '0');
+                                  final month = picked.month.toString().padLeft(2, '0');
+                                  final year = picked.year.toString();
+                                  dobC.text = '$day.$month.$year';
+                                }
+                              },
+                            ),
+                          ),
+                          onTap: () async {
+                            DateTime initial = DateTime(2000);
+                            if (dobC.text.isNotEmpty && dobC.text.contains('.')) {
+                              final parts = dobC.text.split('.');
+                              if (parts.length == 3) {
+                                final parsed = DateTime.tryParse(
+                                  '${parts[2]}-${parts[1]}-${parts[0]}',
+                                );
+                                if (parsed != null) initial = parsed;
+                              }
+                            }
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: initial,
+                              firstDate: DateTime(1920),
+                              lastDate: DateTime.now(),
+                              locale: const Locale('uk'),
+                            );
+                            if (picked != null) {
+                              final day = picked.day.toString().padLeft(2, '0');
+                              final month = picked.month.toString().padLeft(2, '0');
+                              final year = picked.year.toString();
+                              dobC.text = '$day.$month.$year';
+                            }
+                          },
+                        ),
                         const SizedBox(height: 15),
                         DropdownButtonFormField<int>(
                           value: gender,
