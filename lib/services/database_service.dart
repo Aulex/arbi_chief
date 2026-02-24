@@ -16,7 +16,7 @@ class DatabaseService {
         Platform.isWindows ? Directory.current.path : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v7.db');
+    final path = join(dbPath, 'tournament_blueprint_v8.db');
 
     return await openDatabase(
       path,
@@ -192,6 +192,24 @@ class DatabaseService {
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
           )
         ''');
+
+        // 15. CMP_ENTITY
+        await db.execute('''
+          CREATE TABLE CMP_ENTITY (
+            ent_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ent_t_type INTEGER,
+            ent_name TEXT,
+            FOREIGN KEY (ent_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
+          )
+        ''');
+
+        // ── Seed data ──
+
+        // Tournament types
+        await db.insert('CMP_TOURNAMENT_TYPE', {
+          'type_code': '1',
+          'type_name': 'Шахи',
+        });
       },
     );
   }
