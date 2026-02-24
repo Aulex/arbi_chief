@@ -16,7 +16,7 @@ class DatabaseService {
         Platform.isWindows ? Directory.current.path : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v11.db');
+    final path = join(dbPath, 'tournament_blueprint_v12.db');
 
     return await openDatabase(
       path,
@@ -202,9 +202,7 @@ class DatabaseService {
         // ── Seed data ──
 
         // Tournament types
-        await db.insert('CMP_TOURNAMENT_TYPE', {
-          'type_name': 'Шахи',
-        });
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Шахи'});
         await db.insert('CMP_ENTITY', {
           'ent_t_type': '1',
           'ent_name': 'Tournament',
@@ -215,6 +213,132 @@ class DatabaseService {
         });
         await db.insert('CMP_ENTITY', {'ent_t_type': '1', 'ent_name': 'Team'});
         await db.insert('CMP_ENTITY', {'ent_t_type': '1', 'ent_name': 'Event'});
+
+        await db.insert('CMP_ATTR', {
+          'attr_id': '1',
+          'attr_name': 'Тип контролю часу',
+          'attr_data_type': 'DICT',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '2',
+          'attr_name': 'Система жеребкування',
+          'attr_data_type': 'DICT',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '3',
+          'attr_name': 'Кількість кіл',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '4',
+          'attr_name': 'Сортування стартового списку',
+          'attr_data_type': 'DICT',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '5',
+          'attr_name': 'Формат заліку',
+          'attr_data_type': 'DICT',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '6',
+          'attr_name': 'Запасні гравці',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '7',
+          'attr_name': 'Система нарахування очок',
+          'attr_data_type': 'DICT',
+          'attr_entity_type': '1',
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': '8',
+          'attr_name': 'Тай-брейки',
+          'attr_data_type': 'DICT',
+          'attr_entity_type': '1',
+        });
+
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '1',
+          'dict_value': 'Рапід',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '1',
+          'dict_value': 'Бліц',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '1',
+          'dict_value': 'Класика',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '2',
+          'dict_value': 'Швейцарська',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '2',
+          'dict_value': 'Колова',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '2',
+          'dict_value': 'Олімпійська (на вибування)',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '4',
+          'dict_value': 'За алфавітом',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '4',
+          'dict_value': 'За рейтингом',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '5',
+          'dict_value': 'Особистий',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '5',
+          'dict_value': 'Командний',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '5',
+          'dict_value': 'Особисто-командний',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '7',
+          'dict_value': 'Перемога',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '7',
+          'dict_value': 'Нічия',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '7',
+          'dict_value': 'Поразка',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Особиста зустріч',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Бухгольц (повний)',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Бухгольц (усічений)',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Зоннеборн-Бергер',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Кількість перемог',
+        });
       },
     );
   }
