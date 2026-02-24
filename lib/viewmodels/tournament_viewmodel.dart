@@ -24,6 +24,7 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     int? locationId,
     int? organizerId,
     String? selectedTimeControl,
+    String? selectedPairingSystem,
   }) async {
     final svc = ref.read(tournamentServiceProvider);
 
@@ -39,11 +40,19 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
 
     final tId = await svc.saveTournament(t);
 
-    // Save "Тип контролю часу" (attr_id=1) to CMP_ATTR_VALUE
+    // Save "Тип контролю часу" (attr_id=1)
     if (selectedTimeControl != null) {
       final dictId = await svc.getDictId(1, selectedTimeControl);
       if (dictId != null) {
         await svc.saveAttrValue(tId: tId, attrId: 1, dictId: dictId);
+      }
+    }
+
+    // Save "Система жеребкування" (attr_id=2)
+    if (selectedPairingSystem != null) {
+      final dictId = await svc.getDictId(2, selectedPairingSystem);
+      if (dictId != null) {
+        await svc.saveAttrValue(tId: tId, attrId: 2, dictId: dictId);
       }
     }
 

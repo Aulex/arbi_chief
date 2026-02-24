@@ -70,9 +70,12 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
   Future<void> _loadAttrValues(int tId) async {
     final svc = ref.read(tournamentServiceProvider);
     final timeControl = await svc.getAttrDictValue(tId, 1);
-    if (timeControl != null && mounted) {
-      setState(() => selectedTimeControl = timeControl);
-    }
+    final pairingSystem = await svc.getAttrDictValue(tId, 2);
+    if (!mounted) return;
+    setState(() {
+      if (timeControl != null) selectedTimeControl = timeControl;
+      if (pairingSystem != null) selectedPairingSystem = pairingSystem;
+    });
   }
 
   String _formatDateTime(DateTime dt) {
@@ -114,6 +117,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       dateBegin: dateBegin,
       dateEnd: dateEnd,
       selectedTimeControl: selectedTimeControl,
+      selectedPairingSystem: selectedPairingSystem,
     );
 
     setState(() => _isLoading = false);
@@ -436,7 +440,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       ),
       RadioListTile<String>(
         title: const Text('Олімпійська (на вибування)'),
-        value: 'Олімпійська',
+        value: 'Олімпійська (на вибування)',
         groupValue: selectedPairingSystem,
         onChanged: (value) => setState(() => selectedPairingSystem = value!),
       ),
