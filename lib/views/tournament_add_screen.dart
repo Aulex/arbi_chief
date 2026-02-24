@@ -73,12 +73,30 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
     final pairingSystem = await svc.getAttrDictValue(tId, 2);
     final rounds = await svc.getAttrValue(tId, 3);
     final startingListSort = await svc.getAttrDictValue(tId, 4);
+    final scoringFormat = await svc.getAttrDictValue(tId, 5);
+    final substitutes = await svc.getAttrValue(tId, 6);
+    final scoringPoints = await svc.getAttrDictValueMap(tId, 7);
+    final tieBreakers = await svc.getAttrDictValueList(tId, 8);
     if (!mounted) return;
     setState(() {
       if (timeControl != null) selectedTimeControl = timeControl;
       if (pairingSystem != null) selectedPairingSystem = pairingSystem;
       if (rounds != null) roundsController.text = rounds;
       if (startingListSort != null) _startingListSort = startingListSort;
+      if (scoringFormat != null) _scoringFormat = scoringFormat;
+      if (substitutes != null) _allowSubstitutes = substitutes == '1';
+      if (scoringPoints.containsKey('Перемога')) {
+        _winPointsController.text = scoringPoints['Перемога']!;
+      }
+      if (scoringPoints.containsKey('Нічия')) {
+        _drawPointsController.text = scoringPoints['Нічия']!;
+      }
+      if (scoringPoints.containsKey('Поразка')) {
+        _lossPointsController.text = scoringPoints['Поразка']!;
+      }
+      for (final key in _tieBreakers.keys) {
+        _tieBreakers[key] = tieBreakers.contains(key);
+      }
     });
   }
 
@@ -116,6 +134,11 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
         ? '${_endDateTime!.day.toString().padLeft(2, '0')}.${_endDateTime!.month.toString().padLeft(2, '0')}.${_endDateTime!.year}'
         : '';
 
+    final selectedTieBreakers = _tieBreakers.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+
     await ref.read(tournamentProvider.notifier).addTournament(
       name: tNameController.text.trim(),
       dateBegin: dateBegin,
@@ -124,6 +147,14 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       selectedPairingSystem: selectedPairingSystem,
       rounds: roundsController.text.trim(),
       selectedStartingListSort: _startingListSort,
+      selectedScoringFormat: _scoringFormat,
+      allowSubstitutes: _allowSubstitutes,
+      scoringPoints: {
+        'Перемога': _winPointsController.text.trim(),
+        'Нічия': _drawPointsController.text.trim(),
+        'Поразка': _lossPointsController.text.trim(),
+      },
+      selectedTieBreakers: selectedTieBreakers,
     );
 
     setState(() => _isLoading = false);

@@ -81,6 +81,33 @@ class TournamentService {
     return rows.first['attr_value'] as String?;
   }
 
+  /// Get multiple dict_value→attr_value pairs for a multi-row attribute (e.g. scoring points).
+  Future<Map<String, String>> getAttrDictValueMap(int tId, int attrId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT d.dict_value, v.attr_value
+      FROM CMP_ATTR_VALUE v
+      JOIN CMP_ATTR_DICT d ON v.att_value_dict_id = d.dict_id
+      WHERE v.t_id = ? AND v.attr_id = ?
+    ''', [tId, attrId]);
+    return {
+      for (final r in rows)
+        r['dict_value'] as String: (r['attr_value'] as String?) ?? '',
+    };
+  }
+
+  /// Get list of selected dict_values for a multi-row attribute (e.g. tiebreakers).
+  Future<List<String>> getAttrDictValueList(int tId, int attrId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT d.dict_value
+      FROM CMP_ATTR_VALUE v
+      JOIN CMP_ATTR_DICT d ON v.att_value_dict_id = d.dict_id
+      WHERE v.t_id = ? AND v.attr_id = ?
+    ''', [tId, attrId]);
+    return rows.map((r) => r['dict_value'] as String).toList();
+  }
+
   /// Save one attribute value for a tournament.
   Future<void> saveAttrValue({
     required int tId,
@@ -101,5 +128,27 @@ class TournamentService {
       'attr_value': attrValue,
       'att_value_dict_id': dictId,
     });
+  }
+
+  /// Save multiple rows for one attr_id (e.g. scoring points or tiebreakers).
+  Future<void> saveAttrValues({
+    required int tId,
+    required int attrId,
+    required List<({int? dictId, String? attrValue})> values,
+  }) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_ATTR_VALUE',
+      where: 't_id = ? AND attr_id = ?',
+      whereArgs: [tId, attrId],
+    );
+    for (final v in values) {
+      await db.insert('CMP_ATTR_VALUE', {
+        't_id': tId,
+        'attr_id': attrId,
+        'attr_value': v.attrValue,
+        'att_value_dict_id': v.dictId,
+      });
+    }
   }
 }
