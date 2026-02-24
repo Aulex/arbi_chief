@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tournament_model.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/tournament_viewmodel.dart';
+import '../services/tournament_service.dart';
 
 class TournamentAddScreen extends ConsumerStatefulWidget {
   final Tournament? tournament;
@@ -60,6 +61,17 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
         _startDateTime = DateTime.parse(t.t_date_begin);
         _endDateTime = DateTime.parse(t.t_date_end);
       }
+      if (t.t_id != null) {
+        _loadAttrValues(t.t_id!);
+      }
+    }
+  }
+
+  Future<void> _loadAttrValues(int tId) async {
+    final svc = ref.read(tournamentServiceProvider);
+    final timeControl = await svc.getAttrDictValue(tId, 1);
+    if (timeControl != null && mounted) {
+      setState(() => selectedTimeControl = timeControl);
     }
   }
 
