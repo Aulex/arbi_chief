@@ -17,15 +17,9 @@ class TeamEditScreen extends ConsumerStatefulWidget {
 class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   late TextEditingController _nameC;
 
-  // slot 1-3 = Дошка 1-3, slot 4-6 = Запасний 1-3
-  final Map<int, int?> _slotToPlayerId = {
-    1: null,
-    2: null,
-    3: null,
-    4: null,
-    5: null,
-    6: null,
-  };
+  // player_state: 0 = active member, 1 = reserve
+  List<int> _members = [];
+  List<int> _reserves = [];
 
   bool _loading = true;
 
@@ -40,11 +34,14 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     final service = ref.read(teamServiceProvider);
     final assignments = await service.getTeamAssignments(widget.team.team_id!);
     setState(() {
-      for (final a in assignments) {
-        if (_slotToPlayerId.containsKey(a.player_state)) {
-          _slotToPlayerId[a.player_state] = a.player_id;
-        }
-      }
+      _members = assignments
+          .where((a) => a.player_state == 0)
+          .map((a) => a.player_id)
+          .toList();
+      _reserves = assignments
+          .where((a) => a.player_state == 1)
+          .map((a) => a.player_id)
+          .toList();
       _loading = false;
     });
   }
@@ -79,10 +76,6 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   }
 
   Widget _buildForm(BuildContext context, List<Player> allPlayers) {
-    // Separate female players for Дошка 3
-    final femalePlayers =
-        allPlayers.where((p) => p.player_gender == 1).toList();
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -118,69 +111,40 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          // Roster card
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              side: BorderSide(color: Colors.grey.shade300, width: 1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Склад команди',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Призначте гравців на дошки та запасних.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  const Divider(height: 24),
-                  _buildSlotDropdown(
-                    slot: 1,
-                    label: 'Дошка 1',
-                    players: allPlayers,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSlotDropdown(
-                    slot: 2,
-                    label: 'Дошка 2',
-                    players: allPlayers,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSlotDropdown(
-                    slot: 3,
-                    label: 'Дошка 3',
-                    subtitle: 'Тільки жінки',
-                    players: femalePlayers,
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(),
-                  const SizedBox(height: 12),
-                  _buildSlotDropdown(
-                    slot: 4,
-                    label: 'Запасний 1',
-                    players: allPlayers,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSlotDropdown(
-                    slot: 5,
-                    label: 'Запасний 2',
-                    players: allPlayers,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSlotDropdown(
-                    slot: 6,
-                    label: 'Запасний 3',
-                    players: allPlayers,
-                  ),
-                ],
+          // Members & Reserves
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildPlayerListCard(
+                  title: 'Основний склад (${_members.length})',
+                  subtitle: 'Гравці основного складу команди.',
+                  playerIds: _members,
+                  allPlayers: allPlayers,
+                  onAdd: (playerId) {
+                    setState(() => _members.add(playerId));
+                  },
+                  onRemove: (playerId) {
+                    setState(() => _members.remove(playerId));
+                  },
+                ),
               ),
-            ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildPlayerListCard(
+                  title: 'Запасні (${_reserves.length})',
+                  subtitle: 'Запасні гравці команди.',
+                  playerIds: _reserves,
+                  allPlayers: allPlayers,
+                  onAdd: (playerId) {
+                    setState(() => _reserves.add(playerId));
+                  },
+                  onRemove: (playerId) {
+                    setState(() => _reserves.remove(playerId));
+                  },
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           Row(
@@ -206,68 +170,88 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     );
   }
 
-  Widget _buildSlotDropdown({
-    required int slot,
-    required String label,
-    String? subtitle,
-    required List<Player> players,
+  Widget _buildPlayerListCard({
+    required String title,
+    required String subtitle,
+    required List<int> playerIds,
+    required List<Player> allPlayers,
+    required void Function(int playerId) onAdd,
+    required void Function(int playerId) onRemove,
   }) {
-    final selectedId = _slotToPlayerId[slot];
-    // Ensure selected value exists in the player list
-    final validSelected =
-        players.any((p) => p.player_id == selectedId) ? selectedId : null;
+    // Players already assigned to this list
+    final assigned = allPlayers
+        .where((p) => playerIds.contains(p.player_id))
+        .toList();
+    // Available = not in members and not in reserves
+    final usedIds = {..._members, ..._reserves};
+    final available = allPlayers
+        .where((p) => !usedIds.contains(p.player_id))
+        .toList();
 
-    return Row(
-      children: [
-        SizedBox(
-          width: 140,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              if (subtitle != null)
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.orange.shade700,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: DropdownButtonFormField<int?>(
-            value: validSelected,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            hint: const Text('Оберіть гравця'),
-            items: [
-              const DropdownMenuItem<int?>(
-                value: null,
-                child: Text('— Не обрано —'),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const Divider(height: 24),
+            // Add player dropdown
+            DropdownButtonFormField<int?>(
+              value: null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                hintText: 'Додати гравця...',
               ),
-              ...players.map((p) => DropdownMenuItem<int?>(
+              items: available.map((p) => DropdownMenuItem<int?>(
                     value: p.player_id,
                     child: Text(p.fullName),
-                  )),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _slotToPlayerId[slot] = value;
-              });
-            },
-          ),
+                  )).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  onAdd(value);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            // Assigned players list
+            ...assigned.map((p) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(p.fullName),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.remove_circle_outline,
+                        color: Colors.red),
+                    onPressed: () => onRemove(p.player_id!),
+                  ),
+                )),
+            if (assigned.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Немає гравців',
+                  style: TextStyle(color: Colors.grey.shade500),
+                ),
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -276,10 +260,9 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     if (name.isEmpty) return;
 
     final updatedTeam = widget.team.copyWith(team_name: name);
-    await ref.read(teamServiceProvider).saveTeam(updatedTeam);
-    await ref
-        .read(teamServiceProvider)
-        .saveAssignments(widget.team.team_id!, _slotToPlayerId);
+    final service = ref.read(teamServiceProvider);
+    await service.saveTeam(updatedTeam);
+    await service.saveAssignments(widget.team.team_id!, _members, _reserves);
 
     ref.invalidate(teamProvider);
 

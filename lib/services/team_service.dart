@@ -6,7 +6,7 @@ class PlayerTeamAssignment {
   final int? pte_id;
   final int team_id;
   final int player_id;
-  final int player_state; // 1-3 = Дошка 1-3, 4-6 = Запасний 1-3
+  final int player_state; // 0 = active member, 1 = reserve
 
   const PlayerTeamAssignment({
     this.pte_id,
@@ -67,20 +67,31 @@ class TeamService {
     return maps.map((m) => PlayerTeamAssignment.fromJson(m)).toList();
   }
 
-  Future<void> saveAssignments(int teamId, Map<int, int?> slotToPlayerId) async {
+  /// Saves player-team assignments.
+  /// [members] - list of player IDs for active members (player_state = 0)
+  /// [reserves] - list of player IDs for reserves (player_state = 1)
+  Future<void> saveAssignments(int teamId, List<int> members, List<int> reserves) async {
     final db = await _dbService.database;
+    final today = DateTime.now().toIso8601String().split('T').first;
     // Remove old assignments for this team
     await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ?', whereArgs: [teamId]);
-    // Insert new ones
-    for (final entry in slotToPlayerId.entries) {
-      if (entry.value != null) {
-        await db.insert('CMP_PLAYER_TEAM', {
-          'team_id': teamId,
-          'player_id': entry.value,
-          'player_state': entry.key,
-          'asgn_date': DateTime.now().toIso8601String().split('T').first,
-        });
-      }
+    // Insert active members
+    for (final playerId in members) {
+      await db.insert('CMP_PLAYER_TEAM', {
+        'team_id': teamId,
+        'player_id': playerId,
+        'player_state': 0,
+        'asgn_date': today,
+      });
+    }
+    // Insert reserves
+    for (final playerId in reserves) {
+      await db.insert('CMP_PLAYER_TEAM', {
+        'team_id': teamId,
+        'player_id': playerId,
+        'player_state': 1,
+        'asgn_date': today,
+      });
     }
   }
 }
