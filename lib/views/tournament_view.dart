@@ -69,7 +69,7 @@ class TournamentView extends ConsumerWidget {
                         tournaments.isEmpty
                             ? const Center(
                               child: Text(
-                                "No tournaments yet. Tap 'Create Tournament' to start.",
+                                "Турнірів ще немає. Натисніть 'Створити турнір', щоб почати.",
                               ),
                             )
                             : ListView.builder(
@@ -147,7 +147,7 @@ class TournamentView extends ConsumerWidget {
                               },
                             ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Center(child: Text("Error: $e")),
+                error: (e, s) => Center(child: Text("Помилка: $e")),
               ),
             ),
           ],

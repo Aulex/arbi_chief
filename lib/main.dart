@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Tournament Manager Pro',
+      title: 'Менеджер турнірів',
       theme: ThemeData(useMaterial3: true),
       home: const MainView(),
     );

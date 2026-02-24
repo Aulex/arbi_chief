@@ -21,12 +21,12 @@ class MainView extends ConsumerWidget {
           ? const TournamentView()
           : const TournamentAddScreen(),
       const PlayerView(),
-      const Center(child: Text('Games Screen')),
-      const Center(child: Text('Settings Screen')),
+      const Center(child: Text('Екран ігор')),
+      const Center(child: Text('Екран налаштувань')),
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tournament Manager Pro'), elevation: 2),
+      appBar: AppBar(title: const Text('Менеджер турнірів'), elevation: 2),
       body: Row(
         children: [
           NavigationRail(
@@ -44,19 +44,19 @@ class MainView extends ConsumerWidget {
             destinations: const [
               NavigationRailDestination(
                 icon: Icon(Icons.emoji_events),
-                label: Text('Tournaments'),
+                label: Text('Турніри'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.people),
-                label: Text('Players'),
+                label: Text('Гравці'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.sports_esports),
-                label: Text('Games'),
+                label: Text('Ігри'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.settings),
-                label: Text('Settings'),
+                label: Text('Налаштування'),
               ),
             ],
           ),

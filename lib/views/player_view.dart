@@ -64,7 +64,7 @@ class PlayerView extends ConsumerWidget {
               child: playersAsync.when(
                 data: (players) {
                   if (players.isEmpty) {
-                    return const Center(child: Text("No players found."));
+                    return const Center(child: Text("Гравців не знайдено."));
                   }
                   return SingleChildScrollView(
                     child: DataTable(
@@ -114,7 +114,7 @@ class PlayerView extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, s) => Center(child: Text("Error: $e")),
+                error: (e, s) => Center(child: Text("Помилка: $e")),
               ),
             ),
           ],
@@ -138,28 +138,28 @@ class PlayerView extends ConsumerWidget {
           (context) => StatefulBuilder(
             builder:
                 (context, setST) => AlertDialog(
-                  title: Text(player == null ? "Add Player" : "Edit Player"),
+                  title: Text(player == null ? "Додати гравця" : "Редагувати гравця"),
                   content: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _field(nameC, "First Name"),
+                        _field(nameC, "Ім'я"),
                         const SizedBox(height: 10),
-                        _field(surnameC, "Surname"),
+                        _field(surnameC, "Прізвище"),
                         const SizedBox(height: 10),
-                        _field(lastnameC, "Last Name (Patronymic)"),
+                        _field(lastnameC, "По батькові"),
                         const SizedBox(height: 10),
-                        _field(dobC, "Birth Date (dd.mm.yyyy)"),
+                        _field(dobC, "Дата народження (дд.мм.рррр)"),
                         const SizedBox(height: 15),
                         DropdownButtonFormField<int>(
                           value: gender,
                           decoration: const InputDecoration(
-                            labelText: "Gender",
+                            labelText: "Стать",
                             border: OutlineInputBorder(),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 0, child: Text("Male")),
-                            DropdownMenuItem(value: 1, child: Text("Female")),
+                            DropdownMenuItem(value: 0, child: Text("Чоловіча")),
+                            DropdownMenuItem(value: 1, child: Text("Жіноча")),
                           ],
                           onChanged: (v) => setST(() => gender = v!),
                         ),
@@ -169,7 +169,7 @@ class PlayerView extends ConsumerWidget {
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text("Cancel"),
+                      child: const Text("Скасувати"),
                     ),
                     ElevatedButton(
                       onPressed: () {
@@ -201,7 +201,7 @@ class PlayerView extends ConsumerWidget {
                           Navigator.pop(context);
                         }
                       },
-                      child: const Text("Save"),
+                      child: const Text("Зберегти"),
                     ),
                   ],
                 ),
