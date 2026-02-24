@@ -137,22 +137,7 @@ final tournamentProvider =
     );
 
 // --- Tournament Participants (family provider keyed by t_id) ---
-class ParticipantsNotifier extends FamilyAsyncNotifier<List<Player>, int> {
-  @override
-  Future<List<Player>> build(int tId) {
-    return ref.watch(tournamentServiceProvider).getParticipants(tId);
-  }
-
-  Future<void> add(int playerId) async {
-    await ref.read(tournamentServiceProvider).addParticipant(arg, playerId);
-    ref.invalidateSelf();
-  }
-
-  Future<void> remove(int playerId) async {
-    await ref.read(tournamentServiceProvider).removeParticipant(arg, playerId);
-    ref.invalidateSelf();
-  }
-}
-
-final participantsProvider = AsyncNotifierProvider.family<
-    ParticipantsNotifier, List<Player>, int>(ParticipantsNotifier.new);
+final participantsProvider =
+    FutureProvider.family<List<Player>, int>((ref, tId) {
+  return ref.watch(tournamentServiceProvider).getParticipants(tId);
+});

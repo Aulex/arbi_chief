@@ -302,10 +302,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     emptyText: 'Немає учасників',
                     actionIcon: Icons.remove_circle_outline,
                     actionColor: Colors.redAccent,
-                    onAction: (player) {
-                      ref
-                          .read(participantsProvider(tId).notifier)
-                          .remove(player.player_id!);
+                    onAction: (player) async {
+                      final svc = ref.read(tournamentServiceProvider);
+                      await svc.removeParticipant(tId, player.player_id!);
+                      ref.invalidate(participantsProvider(tId));
                     },
                   ),
                 ),
@@ -318,10 +318,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     emptyText: 'Немає доступних гравців',
                     actionIcon: Icons.add_circle_outline,
                     actionColor: Colors.green,
-                    onAction: (player) {
-                      ref
-                          .read(participantsProvider(tId).notifier)
-                          .add(player.player_id!);
+                    onAction: (player) async {
+                      final svc = ref.read(tournamentServiceProvider);
+                      await svc.addParticipant(tId, player.player_id!);
+                      ref.invalidate(participantsProvider(tId));
                     },
                   ),
                 ),
