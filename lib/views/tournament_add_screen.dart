@@ -140,6 +140,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
         .toList();
 
     await ref.read(tournamentProvider.notifier).addTournament(
+      existingId: widget.isEditMode ? widget.tournament?.t_id : null,
       name: tNameController.text.trim(),
       dateBegin: dateBegin,
       dateEnd: dateEnd,

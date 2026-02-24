@@ -17,6 +17,7 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
   }
 
   Future<void> addTournament({
+    int? existingId,
     required String name,
     required String dateBegin,
     required String dateEnd,
@@ -35,7 +36,7 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     final svc = ref.read(tournamentServiceProvider);
 
     final t = Tournament(
-      t_id: null,
+      t_id: existingId,
       t_name: name,
       t_date_begin: Tournament.formatForDB(dateBegin),
       t_date_end: Tournament.formatForDB(dateEnd),
