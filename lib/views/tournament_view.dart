@@ -129,7 +129,36 @@ class TournamentView extends ConsumerWidget {
                                             color: Colors.red,
                                           ),
                                           onPressed: () {
-                                            // TODO: Implement delete confirmation and logic
+                                            showDialog(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Text('Видалити турнір?'),
+                                                content: Text(
+                                                  'Ви впевнені, що хочете видалити турнір "${t.t_name}"?',
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.pop(ctx),
+                                                    child: const Text('Скасувати'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.red,
+                                                    ),
+                                                    onPressed: () {
+                                                      ref
+                                                          .read(tournamentProvider.notifier)
+                                                          .removeTournament(t.t_id!);
+                                                      Navigator.pop(ctx);
+                                                    },
+                                                    child: const Text(
+                                                      'Видалити',
+                                                      style: TextStyle(color: Colors.white),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
                                           },
                                           style: IconButton.styleFrom(
                                             backgroundColor: Colors.red
