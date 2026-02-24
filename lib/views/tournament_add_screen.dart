@@ -148,7 +148,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       TextFormField(
         controller: tNameController,
         decoration: const InputDecoration(
-          hintText: 'Спартакіада ПООП',
           border: OutlineInputBorder(),
         ),
       ),
@@ -200,7 +199,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
                     TextFormField(
                       controller: _cityController,
                       decoration: const InputDecoration(
-                        hintText: 'Южноукраїнськ',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -217,7 +215,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
                     TextFormField(
                       controller: _addressController,
                       decoration: const InputDecoration(
-                        hintText: 'проспект незалежності 10',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -267,7 +264,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
                     TextFormField(
                       controller: _organizerSiteController,
                       decoration: const InputDecoration(
-                        hintText: 'https://example.com',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -284,7 +280,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
                     TextFormField(
                       controller: _organizerPhoneController,
                       decoration: const InputDecoration(
-                        hintText: '5-99-79',
                         border: OutlineInputBorder(),
                       ),
                     ),
