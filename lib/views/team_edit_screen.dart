@@ -211,6 +211,7 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
             const Divider(height: 24),
             // Add player dropdown
             DropdownButtonFormField<int?>(
+              key: ValueKey(usedIds.length),
               value: null,
               isExpanded: true,
               decoration: const InputDecoration(
