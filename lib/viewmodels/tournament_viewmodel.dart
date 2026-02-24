@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tournament_model.dart';
+import '../models/player_model.dart';
 import '../services/tournament_service.dart';
 import 'shared_providers.dart';
 
@@ -134,3 +135,24 @@ final tournamentProvider =
     AsyncNotifierProvider<TournamentNotifier, List<Tournament>>(
       TournamentNotifier.new,
     );
+
+// --- Tournament Participants (family provider keyed by t_id) ---
+class ParticipantsNotifier extends FamilyAsyncNotifier<List<Player>, int> {
+  @override
+  Future<List<Player>> build(int tId) {
+    return ref.watch(tournamentServiceProvider).getParticipants(tId);
+  }
+
+  Future<void> add(int playerId) async {
+    await ref.read(tournamentServiceProvider).addParticipant(arg, playerId);
+    ref.invalidateSelf();
+  }
+
+  Future<void> remove(int playerId) async {
+    await ref.read(tournamentServiceProvider).removeParticipant(arg, playerId);
+    ref.invalidateSelf();
+  }
+}
+
+final participantsProvider = AsyncNotifierProvider.family<
+    ParticipantsNotifier, List<Player>, int>(ParticipantsNotifier.new);

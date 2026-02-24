@@ -277,51 +277,75 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildParticipantsTab() {
-    final playersAsync = ref.watch(playerProvider);
+    final tId = widget.tournament.t_id!;
+    final participantsAsync = ref.watch(participantsProvider(tId));
+    final allPlayersAsync = ref.watch(playerProvider);
 
-    return playersAsync.when(
-      data: (allPlayers) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Expanded(
-              child: _ParticipantsCard(
-                title: 'Учасники (0)',
-                subtitle: 'Гравці, зареєстровані в цьому турнірі.',
-                players: [],
-                actionIcon: Icons.remove_circle_outline,
-              ),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: _AvailablePlayersCard(
-                allPlayers: allPlayers,
-              ),
-            ),
-          ],
+    return participantsAsync.when(
+      data: (participants) {
+        final participantIds = participants.map((p) => p.player_id).toSet();
+
+        return allPlayersAsync.when(
+          data: (allPlayers) {
+            final available = allPlayers
+                .where((p) => !participantIds.contains(p.player_id))
+                .toList();
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _buildPlayerListCard(
+                    title: 'Учасники (${participants.length})',
+                    subtitle: 'Гравці, зареєстровані в цьому турнірі.',
+                    players: participants,
+                    emptyText: 'Немає учасників',
+                    actionIcon: Icons.remove_circle_outline,
+                    actionColor: Colors.redAccent,
+                    onAction: (player) {
+                      ref
+                          .read(participantsProvider(tId).notifier)
+                          .remove(player.player_id!);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: _buildPlayerListCard(
+                    title: 'Доступні гравці (${available.length})',
+                    subtitle: 'Додайте гравців із загального списку.',
+                    players: available,
+                    emptyText: 'Немає доступних гравців',
+                    actionIcon: Icons.add_circle_outline,
+                    actionColor: Colors.green,
+                    onAction: (player) {
+                      ref
+                          .read(participantsProvider(tId).notifier)
+                          .add(player.player_id!);
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, s) => Center(child: Text('Помилка: $e')),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, s) => Center(child: Text('Помилка: $e')),
     );
   }
-}
 
-class _ParticipantsCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final List<Player> players;
-  final IconData actionIcon;
-
-  const _ParticipantsCard({
-    required this.title,
-    required this.subtitle,
-    required this.players,
-    required this.actionIcon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildPlayerListCard({
+    required String title,
+    required String subtitle,
+    required List<Player> players,
+    required String emptyText,
+    required IconData actionIcon,
+    required Color actionColor,
+    required void Function(Player) onAction,
+  }) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -345,82 +369,20 @@ class _ParticipantsCard extends StatelessWidget {
             const Divider(height: 24),
             Expanded(
               child: players.isEmpty
-                  ? const Center(child: Text('Немає учасників'))
+                  ? Center(child: Text(emptyText))
                   : ListView.separated(
                       itemCount: players.length,
-                      separatorBuilder: (context, index) => const Divider(),
+                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        return ListTile(
-                          title: Text(players[index].fullName),
-                          trailing: IconButton(
-                            icon: Icon(actionIcon, color: Colors.red),
-                            onPressed: () {
-                              /* Remove logic */
-                            },
-                          ),
-                          contentPadding: EdgeInsets.zero,
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AvailablePlayersCard extends StatelessWidget {
-  final List<Player> allPlayers;
-
-  const _AvailablePlayersCard({required this.allPlayers});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Доступні гравці (${allPlayers.length})',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Додайте гравців із загального списку.',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
-            ),
-            const Divider(height: 24),
-            Expanded(
-              child: allPlayers.isEmpty
-                  ? const Center(child: Text('Немає доступних гравців'))
-                  : ListView.separated(
-                      itemCount: allPlayers.length,
-                      separatorBuilder: (context, index) => const Divider(),
-                      itemBuilder: (context, index) {
-                        final player = allPlayers[index];
+                        final player = players[index];
                         return ListTile(
                           title: Text(player.fullName),
-                          subtitle: Text(
-                            player.birthDateForUI.isNotEmpty
-                                ? player.birthDateForUI
-                                : '',
-                          ),
+                          subtitle: player.birthDateForUI.isNotEmpty
+                              ? Text(player.birthDateForUI)
+                              : null,
                           trailing: IconButton(
-                            icon: const Icon(
-                              Icons.add_circle_outline,
-                              color: Colors.green,
-                            ),
-                            onPressed: () {
-                              /* Add to tournament logic */
-                            },
+                            icon: Icon(actionIcon, color: actionColor),
+                            onPressed: () => onAction(player),
                           ),
                           contentPadding: EdgeInsets.zero,
                         );

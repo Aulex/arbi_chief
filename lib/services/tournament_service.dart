@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../models/tournament_model.dart';
+import '../models/player_model.dart';
 import 'database_service.dart';
 
 class TournamentService {
@@ -35,8 +36,48 @@ class TournamentService {
 
   Future<void> deleteTournament(int id) async {
     final db = await _dbService.database;
+    await db.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
+  }
+
+  // --- Tournament Participants (CMP_PLAYER_TOURNAMENT) ---
+
+  Future<List<Player>> getParticipants(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT p.*
+      FROM CMP_PLAYER p
+      JOIN CMP_PLAYER_TOURNAMENT pt ON p.player_id = pt.player_id
+      WHERE pt.t_id = ?
+      ORDER BY p.player_surname, p.player_name
+    ''', [tId]);
+    return rows.map((r) => Player.fromJson(r)).toList();
+  }
+
+  Future<void> addParticipant(int tId, int playerId) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_PLAYER_TOURNAMENT',
+      where: 't_id = ? AND player_id = ?',
+      whereArgs: [tId, playerId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return;
+    await db.insert('CMP_PLAYER_TOURNAMENT', {
+      't_id': tId,
+      'player_id': playerId,
+      'asgn_date': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<void> removeParticipant(int tId, int playerId) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_PLAYER_TOURNAMENT',
+      where: 't_id = ? AND player_id = ?',
+      whereArgs: [tId, playerId],
+    );
   }
 
   /// Look up dict_id by attr_id + dict_value text.
