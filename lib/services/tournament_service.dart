@@ -67,6 +67,20 @@ class TournamentService {
     return rows.first['dict_value'] as String;
   }
 
+  /// Get plain attr_value text for a tournament attribute (non-dict).
+  Future<String?> getAttrValue(int tId, int attrId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_ATTR_VALUE',
+      columns: ['attr_value'],
+      where: 't_id = ? AND attr_id = ?',
+      whereArgs: [tId, attrId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['attr_value'] as String?;
+  }
+
   /// Save one attribute value for a tournament.
   Future<void> saveAttrValue({
     required int tId,

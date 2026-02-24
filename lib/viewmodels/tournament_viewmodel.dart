@@ -25,6 +25,8 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     int? organizerId,
     String? selectedTimeControl,
     String? selectedPairingSystem,
+    String? rounds,
+    String? selectedStartingListSort,
   }) async {
     final svc = ref.read(tournamentServiceProvider);
 
@@ -40,7 +42,7 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
 
     final tId = await svc.saveTournament(t);
 
-    // Save "Тип контролю часу" (attr_id=1)
+    // Save "Тип контролю часу" (attr_id=1) — DICT
     if (selectedTimeControl != null) {
       final dictId = await svc.getDictId(1, selectedTimeControl);
       if (dictId != null) {
@@ -48,11 +50,24 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
       }
     }
 
-    // Save "Система жеребкування" (attr_id=2)
+    // Save "Система жеребкування" (attr_id=2) — DICT
     if (selectedPairingSystem != null) {
       final dictId = await svc.getDictId(2, selectedPairingSystem);
       if (dictId != null) {
         await svc.saveAttrValue(tId: tId, attrId: 2, dictId: dictId);
+      }
+    }
+
+    // Save "Кількість кіл" (attr_id=3) — INTEGER
+    if (rounds != null && rounds.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 3, attrValue: rounds);
+    }
+
+    // Save "Сортування стартового списку" (attr_id=4) — DICT
+    if (selectedStartingListSort != null) {
+      final dictId = await svc.getDictId(4, selectedStartingListSort);
+      if (dictId != null) {
+        await svc.saveAttrValue(tId: tId, attrId: 4, dictId: dictId);
       }
     }
 

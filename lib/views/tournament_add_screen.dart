@@ -71,10 +71,14 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
     final svc = ref.read(tournamentServiceProvider);
     final timeControl = await svc.getAttrDictValue(tId, 1);
     final pairingSystem = await svc.getAttrDictValue(tId, 2);
+    final rounds = await svc.getAttrValue(tId, 3);
+    final startingListSort = await svc.getAttrDictValue(tId, 4);
     if (!mounted) return;
     setState(() {
       if (timeControl != null) selectedTimeControl = timeControl;
       if (pairingSystem != null) selectedPairingSystem = pairingSystem;
+      if (rounds != null) roundsController.text = rounds;
+      if (startingListSort != null) _startingListSort = startingListSort;
     });
   }
 
@@ -118,6 +122,8 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       dateEnd: dateEnd,
       selectedTimeControl: selectedTimeControl,
       selectedPairingSystem: selectedPairingSystem,
+      rounds: roundsController.text.trim(),
+      selectedStartingListSort: _startingListSort,
     );
 
     setState(() => _isLoading = false);
