@@ -47,7 +47,8 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
   final _organizerNameController = TextEditingController();
   final _organizerSiteController = TextEditingController();
   final _organizerPhoneController = TextEditingController();
-  DateTimeRange? _selectedDateRange;
+  DateTime? _startDateTime;
+  DateTime? _endDateTime;
 
   @override
   void initState() {
@@ -56,12 +57,17 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       final t = widget.tournament!;
       tNameController.text = t.t_name;
       if (t.t_date_begin.isNotEmpty && t.t_date_end.isNotEmpty) {
-        _selectedDateRange = DateTimeRange(
-          start: DateTime.parse(t.t_date_begin),
-          end: DateTime.parse(t.t_date_end),
-        );
+        _startDateTime = DateTime.parse(t.t_date_begin);
+        _endDateTime = DateTime.parse(t.t_date_end);
       }
     }
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final d = dt.toLocal().toString().split(' ')[0];
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$d $h:$m';
   }
 
   @override
@@ -153,29 +159,97 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       ),
       const SizedBox(height: 20),
       const Text('Терміни проведення'),
-      TextFormField(
-        readOnly: true,
-        decoration: InputDecoration(
-          hintText:
-              _selectedDateRange == null
-                  ? 'Виберіть дати'
-                  : "${_selectedDateRange!.start.toLocal().toString().split(' ')[0]} - ${_selectedDateRange!.end.toLocal().toString().split(' ')[0]}",
-          prefixIcon: const Icon(Icons.calendar_today),
-          border: const OutlineInputBorder(),
-        ),
-        onTap: () async {
-          final picked = await showDateRangePicker(
-            context: context,
-            firstDate: DateTime(2023),
-            lastDate: DateTime(2030),
-            currentDate: DateTime.now(),
-          );
-          if (picked != null) {
-            setState(() {
-              _selectedDateRange = picked;
-            });
-          }
-        },
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Початок'),
+                const SizedBox(height: 8),
+                TextFormField(
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    hintText: _startDateTime == null
+                        ? 'Дата та час'
+                        : _formatDateTime(_startDateTime!),
+                    prefixIcon: const Icon(Icons.calendar_today),
+                    border: const OutlineInputBorder(),
+                  ),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _startDateTime ?? DateTime.now(),
+                      firstDate: DateTime(2023),
+                      lastDate: DateTime(2030),
+                    );
+                    if (date != null && mounted) {
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: _startDateTime != null
+                            ? TimeOfDay.fromDateTime(_startDateTime!)
+                            : const TimeOfDay(hour: 9, minute: 0),
+                      );
+                      if (time != null) {
+                        setState(() {
+                          _startDateTime = DateTime(
+                            date.year, date.month, date.day,
+                            time.hour, time.minute,
+                          );
+                        });
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Закінчення'),
+                const SizedBox(height: 8),
+                TextFormField(
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    hintText: _endDateTime == null
+                        ? 'Дата та час'
+                        : _formatDateTime(_endDateTime!),
+                    prefixIcon: const Icon(Icons.calendar_today),
+                    border: const OutlineInputBorder(),
+                  ),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _endDateTime ?? _startDateTime ?? DateTime.now(),
+                      firstDate: DateTime(2023),
+                      lastDate: DateTime(2030),
+                    );
+                    if (date != null && mounted) {
+                      final time = await showTimePicker(
+                        context: context,
+                        initialTime: _endDateTime != null
+                            ? TimeOfDay.fromDateTime(_endDateTime!)
+                            : const TimeOfDay(hour: 18, minute: 0),
+                      );
+                      if (time != null) {
+                        setState(() {
+                          _endDateTime = DateTime(
+                            date.year, date.month, date.day,
+                            time.hour, time.minute,
+                          );
+                        });
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 20),
       const Text('Локація'),
