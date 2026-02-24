@@ -1,0 +1,58 @@
+# Flutter/Dart/Pub
+.metadata
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+build/
+
+# Databases (local data)
+*.db
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/build/
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Windows
+windows/build/
+windows/**/*.vcxproj.user
+windows/**/*.suo
+windows/**/*.opensdf
+windows/**/*.sdf
+windows/**/*.ipch
+
+# OS
+.DS_Store
+Thumbs.db
