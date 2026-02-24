@@ -16,19 +16,20 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     return ref.watch(tournamentServiceProvider).getAllTournaments();
   }
 
-  // Updated to match the CMP_TOURNAMENT table structure 🏆
   Future<void> addTournament({
     required String name,
-    required String dateBegin, // Expected as dd.mm.yyyy from UI
-    required String dateEnd, // Expected as dd.mm.yyyy from UI
+    required String dateBegin,
+    required String dateEnd,
     int? typeId,
     int? locationId,
     int? organizerId,
+    String? selectedTimeControl,
   }) async {
+    final svc = ref.read(tournamentServiceProvider);
+
     final t = Tournament(
-      t_id: null, // SQLite handles autoincrement
+      t_id: null,
       t_name: name,
-      // Using our model's helper to store as yyyy-mm-dd 📅
       t_date_begin: Tournament.formatForDB(dateBegin),
       t_date_end: Tournament.formatForDB(dateEnd),
       t_type: typeId,
@@ -36,9 +37,16 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
       t_org: organizerId,
     );
 
-    await ref.read(tournamentServiceProvider).saveTournament(t);
+    final tId = await svc.saveTournament(t);
 
-    // Refresh the local list
+    // Save "Тип контролю часу" (attr_id=1) to CMP_ATTR_VALUE
+    if (selectedTimeControl != null) {
+      final dictId = await svc.getDictId(1, selectedTimeControl);
+      if (dictId != null) {
+        await svc.saveAttrValue(tId: tId, attrId: 1, dictId: dictId);
+      }
+    }
+
     ref.invalidateSelf();
   }
 

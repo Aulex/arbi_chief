@@ -85,6 +85,29 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
     super.dispose();
   }
 
+  Future<void> _saveTournament() async {
+    if (tNameController.text.trim().isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    final dateBegin = _startDateTime != null
+        ? '${_startDateTime!.day.toString().padLeft(2, '0')}.${_startDateTime!.month.toString().padLeft(2, '0')}.${_startDateTime!.year}'
+        : '';
+    final dateEnd = _endDateTime != null
+        ? '${_endDateTime!.day.toString().padLeft(2, '0')}.${_endDateTime!.month.toString().padLeft(2, '0')}.${_endDateTime!.year}'
+        : '';
+
+    await ref.read(tournamentProvider.notifier).addTournament(
+      name: tNameController.text.trim(),
+      dateBegin: dateBegin,
+      dateEnd: dateEnd,
+      selectedTimeControl: selectedTimeControl,
+    );
+
+    setState(() => _isLoading = false);
+    ref.read(tournamentNavProvider.notifier).showList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -125,12 +148,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed:
-                      _isLoading
-                          ? null
-                          : () {
-                            /* Your Save Logic */
-                          },
+                  onPressed: _isLoading ? null : _saveTournament,
                   child: Text(
                     widget.isEditMode ? "Зберегти зміни" : "Створити турнір",
                   ),
