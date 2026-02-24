@@ -16,7 +16,7 @@ class DatabaseService {
         Platform.isWindows ? Directory.current.path : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v8.db');
+    final path = join(dbPath, 'tournament_blueprint_v9.db');
 
     return await openDatabase(
       path,
@@ -34,7 +34,17 @@ class DatabaseService {
           )
         ''');
 
-        // 2. CMP_ATTR
+        // 2. CMP_ENTITY
+        await db.execute('''
+          CREATE TABLE CMP_ENTITY (
+            ent_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ent_t_type INTEGER,
+            ent_name TEXT,
+            FOREIGN KEY (ent_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
+          )
+        ''');
+
+        // 3. CMP_ATTR
         await db.execute('''
           CREATE TABLE CMP_ATTR (
             attr_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +55,8 @@ class DatabaseService {
             attr_t_type INTEGER,
             attr_data_type TEXT,
             attr_entity_type INTEGER,
-            FOREIGN KEY (attr_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
+            FOREIGN KEY (attr_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id),
+            FOREIGN KEY (attr_entity_type) REFERENCES CMP_ENTITY (ent_id)
           )
         ''');
 
@@ -190,16 +201,6 @@ class DatabaseService {
             asgn_date TEXT,
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
-          )
-        ''');
-
-        // 15. CMP_ENTITY
-        await db.execute('''
-          CREATE TABLE CMP_ENTITY (
-            ent_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ent_t_type INTEGER,
-            ent_name TEXT,
-            FOREIGN KEY (ent_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
 
