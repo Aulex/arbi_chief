@@ -34,8 +34,6 @@ class MainView extends ConsumerWidget {
       tournamentScreen,
       const PlayerView(),
       const TeamView(),
-      const Center(child: Text('Екран ігор')),
-      const Center(child: Text('Екран налаштувань')),
     ];
 
     return Scaffold(
@@ -66,14 +64,6 @@ class MainView extends ConsumerWidget {
               NavigationRailDestination(
                 icon: Icon(Icons.groups),
                 label: Text('Команди'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.sports_esports),
-                label: Text('Ігри'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.settings),
-                label: Text('Налаштування'),
               ),
             ],
           ),
