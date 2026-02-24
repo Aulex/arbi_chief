@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'tournament_add_screen.dart';
 import '../models/tournament_model.dart';
+import '../models/player_model.dart';
+import '../viewmodels/player_viewmodel.dart';
 
 class TournamentEditScreen extends ConsumerStatefulWidget {
   final Tournament tournament;
@@ -244,49 +246,51 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildParticipantsTab() {
-    final tournamentPlayers = [
-      'Олександр Смирнов',
-      'Максим Кузнєцов',
-      'Сергій Соколов',
-    ];
-    final availablePlayers = [
-      'Дмитро Іванов',
-      'Андрій Попов',
-      'Олексій Лєбєдєв',
-      'Артем Козлов',
-      'Ілля Новіков',
-    ];
+    final playersAsync = ref.watch(playerProvider);
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _buildPlayerListCard(
-            'Учасники (3)',
-            'Гравці, зареєстровані в цьому турнірі.',
-            tournamentPlayers,
-            Icons.remove_circle_outline,
-          ),
-        ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: _buildPlayerListCard(
-            'Доступні гравці (57)',
-            'Додайте гравців із загального списку.',
-            availablePlayers,
-            Icons.add_circle_outline,
-          ),
-        ),
-      ],
+    return playersAsync.when(
+      data: (allPlayers) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Expanded(
+              child: _ParticipantsCard(
+                title: 'Учасники (0)',
+                subtitle: 'Гравці, зареєстровані в цьому турнірі.',
+                players: [],
+                actionIcon: Icons.remove_circle_outline,
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _AvailablePlayersCard(
+                allPlayers: allPlayers,
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, s) => Center(child: Text('Помилка: $e')),
     );
   }
+}
 
-  Widget _buildPlayerListCard(
-    String title,
-    String subtitle,
-    List<String> players,
-    IconData actionIcon,
-  ) {
+class _ParticipantsCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final List<Player> players;
+  final IconData actionIcon;
+
+  const _ParticipantsCard({
+    required this.title,
+    required this.subtitle,
+    required this.players,
+    required this.actionIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -309,28 +313,88 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
             ),
             const Divider(height: 24),
             Expanded(
-              child: ListView.separated(
-                itemCount: players.length,
-                separatorBuilder: (context, index) => const Divider(),
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    title: Text(players[index]),
-                    trailing: IconButton(
-                      icon: Icon(
-                        actionIcon,
-                        color:
-                            actionIcon == Icons.add_circle_outline
-                                ? Colors.green
-                                : Colors.red,
-                      ),
-                      onPressed: () {
-                        /* Add/Remove logic */
+              child: players.isEmpty
+                  ? const Center(child: Text('Немає учасників'))
+                  : ListView.separated(
+                      itemCount: players.length,
+                      separatorBuilder: (context, index) => const Divider(),
+                      itemBuilder: (context, index) {
+                        return ListTile(
+                          title: Text(players[index].fullName),
+                          trailing: IconButton(
+                            icon: Icon(actionIcon, color: Colors.red),
+                            onPressed: () {
+                              /* Remove logic */
+                            },
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                        );
                       },
                     ),
-                    contentPadding: EdgeInsets.zero,
-                  );
-                },
-              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvailablePlayersCard extends StatelessWidget {
+  final List<Player> allPlayers;
+
+  const _AvailablePlayersCard({required this.allPlayers});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Доступні гравці (${allPlayers.length})',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Додайте гравців із загального списку.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            const Divider(height: 24),
+            Expanded(
+              child: allPlayers.isEmpty
+                  ? const Center(child: Text('Немає доступних гравців'))
+                  : ListView.separated(
+                      itemCount: allPlayers.length,
+                      separatorBuilder: (context, index) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final player = allPlayers[index];
+                        return ListTile(
+                          title: Text(player.fullName),
+                          subtitle: Text(
+                            player.birthDateForUI.isNotEmpty
+                                ? player.birthDateForUI
+                                : '',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.add_circle_outline,
+                              color: Colors.green,
+                            ),
+                            onPressed: () {
+                              /* Add to tournament logic */
+                            },
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                        );
+                      },
+                    ),
             ),
           ],
         ),
