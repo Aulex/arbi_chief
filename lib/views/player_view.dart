@@ -66,8 +66,12 @@ class PlayerView extends ConsumerWidget {
                   if (players.isEmpty) {
                     return const Center(child: Text("Гравців не знайдено."));
                   }
-                  return SingleChildScrollView(
-                    child: DataTable(
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                    return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: DataTable(
                       headingTextStyle: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.black54,
@@ -111,6 +115,9 @@ class PlayerView extends ConsumerWidget {
                             );
                           }).toList(),
                     ),
+                    ),
+                  );
+                    },
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
