@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/navigation_viewmodel.dart';
 import '../viewmodels/nav_provider.dart'; // Import the new one
 import 'player_view.dart';
+import 'team_view.dart';
 import 'tournament_view.dart';
 import 'tournament_add_screen.dart';
 
@@ -21,6 +22,7 @@ class MainView extends ConsumerWidget {
           ? const TournamentView()
           : const TournamentAddScreen(),
       const PlayerView(),
+      const TeamView(),
       const Center(child: Text('Екран ігор')),
       const Center(child: Text('Екран налаштувань')),
     ];
@@ -49,6 +51,10 @@ class MainView extends ConsumerWidget {
               NavigationRailDestination(
                 icon: Icon(Icons.people),
                 label: Text('Гравці'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.groups),
+                label: Text('Команди'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.sports_esports),
