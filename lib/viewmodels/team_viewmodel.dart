@@ -16,7 +16,6 @@ class TeamNotifier extends AsyncNotifier<List<Team>> {
   Future<void> addTeam({required String name}) async {
     final team = Team(
       team_id: null,
-      team_code: '',
       team_name: name,
     );
     await ref.read(teamServiceProvider).saveTeam(team);

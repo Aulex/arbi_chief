@@ -16,7 +16,7 @@ class DatabaseService {
         Platform.isWindows ? Directory.current.path : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v10.db');
+    final path = join(dbPath, 'tournament_blueprint_v11.db');
 
     return await openDatabase(
       path,
@@ -29,7 +29,6 @@ class DatabaseService {
         await db.execute('''
           CREATE TABLE CMP_TOURNAMENT_TYPE (
             type_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type_code TEXT,
             type_name TEXT
           )
         ''');
@@ -48,7 +47,6 @@ class DatabaseService {
         await db.execute('''
           CREATE TABLE CMP_ATTR (
             attr_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            attr_code TEXT,
             attr_name TEXT,
             attr_enable INTEGER DEFAULT 1,
             attr_visible INTEGER DEFAULT 1,
@@ -74,7 +72,6 @@ class DatabaseService {
         await db.execute('''
           CREATE TABLE CMP_TOURNAMENT_LOCATION (
             location_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            location_code TEXT,
             location_country TEXT,
             location_city TEXT,
             location_address TEXT
@@ -85,7 +82,6 @@ class DatabaseService {
         await db.execute('''
           CREATE TABLE CMP_TOURNAMENT_ORGANIZER (
             organizer_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            organizer_code TEXT,
             organizer_name TEXT,
             organizer_email TEXT,
             organizer_phone TEXT
@@ -174,7 +170,6 @@ class DatabaseService {
         await db.execute('''
           CREATE TABLE CMP_TEAM (
             team_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_code TEXT,
             team_name TEXT
           )
         ''');
@@ -208,7 +203,6 @@ class DatabaseService {
 
         // Tournament types
         await db.insert('CMP_TOURNAMENT_TYPE', {
-          'type_code': '1',
           'type_name': 'Шахи',
         });
         await db.insert('CMP_ENTITY', {
