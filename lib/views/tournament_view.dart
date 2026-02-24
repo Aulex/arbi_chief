@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'tournament_edit_screen.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/nav_provider.dart';
 
@@ -101,15 +100,10 @@ class TournamentView extends ConsumerWidget {
                                       children: [
                                         OutlinedButton(
                                           onPressed: () {
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder:
-                                                    (context) =>
-                                                        TournamentEditScreen(
-                                                          tournament: t,
-                                                        ),
-                                              ),
-                                            );
+                                            ref
+                                                .read(tournamentNavProvider
+                                                    .notifier)
+                                                .showEdit(t);
                                           },
                                           child: const Text('Керувати'),
                                           style: OutlinedButton.styleFrom(

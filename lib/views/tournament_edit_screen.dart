@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'tournament_add_screen.dart';
 import '../models/tournament_model.dart';
 import '../models/player_model.dart';
+import '../viewmodels/nav_provider.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 
@@ -20,22 +21,12 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 5,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Керування турніром'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            children: [
-              // Header
-              Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            // Header
+            Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   side: BorderSide(color: Colors.grey.shade300, width: 1),
@@ -46,18 +37,31 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
                         children: [
-                          Text(
-                            'Керування турніром: ${widget.tournament.t_name}',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.bold),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            onPressed: () {
+                              ref
+                                  .read(tournamentNavProvider.notifier)
+                                  .showList();
+                            },
                           ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            'Ідентифікатор турніру: ${widget.tournament.t_id}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Керування турніром: ${widget.tournament.t_name}',
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                'Ідентифікатор турніру: ${widget.tournament.t_id}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -84,7 +88,9 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                                         .read(tournamentProvider.notifier)
                                         .removeTournament(widget.tournament.t_id!);
                                     Navigator.pop(ctx);
-                                    Navigator.of(context).pop();
+                                    ref
+                                        .read(tournamentNavProvider.notifier)
+                                        .showList();
                                   },
                                   child: const Text(
                                     'Видалити',
@@ -145,7 +151,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
