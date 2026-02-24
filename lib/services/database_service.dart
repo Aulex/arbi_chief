@@ -187,7 +187,21 @@ class DatabaseService {
           )
         ''');
 
-        // 14. CMP_PLAYER_TOURNAMENT
+        // 14. CMP_PLAYER_TEAM_ATTR_VALUE
+        await db.execute('''
+          CREATE TABLE CMP_PLAYER_TEAM_ATTR_VALUE (
+            pta_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pte_id INTEGER,
+            attr_id INTEGER,
+            attr_value TEXT,
+            att_value_dict_id INTEGER,
+            FOREIGN KEY (pte_id) REFERENCES CMP_PLAYER_TEAM (pte_id),
+            FOREIGN KEY (attr_id) REFERENCES CMP_ATTR (attr_id),
+            FOREIGN KEY (att_value_dict_id) REFERENCES CMP_ATTR_DICT (dict_id)
+          )
+        ''');
+
+        // 15. CMP_PLAYER_TOURNAMENT
         await db.execute('''
           CREATE TABLE CMP_PLAYER_TOURNAMENT (
             pt_id INTEGER PRIMARY KEY AUTOINCREMENT,
