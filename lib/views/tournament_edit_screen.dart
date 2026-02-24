@@ -210,7 +210,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text('Live-таблиця з результатами та тай-брейками.'),
+            const Text('Онлайн-таблиця з результатами та тай-брейками.'),
             const SizedBox(height: 16),
             Expanded(
               child: DataTable(
