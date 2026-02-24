@@ -4,6 +4,7 @@ import 'tournament_add_screen.dart';
 import '../models/tournament_model.dart';
 import '../models/player_model.dart';
 import '../viewmodels/player_viewmodel.dart';
+import '../viewmodels/tournament_viewmodel.dart';
 
 class TournamentEditScreen extends ConsumerStatefulWidget {
   final Tournament tournament;
@@ -62,7 +63,37 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                       ),
                       ElevatedButton.icon(
                         onPressed: () {
-                          // Delete logic
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Видалити турнір?'),
+                              content: Text(
+                                'Ви впевнені, що хочете видалити турнір "${widget.tournament.t_name}"?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx),
+                                  child: const Text('Скасувати'),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                  ),
+                                  onPressed: () {
+                                    ref
+                                        .read(tournamentProvider.notifier)
+                                        .removeTournament(widget.tournament.t_id!);
+                                    Navigator.pop(ctx);
+                                    Navigator.of(context).pop();
+                                  },
+                                  child: const Text(
+                                    'Видалити',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
                         },
                         icon: const Icon(Icons.delete_outline),
                         label: const Text('Видалити турнір'),
