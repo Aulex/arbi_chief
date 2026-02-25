@@ -36,6 +36,17 @@ class TournamentService {
 
   Future<void> deleteTournament(int id) async {
     final db = await _dbService.database;
+    // Delete player events and events for all stages of this tournament
+    final stages = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [id]);
+    for (final s in stages) {
+      final tsId = s['ts_id'] as int;
+      final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 'ts_id = ?', whereArgs: [tsId]);
+      for (final e in events) {
+        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [e['event_id']]);
+      }
+      await db.delete('CMP_EVENT', where: 'ts_id = ?', whereArgs: [tsId]);
+    }
+    await db.delete('CMP_TOURNAMENT_STAGE', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
