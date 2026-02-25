@@ -868,11 +868,20 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     return (_boardResults[boardNum]?[playerId] ?? {}).length;
   }
 
+  /// Коефіцієнт Бергера = сума очок переможених суперників
+  /// + половина очок суперників, з якими нічия.
   double _bergerCoefficient(int boardNum, int playerId) {
     final results = _boardResults[boardNum]?[playerId] ?? {};
     double sb = 0;
     for (final entry in results.entries) {
-      sb += entry.value * _totalPoints(boardNum, entry.key);
+      final result = entry.value;
+      final opponentPoints = _totalPoints(boardNum, entry.key);
+      if (result == 1.0) {
+        sb += opponentPoints;          // перемога: повна сума очок суперника
+      } else if (result == 0.5) {
+        sb += opponentPoints * 0.5;    // нічия: половина очок суперника
+      }
+      // поразка: 0
     }
     return sb;
   }
