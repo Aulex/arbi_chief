@@ -21,7 +21,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -124,7 +124,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 indicatorColor: Colors.indigo,
                 tabs: [
                   Tab(icon: Icon(Icons.grid_view_outlined), text: 'Огляд'),
-                  Tab(icon: Icon(Icons.shuffle_outlined), text: 'Жеребкування'),
+                  Tab(icon: Icon(Icons.dashboard_outlined), text: 'Дошки'),
+                  Tab(icon: Icon(Icons.sports_esports_outlined), text: 'Ігри'),
                   Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
                   Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
                   Tab(
@@ -139,7 +140,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 child: TabBarView(
                   children: [
                     _buildOverviewTab(),
-                    _buildPairingTab(),
+                    _buildBoardsTab(),
+                    _buildGamesTab(),
                     _buildTableTab(),
                     _buildParticipantsTab(),
                     TournamentAddScreen(
@@ -179,7 +181,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     );
   }
 
-  Widget _buildPairingTab() {
+  Widget _buildBoardsTab() {
     final tId = widget.tournament.t_id!;
     final svc = ref.read(tournamentServiceProvider);
     final teamSvc = ref.read(teamServiceProvider);
@@ -209,7 +211,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Жеребкування та результати',
+                  'Дошки',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
@@ -252,7 +254,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Жеребкування — Колова система',
+                        'Дошки — Колова система',
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
@@ -346,6 +348,135 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     title: Text(e.player.fullName),
                     subtitle: Text(e.teamName),
                   )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGamesTab() {
+    final tId = widget.tournament.t_id!;
+    final svc = ref.read(tournamentServiceProvider);
+    final teamSvc = ref.read(teamServiceProvider);
+
+    return FutureBuilder(
+      future: Future.wait([
+        svc.getGamesForTournament(tId),
+        teamSvc.getBoardAssignmentsForTournament(tId),
+      ]),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final games = snapshot.data![0]
+            as List<({int eventId, Player white, Player black, String? dateBegin})>;
+        final boards = snapshot.data![1]
+            as Map<int, List<({int teamId, String teamName, Player player})>>;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Create game card
+              _buildCreateGameCard(boards, tId),
+              const SizedBox(height: 16),
+              // Games list
+              _buildGamesListCard(games, tId),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCreateGameCard(
+    Map<int, List<({int teamId, String teamName, Player player})>> boards,
+    int tId,
+  ) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Створити гру',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Оберіть дошку та двох гравців з однієї дошки.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const Divider(height: 24),
+            _CreateGameForm(boards: boards, tId: tId),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGamesListCard(
+    List<({int eventId, Player white, Player black, String? dateBegin})> games,
+    int tId,
+  ) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Список ігор (${games.length})',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Divider(height: 24),
+            if (games.isEmpty)
+              Text(
+                'Ігор ще немає. Створіть першу гру вище.',
+                style: TextStyle(color: Colors.grey.shade500),
+              )
+            else
+              ...games.asMap().entries.map((entry) {
+                final i = entry.key;
+                final g = entry.value;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.indigo,
+                    child: Text(
+                      '${i + 1}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14),
+                    ),
+                  ),
+                  title: Text(
+                      '${g.white.fullName}  —  ${g.black.fullName}'),
+                  subtitle: g.dateBegin != null ? Text(g.dateBegin!) : null,
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () async {
+                      final svc = ref.read(tournamentServiceProvider);
+                      await svc.deleteGame(g.eventId);
+                      setState(() {});
+                    },
+                  ),
+                );
+              }),
           ],
         ),
       ),
@@ -531,5 +662,152 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         ),
       ),
     );
+  }
+}
+
+/// Stateful form for creating a game: pick board -> pick two players -> create.
+class _CreateGameForm extends ConsumerStatefulWidget {
+  final Map<int, List<({int teamId, String teamName, Player player})>> boards;
+  final int tId;
+
+  const _CreateGameForm({required this.boards, required this.tId});
+
+  @override
+  ConsumerState<_CreateGameForm> createState() => _CreateGameFormState();
+}
+
+class _CreateGameFormState extends ConsumerState<_CreateGameForm> {
+  int? _selectedBoard;
+  int? _player1Id;
+  int? _player2Id;
+
+  @override
+  Widget build(BuildContext context) {
+    final boardNumbers = widget.boards.keys.toList()..sort();
+    final playersOnBoard = _selectedBoard != null
+        ? widget.boards[_selectedBoard!] ?? []
+        : <({int teamId, String teamName, Player player})>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Board selector
+        DropdownButtonFormField<int?>(
+          key: ValueKey('board_select_${widget.tId}'),
+          value: _selectedBoard,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            labelText: 'Дошка',
+          ),
+          items: boardNumbers.map((b) {
+            final label = b == 3 ? 'Дошка $b (жіноча)' : 'Дошка $b';
+            return DropdownMenuItem<int?>(value: b, child: Text(label));
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedBoard = value;
+              _player1Id = null;
+              _player2Id = null;
+            });
+          },
+        ),
+        const SizedBox(height: 12),
+        // Two player selectors in a row
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<int?>(
+                key: ValueKey('p1_${_selectedBoard}_${_player2Id}'),
+                value: _player1Id,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  labelText: 'Гравець 1',
+                ),
+                items: playersOnBoard
+                    .where((e) => e.player.player_id != _player2Id)
+                    .map((e) => DropdownMenuItem<int?>(
+                          value: e.player.player_id,
+                          child: Text(
+                              '${e.player.fullName} (${e.teamName})'),
+                        ))
+                    .toList(),
+                onChanged: _selectedBoard == null
+                    ? null
+                    : (value) => setState(() => _player1Id = value),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text('—', style: TextStyle(fontSize: 20)),
+            ),
+            Expanded(
+              child: DropdownButtonFormField<int?>(
+                key: ValueKey('p2_${_selectedBoard}_${_player1Id}'),
+                value: _player2Id,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  labelText: 'Гравець 2',
+                ),
+                items: playersOnBoard
+                    .where((e) => e.player.player_id != _player1Id)
+                    .map((e) => DropdownMenuItem<int?>(
+                          value: e.player.player_id,
+                          child: Text(
+                              '${e.player.fullName} (${e.teamName})'),
+                        ))
+                    .toList(),
+                onChanged: _selectedBoard == null
+                    ? null
+                    : (value) => setState(() => _player2Id = value),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.indigo,
+            ),
+            onPressed:
+                (_player1Id != null && _player2Id != null) ? _create : null,
+            icon: const Icon(Icons.add),
+            label: const Text('Створити гру'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _create() async {
+    final svc = ref.read(tournamentServiceProvider);
+    final tsId = await svc.getOrCreateDefaultStage(widget.tId);
+    await svc.createGame(
+      tsId: tsId,
+      whitePlayerId: _player1Id!,
+      blackPlayerId: _player2Id!,
+    );
+    setState(() {
+      _player1Id = null;
+      _player2Id = null;
+    });
+    // Trigger rebuild of parent to refresh games list
+    if (context.mounted) {
+      (context.findAncestorStateOfType<_TournamentEditScreenState>())
+          ?.setState(() {});
+    }
   }
 }

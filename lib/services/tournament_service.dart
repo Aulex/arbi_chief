@@ -192,4 +192,101 @@ class TournamentService {
       });
     }
   }
+
+  // --- Games (CMP_EVENT + CMP_PLAYER_EVENT) ---
+
+  /// Ensure a default stage exists for the tournament, return its ts_id.
+  Future<int> getOrCreateDefaultStage(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TOURNAMENT_STAGE',
+      where: 't_id = ?',
+      whereArgs: [tId],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) return rows.first['ts_id'] as int;
+    return await db.insert('CMP_TOURNAMENT_STAGE', {
+      't_id': tId,
+      'ts_name': 'Основний етап',
+    });
+  }
+
+  /// Create a game between two players and return the event_id.
+  Future<int> createGame({
+    required int tsId,
+    required int whitePlayerId,
+    required int blackPlayerId,
+  }) async {
+    final db = await _dbService.database;
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final eventId = await db.insert('CMP_EVENT', {
+      'ts_id': tsId,
+      'event_date_begin': today,
+    });
+    await db.insert('CMP_PLAYER_EVENT', {
+      'event_id': eventId,
+      'player_id': whitePlayerId,
+      'asgn_date': today,
+    });
+    await db.insert('CMP_PLAYER_EVENT', {
+      'event_id': eventId,
+      'player_id': blackPlayerId,
+      'asgn_date': today,
+    });
+    return eventId;
+  }
+
+  /// Get all games for a tournament (via its stages).
+  Future<List<({int eventId, Player white, Player black, String? dateBegin})>>
+      getGamesForTournament(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT e.event_id, e.event_date_begin,
+             p1.player_id AS w_id, p1.player_surname AS w_surname,
+             p1.player_name AS w_name, p1.player_lastname AS w_lastname,
+             p1.player_gender AS w_gender, p1.player_date_birth AS w_dob,
+             p2.player_id AS b_id, p2.player_surname AS b_surname,
+             p2.player_name AS b_name, p2.player_lastname AS b_lastname,
+             p2.player_gender AS b_gender, p2.player_date_birth AS b_dob
+      FROM CMP_EVENT e
+      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
+      JOIN CMP_PLAYER_EVENT pe1 ON pe1.event_id = e.event_id
+      JOIN CMP_PLAYER_EVENT pe2 ON pe2.event_id = e.event_id AND pe2.pe_id > pe1.pe_id
+      JOIN CMP_PLAYER p1 ON pe1.player_id = p1.player_id
+      JOIN CMP_PLAYER p2 ON pe2.player_id = p2.player_id
+      WHERE ts.t_id = ?
+      ORDER BY e.event_id
+    ''', [tId]);
+    return rows.map((r) {
+      final white = Player(
+        player_id: r['w_id'] as int,
+        player_surname: r['w_surname'] as String? ?? '',
+        player_name: r['w_name'] as String? ?? '',
+        player_lastname: r['w_lastname'] as String? ?? '',
+        player_gender: r['w_gender'] as int? ?? 0,
+        player_date_birth: r['w_dob'] as String? ?? '',
+      );
+      final black = Player(
+        player_id: r['b_id'] as int,
+        player_surname: r['b_surname'] as String? ?? '',
+        player_name: r['b_name'] as String? ?? '',
+        player_lastname: r['b_lastname'] as String? ?? '',
+        player_gender: r['b_gender'] as int? ?? 0,
+        player_date_birth: r['b_dob'] as String? ?? '',
+      );
+      return (
+        eventId: r['event_id'] as int,
+        white: white,
+        black: black,
+        dateBegin: r['event_date_begin'] as String?,
+      );
+    }).toList();
+  }
+
+  /// Delete a game and its player events.
+  Future<void> deleteGame(int eventId) async {
+    final db = await _dbService.database;
+    await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+    await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+  }
 }
