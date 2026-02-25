@@ -36,11 +36,12 @@ class TeamService {
     return List.generate(maps.length, (i) => Team.fromJson(maps[i]));
   }
 
-  Future<void> saveTeam(Team team) async {
+  Future<Team> saveTeam(Team team) async {
     final db = await _dbService.database;
     final data = team.toJson();
     if (team.team_id == null) {
-      await db.insert('CMP_TEAM', data);
+      final id = await db.insert('CMP_TEAM', data);
+      return team.copyWith(team_id: id);
     } else {
       await db.update(
         'CMP_TEAM',
@@ -48,6 +49,7 @@ class TeamService {
         where: 'team_id = ?',
         whereArgs: [team.team_id],
       );
+      return team;
     }
   }
 
@@ -81,24 +83,48 @@ class TeamService {
     return maps.map((m) => PlayerTeamAssignment.fromJson(m)).toList();
   }
 
-  /// Saves player-team assignments.
-  /// [members] - list of player IDs for active members (player_state = 0)
-  /// [reserves] - list of player IDs for reserves (player_state = 1)
+  /// Saves player-team assignments with board numbers.
+  /// [members] - ordered list of player IDs for boards (player_state = 0).
+  ///   Position in list = board number (index + 1).
+  /// [reserves] - list of player IDs for the bench (player_state = 1).
   Future<void> saveAssignments(int teamId, List<int> members, List<int> reserves) async {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
-    // Remove old assignments for this team
+
+    // Clean up old attr values before deleting assignments
+    final oldAssignments = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['pte_id'],
+      where: 'team_id = ?',
+      whereArgs: [teamId],
+    );
+    for (final a in oldAssignments) {
+      await db.delete(
+        'CMP_PLAYER_TEAM_ATTR_VALUE',
+        where: 'pte_id = ?',
+        whereArgs: [a['pte_id']],
+      );
+    }
+
+    // Remove old assignments
     await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ?', whereArgs: [teamId]);
-    // Insert active members
-    for (final playerId in members) {
-      await db.insert('CMP_PLAYER_TEAM', {
+
+    // Insert board members with board number attribute (attr_id = 9)
+    for (int i = 0; i < members.length; i++) {
+      final pteId = await db.insert('CMP_PLAYER_TEAM', {
         'team_id': teamId,
-        'player_id': playerId,
+        'player_id': members[i],
         'player_state': 0,
         'asgn_date': today,
       });
+      await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+        'pte_id': pteId,
+        'attr_id': 9,
+        'attr_value': '${i + 1}',
+      });
     }
-    // Insert reserves
+
+    // Insert bench (reserves)
     for (final playerId in reserves) {
       await db.insert('CMP_PLAYER_TEAM', {
         'team_id': teamId,
@@ -107,6 +133,20 @@ class TeamService {
         'asgn_date': today,
       });
     }
+  }
+
+  /// Returns board members ordered by board number.
+  Future<List<int>> getBoardMembers(int teamId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id
+      FROM CMP_PLAYER_TEAM pt
+      LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
+        ON pt.pte_id = v.pte_id AND v.attr_id = 9
+      WHERE pt.team_id = ? AND pt.player_state = 0
+      ORDER BY CAST(v.attr_value AS INTEGER)
+    ''', [teamId]);
+    return rows.map((r) => r['player_id'] as int).toList();
   }
 
   // --- Player-Team Attribute Values (CMP_PLAYER_TEAM_ATTR_VALUE) ---

@@ -13,13 +13,14 @@ class TeamNotifier extends AsyncNotifier<List<Team>> {
     return ref.watch(teamServiceProvider).getAllTeams();
   }
 
-  Future<void> addTeam({required String name}) async {
+  Future<Team> addTeam({required String name}) async {
     final team = Team(
       team_id: null,
       team_name: name,
     );
-    await ref.read(teamServiceProvider).saveTeam(team);
+    final saved = await ref.read(teamServiceProvider).saveTeam(team);
     ref.invalidateSelf();
+    return saved;
   }
 
   Future<void> updateTeam(Team team) async {
