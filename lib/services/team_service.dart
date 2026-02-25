@@ -161,10 +161,10 @@ class TeamService {
     return rows.map((r) => r['player_id'] as int).toSet();
   }
 
-  /// Returns board data grouped by board number.
-  /// Each entry: team name + player for that board.
+  /// Returns board data grouped by board number, filtered to only include
+  /// players registered as participants in the given tournament.
   Future<Map<int, List<({int teamId, String teamName, Player player})>>>
-      getAllBoardAssignments() async {
+      getBoardAssignmentsForTournament(int tId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
       SELECT t.team_id, t.team_name, p.*,
@@ -172,11 +172,12 @@ class TeamService {
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_TEAM t ON pt.team_id = t.team_id
       JOIN CMP_PLAYER p ON pt.player_id = p.player_id
+      JOIN CMP_PLAYER_TOURNAMENT ptr ON ptr.player_id = p.player_id AND ptr.t_id = ?
       LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
         ON pt.pte_id = v.pte_id AND v.attr_id = 9
       WHERE pt.player_state = 0 AND v.attr_value IS NOT NULL
       ORDER BY CAST(v.attr_value AS INTEGER), t.team_name
-    ''');
+    ''', [tId]);
     final result = <int, List<({int teamId, String teamName, Player player})>>{};
     for (final r in rows) {
       final boardNum = r['board_number'] as int;

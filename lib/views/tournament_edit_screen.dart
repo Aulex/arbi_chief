@@ -193,7 +193,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         final pairingSystem = snapshot.data;
 
         if (pairingSystem == 'Колова') {
-          return _buildRoundRobinPairing(teamSvc);
+          return _buildRoundRobinPairing(teamSvc, tId);
         }
 
         // Placeholder for other systems
@@ -226,10 +226,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     );
   }
 
-  Widget _buildRoundRobinPairing(dynamic teamSvc) {
+  Widget _buildRoundRobinPairing(dynamic teamSvc, int tId) {
     return FutureBuilder<
         Map<int, List<({int teamId, String teamName, Player player})>>>(
-      future: teamSvc.getAllBoardAssignments(),
+      future: teamSvc.getBoardAssignmentsForTournament(tId),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
