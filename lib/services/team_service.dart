@@ -149,6 +149,18 @@ class TeamService {
     return rows.map((r) => r['player_id'] as int).toList();
   }
 
+  /// Returns player IDs assigned to any team OTHER than [excludeTeamId].
+  Future<Set<int>> getPlayersInOtherTeams(int excludeTeamId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['player_id'],
+      where: 'team_id != ?',
+      whereArgs: [excludeTeamId],
+    );
+    return rows.map((r) => r['player_id'] as int).toSet();
+  }
+
   // --- Player-Team Attribute Values (CMP_PLAYER_TEAM_ATTR_VALUE) ---
 
   /// Look up dict_id by attr_id + dict_value text.

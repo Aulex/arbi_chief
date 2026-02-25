@@ -23,6 +23,9 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   /// Bench (reserve) players
   List<int> _reserves = [];
 
+  /// Players already assigned to other teams (cannot be added here).
+  Set<int> _takenByOtherTeams = {};
+
   bool _loading = true;
 
   @override
@@ -42,9 +45,12 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
         .where((a) => a.player_state == 1)
         .map((a) => a.player_id)
         .toList();
+    // Load players taken by other teams
+    final taken = await service.getPlayersInOtherTeams(widget.team.team_id!);
     setState(() {
       _members = boardMembers;
       _reserves = reserves;
+      _takenByOtherTeams = taken;
       _loading = false;
     });
   }
@@ -162,9 +168,10 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
 
     final usedIds = {..._members, ..._reserves};
     final nextBoard = _members.length + 1;
-    // Board 3 is women-only: filter available players accordingly
+    // Exclude players in this team + other teams; board 3 is women-only
     final available = allPlayers
         .where((p) => !usedIds.contains(p.player_id))
+        .where((p) => !_takenByOtherTeams.contains(p.player_id))
         .where((p) => nextBoard != 3 || p.player_gender == 1)
         .toList();
 
@@ -315,6 +322,7 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     final usedIds = {..._members, ..._reserves};
     final available = allPlayers
         .where((p) => !usedIds.contains(p.player_id))
+        .where((p) => !_takenByOtherTeams.contains(p.player_id))
         .toList();
 
     return Card(
