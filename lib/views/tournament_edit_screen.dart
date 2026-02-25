@@ -125,7 +125,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 tabs: [
                   Tab(icon: Icon(Icons.grid_view_outlined), text: 'Огляд'),
                   Tab(icon: Icon(Icons.dashboard_outlined), text: 'Дошки'),
-                  Tab(icon: Icon(Icons.sports_esports_outlined), text: 'Ігри'),
+                  Tab(icon: Icon(Icons.castle_outlined), text: 'Ігри'),
                   Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
                   Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
                   Tab(
