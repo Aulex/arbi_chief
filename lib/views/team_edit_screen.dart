@@ -161,8 +161,11 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
         _members.indexOf(a.player_id!).compareTo(_members.indexOf(b.player_id!)));
 
     final usedIds = {..._members, ..._reserves};
+    final nextBoard = _members.length + 1;
+    // Board 3 is women-only: filter available players accordingly
     final available = allPlayers
         .where((p) => !usedIds.contains(p.player_id))
+        .where((p) => nextBoard != 3 || p.player_gender == 1)
         .toList();
 
     return Card(
@@ -191,12 +194,14 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
               key: ValueKey('board_${usedIds.length}'),
               value: null,
               isExpanded: true,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 isDense: true,
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
                 contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                hintText: 'Додати гравця на дошку...',
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                hintText: nextBoard == 3
+                    ? 'Додати гравця на дошку 3 (лише жінки)...'
+                    : 'Додати гравця на дошку...',
               ),
               items: available.map((p) => DropdownMenuItem<int?>(
                     value: p.player_id,
@@ -213,11 +218,12 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
             ...List.generate(assigned.length, (index) {
               final player = assigned[index];
               final boardNum = index + 1;
+              final isWomenBoard = boardNum == 3;
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(
                   radius: 16,
-                  backgroundColor: Colors.indigo,
+                  backgroundColor: isWomenBoard ? Colors.pink : Colors.indigo,
                   child: Text(
                     '$boardNum',
                     style: const TextStyle(
@@ -228,14 +234,16 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
                   ),
                 ),
                 title: Text(player.fullName),
-                subtitle: Text('Дошка $boardNum'),
+                subtitle: Text(
+                  isWomenBoard ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum',
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Move up
                     IconButton(
                       icon: const Icon(Icons.arrow_upward, size: 20),
-                      onPressed: index > 0
+                      onPressed: index > 0 && _canSwapBoards(index, index - 1, allPlayers)
                           ? () {
                               setState(() {
                                 final id = _members.removeAt(index);
@@ -247,7 +255,7 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
                     // Move down
                     IconButton(
                       icon: const Icon(Icons.arrow_downward, size: 20),
-                      onPressed: index < assigned.length - 1
+                      onPressed: index < assigned.length - 1 && _canSwapBoards(index, index + 1, allPlayers)
                           ? () {
                               setState(() {
                                 final id = _members.removeAt(index);
@@ -279,6 +287,23 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
         ),
       ),
     );
+  }
+
+  /// Check whether two players can swap board positions.
+  /// Board 3 (index 2) only allows women (player_gender == 1).
+  bool _canSwapBoards(int fromIndex, int toIndex, List<Player> allPlayers) {
+    final movingId = _members[fromIndex];
+    final targetId = _members[toIndex];
+    final movingPlayer = allPlayers.firstWhere((p) => p.player_id == movingId);
+    final targetPlayer = allPlayers.firstWhere((p) => p.player_id == targetId);
+
+    // After swap: movingPlayer goes to toIndex, targetPlayer goes to fromIndex
+    final movingNewBoard = toIndex + 1;
+    final targetNewBoard = fromIndex + 1;
+
+    if (movingNewBoard == 3 && movingPlayer.player_gender != 1) return false;
+    if (targetNewBoard == 3 && targetPlayer.player_gender != 1) return false;
+    return true;
   }
 
   /// Card for bench (reserve) players.
