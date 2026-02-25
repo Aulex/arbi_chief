@@ -347,6 +347,48 @@ class TournamentService {
     return result;
   }
 
+  /// Find a game between two players in a tournament, return eventId if found.
+  Future<int?> findGameBetweenPlayers(int tId, int player1Id, int player2Id) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT e.event_id
+      FROM CMP_EVENT e
+      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
+      JOIN CMP_PLAYER_EVENT pe1 ON pe1.event_id = e.event_id AND pe1.player_id = ?
+      JOIN CMP_PLAYER_EVENT pe2 ON pe2.event_id = e.event_id AND pe2.player_id = ?
+      WHERE ts.t_id = ?
+      LIMIT 1
+    ''', [player1Id, player2Id, tId]);
+    if (rows.isEmpty) return null;
+    return rows.first['event_id'] as int;
+  }
+
+  /// Save result for a specific player in a game; sets complement for opponent.
+  Future<void> saveResultForPlayer(int eventId, int playerId, double? playerResult) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_EVENT',
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+      orderBy: 'pe_id',
+    );
+    if (rows.length < 2) return;
+
+    final pe1Id = rows[0]['pe_id'];
+    final pe2Id = rows[1]['pe_id'];
+    final player1Id = rows[0]['player_id'] as int;
+
+    final complement = playerResult != null ? 1.0 - playerResult : null;
+
+    if (player1Id == playerId) {
+      await db.update('CMP_PLAYER_EVENT', {'event_result': playerResult}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+      await db.update('CMP_PLAYER_EVENT', {'event_result': complement}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+    } else {
+      await db.update('CMP_PLAYER_EVENT', {'event_result': playerResult}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+      await db.update('CMP_PLAYER_EVENT', {'event_result': complement}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+    }
+  }
+
   /// Save result for both players in a game.
   Future<void> saveGameResult(int eventId, double? whiteResult, double? blackResult) async {
     final db = await _dbService.database;

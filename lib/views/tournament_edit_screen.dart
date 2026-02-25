@@ -21,7 +21,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 5,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -125,7 +125,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 tabs: [
                   Tab(icon: Icon(Icons.grid_view_outlined), text: 'Огляд'),
                   Tab(icon: Icon(Icons.dashboard_outlined), text: 'Дошки'),
-                  Tab(icon: Icon(Icons.castle_outlined), text: 'Ігри'),
                   Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
                   Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
                   Tab(
@@ -141,7 +140,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   children: [
                     _buildOverviewTab(),
                     _buildBoardsTab(),
-                    _buildGamesTab(),
                     _buildTableTab(),
                     _buildParticipantsTab(),
                     TournamentAddScreen(
@@ -714,6 +712,7 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
 }
 
 /// Tab showing a round-robin cross-table per board with standings.
+/// Cells are tappable to enter results directly.
 class _CrossTableTab extends ConsumerStatefulWidget {
   final int tId;
   const _CrossTableTab({required this.tId});
@@ -767,6 +766,149 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     }
   }
 
+  // --- Result entry ---
+
+  Future<void> _onResultSelected(int rowPlayerId, int colPlayerId, double? result) async {
+    final svc = ref.read(tournamentServiceProvider);
+
+    if (result == null) {
+      // Clear: find the game and null out both results
+      final eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
+      if (eventId != null) {
+        await svc.saveResultForPlayer(eventId, rowPlayerId, null);
+      }
+    } else {
+      // Find or create game, then save
+      final tsId = await svc.getOrCreateDefaultStage(widget.tId);
+      var eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
+      eventId ??= await svc.createGame(
+        tsId: tsId,
+        whitePlayerId: rowPlayerId,
+        blackPlayerId: colPlayerId,
+      );
+      await svc.saveResultForPlayer(eventId, rowPlayerId, result);
+    }
+
+    await _loadData();
+  }
+
+  void _showResultPicker(
+    BuildContext context, {
+    required int rowPlayerId,
+    required int colPlayerId,
+    required String rowPlayerName,
+    required String colPlayerName,
+    required double? currentResult,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(
+          '$rowPlayerName  vs  $colPlayerName',
+          style: const TextStyle(fontSize: 16),
+        ),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 1.0),
+            child: Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text('1', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+                ),
+                const SizedBox(width: 12),
+                const Text('Перемога'),
+                if (currentResult == 1.0) ...[
+                  const Spacer(),
+                  Icon(Icons.check, color: Colors.green.shade700, size: 20),
+                ],
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 0.5),
+            child: Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text('½', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800)),
+                ),
+                const SizedBox(width: 12),
+                const Text('Нічия'),
+                if (currentResult == 0.5) ...[
+                  const Spacer(),
+                  Icon(Icons.check, color: Colors.amber.shade800, size: 20),
+                ],
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 0.0),
+            child: Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text('0', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800)),
+                ),
+                const SizedBox(width: 12),
+                const Text('Поразка'),
+                if (currentResult == 0.0) ...[
+                  const Spacer(),
+                  Icon(Icons.check, color: Colors.red.shade700, size: 20),
+                ],
+              ],
+            ),
+          ),
+          if (currentResult != null) ...[
+            const Divider(),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, -1.0),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.close, size: 18, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Очистити'),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).then((value) {
+      if (value == null) return;
+      _onResultSelected(
+        rowPlayerId,
+        colPlayerId,
+        value == -1.0 ? null : value,
+      );
+    });
+  }
+
+  // --- Calculations ---
+
   double _totalPoints(int boardNum, int playerId) {
     return (_boardResults[boardNum]?[playerId] ?? {})
         .values.fold(0.0, (sum, r) => sum + r);
@@ -797,11 +939,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     if (points == points.roundToDouble()) {
       return points.toStringAsFixed(1);
     }
-    // Show up to 2 decimal places, strip trailing zeros
     String s = points.toStringAsFixed(2);
     if (s.endsWith('0')) s = s.substring(0, s.length - 1);
     return s;
   }
+
+  // --- Build ---
 
   @override
   Widget build(BuildContext context) {
@@ -876,7 +1019,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Board header
             Row(
               children: [
                 CircleAvatar(
@@ -899,11 +1041,9 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
               ],
             ),
             const Divider(height: 24),
-            // Cross-table and standings side by side
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Cross-table (scrollable horizontally)
                 Expanded(
                   flex: 3,
                   child: SingleChildScrollView(
@@ -912,7 +1052,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
                   ),
                 ),
                 const SizedBox(width: 24),
-                // Standings
                 Expanded(
                   flex: 2,
                   child: SingleChildScrollView(
@@ -933,19 +1072,18 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     List<({int teamId, String teamName, Player player})> players,
   ) {
     final n = players.length;
-    final headerStyle = const TextStyle(
+    const headerStyle = TextStyle(
       fontWeight: FontWeight.bold,
       fontSize: 12,
       color: Colors.black54,
     );
-    final cellStyle = const TextStyle(fontSize: 13, color: Colors.black87);
+    const cellStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
-        // Header row
         TableRow(
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
@@ -959,7 +1097,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
             _tableCell('К.\nБергера', style: headerStyle),
           ],
         ),
-        // Data rows
         for (int i = 0; i < n; i++)
           TableRow(
             decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
@@ -981,12 +1118,10 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
                 if (i == j)
                   _diagonalCell()
                 else
-                  _resultCell(
-                    _formatResult(
-                      _boardResults[boardNum]
-                          ?[players[i].player.player_id!]
-                          ?[players[j].player.player_id!],
-                    ),
+                  _tappableResultCell(
+                    boardNum: boardNum,
+                    rowPlayer: players[i],
+                    colPlayer: players[j],
                   ),
               _tableCell(
                 _formatPoints(_totalPoints(boardNum, players[i].player.player_id!)),
@@ -1010,7 +1145,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     int boardNum,
     List<({int teamId, String teamName, Player player})> players,
   ) {
-    // Sort by points desc, then Berger desc
     final sorted = List.of(players);
     sorted.sort((a, b) {
       final pa = _totalPoints(boardNum, a.player.player_id!);
@@ -1021,19 +1155,18 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
       return bb.compareTo(ba);
     });
 
-    final headerStyle = const TextStyle(
+    const headerStyle = TextStyle(
       fontWeight: FontWeight.bold,
       fontSize: 12,
       color: Colors.black54,
     );
-    final cellStyle = const TextStyle(fontSize: 13, color: Colors.black87);
+    const cellStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
-        // Header
         TableRow(
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
@@ -1044,7 +1177,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
             _tableCell('Місце', style: headerStyle),
           ],
         ),
-        // Data rows
         for (int i = 0; i < sorted.length; i++)
           TableRow(
             decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
@@ -1079,6 +1211,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     );
   }
 
+  // --- Cell widgets ---
+
   Widget _tableCell(
     String text, {
     TextStyle? style,
@@ -1086,9 +1220,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     bool leftAlign = false,
   }) {
     return Container(
-      constraints: minWidth != null
-          ? BoxConstraints(minWidth: minWidth)
-          : null,
+      constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
       child: Text(
@@ -1106,7 +1238,16 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     );
   }
 
-  Widget _resultCell(String text) {
+  Widget _tappableResultCell({
+    required int boardNum,
+    required ({int teamId, String teamName, Player player}) rowPlayer,
+    required ({int teamId, String teamName, Player player}) colPlayer,
+  }) {
+    final result = _boardResults[boardNum]
+        ?[rowPlayer.player.player_id!]
+        ?[colPlayer.player.player_id!];
+    final text = _formatResult(result);
+
     Color? bgColor;
     if (text == '1') {
       bgColor = Colors.green.shade50;
@@ -1115,24 +1256,40 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     } else if (text == '½') {
       bgColor = Colors.amber.shade50;
     }
-    return Container(
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-      color: bgColor,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: text.isNotEmpty ? FontWeight.bold : FontWeight.normal,
-          color: text == '1'
-              ? Colors.green.shade700
-              : text == '0'
-                  ? Colors.red.shade700
-                  : text == '½'
-                      ? Colors.amber.shade800
-                      : Colors.black87,
+
+    return GestureDetector(
+      onTap: () => _showResultPicker(
+        context,
+        rowPlayerId: rowPlayer.player.player_id!,
+        colPlayerId: colPlayer.player.player_id!,
+        rowPlayerName: '${rowPlayer.player.player_surname} ${rowPlayer.player.player_name}',
+        colPlayerName: '${colPlayer.player.player_surname} ${colPlayer.player.player_name}',
+        currentResult: result,
+      ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          decoration: BoxDecoration(
+            color: bgColor ?? Colors.transparent,
+          ),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: text.isEmpty
+              ? Icon(Icons.edit_outlined, size: 14, color: Colors.grey.shade400)
+              : Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: text == '1'
+                        ? Colors.green.shade700
+                        : text == '0'
+                            ? Colors.red.shade700
+                            : Colors.amber.shade800,
+                  ),
+                ),
         ),
       ),
     );
