@@ -359,65 +359,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildTableTab() {
-    // Mock data for the table
-    final players = [
-      {
-        'rank': '1',
-        'name': 'Олександр Смирнов',
-        'points': '0.0',
-        'played': '0',
-      },
-      {'rank': '1', 'name': 'Максим Кузнєцов', 'points': '0.0', 'played': '0'},
-      {'rank': '1', 'name': 'Сергій Соколов', 'points': '0.0', 'played': '0'},
-    ];
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Поточна таблиця',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('Онлайн-таблиця з результатами та тай-брейками.'),
-            const SizedBox(height: 16),
-            Expanded(
-              child: DataTable(
-                headingTextStyle: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black54,
-                ),
-                columns: const [
-                  DataColumn(label: Text('Ранг')),
-                  DataColumn(label: Text('Гравець')),
-                  DataColumn(label: Text('Очки'), numeric: true),
-                  DataColumn(label: Text('Ігор зіграно'), numeric: true),
-                ],
-                rows:
-                    players.map((player) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(player['rank']!)),
-                          DataCell(Text(player['name']!)),
-                          DataCell(Text(player['points']!)),
-                          DataCell(Text(player['played']!)),
-                        ],
-                      );
-                    }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return _CrossTableTab(tId: widget.tournament.t_id!);
   }
 
   Widget _buildParticipantsTab() {
@@ -765,6 +707,432 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tab showing a round-robin cross-table per board with standings.
+class _CrossTableTab extends ConsumerStatefulWidget {
+  final int tId;
+  const _CrossTableTab({required this.tId});
+
+  @override
+  ConsumerState<_CrossTableTab> createState() => _CrossTableTabState();
+}
+
+class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
+  bool _loading = true;
+  Map<int, List<({int teamId, String teamName, Player player})>> _boardPlayers = {};
+  // results[boardNum][playerId][opponentId] = score
+  Map<int, Map<int, Map<int, double>>> _boardResults = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final tournamentSvc = ref.read(tournamentServiceProvider);
+
+    final boards = await teamSvc.getBoardAssignmentsForTournament(widget.tId);
+    final games = await tournamentSvc.getGamesGroupedByBoard(widget.tId);
+
+    // Build results matrix per board
+    final results = <int, Map<int, Map<int, double>>>{};
+    for (final entry in games.entries) {
+      final boardNum = entry.key;
+      results.putIfAbsent(boardNum, () => {});
+      for (final game in entry.value) {
+        final wId = game.white.player_id!;
+        final bId = game.black.player_id!;
+        if (game.whiteResult != null) {
+          results[boardNum]!.putIfAbsent(wId, () => {})[bId] = game.whiteResult!;
+        }
+        if (game.blackResult != null) {
+          results[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackResult!;
+        }
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _boardPlayers = boards;
+        _boardResults = results;
+        _loading = false;
+      });
+    }
+  }
+
+  double _totalPoints(int boardNum, int playerId) {
+    return (_boardResults[boardNum]?[playerId] ?? {})
+        .values.fold(0.0, (sum, r) => sum + r);
+  }
+
+  int _gamesPlayed(int boardNum, int playerId) {
+    return (_boardResults[boardNum]?[playerId] ?? {}).length;
+  }
+
+  double _bergerCoefficient(int boardNum, int playerId) {
+    final results = _boardResults[boardNum]?[playerId] ?? {};
+    double sb = 0;
+    for (final entry in results.entries) {
+      sb += entry.value * _totalPoints(boardNum, entry.key);
+    }
+    return sb;
+  }
+
+  String _formatResult(double? result) {
+    if (result == null) return '';
+    if (result == 1.0) return '1';
+    if (result == 0.0) return '0';
+    if (result == 0.5) return '½';
+    return result.toString();
+  }
+
+  String _formatPoints(double points) {
+    if (points == points.roundToDouble()) {
+      return points.toStringAsFixed(1);
+    }
+    // Show up to 2 decimal places, strip trailing zeros
+    String s = points.toStringAsFixed(2);
+    if (s.endsWith('0')) s = s.substring(0, s.length - 1);
+    return s;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_boardPlayers.isEmpty) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade300, width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.table_chart_outlined, size: 48, color: Colors.grey.shade400),
+                const SizedBox(height: 16),
+                Text(
+                  'Немає даних для таблиці',
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Додайте учасників та розподіліть їх по дошках.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final sortedBoards = _boardPlayers.keys.toList()..sort();
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < sortedBoards.length; i++) ...[
+            if (i > 0) const SizedBox(height: 16),
+            _buildBoardSection(sortedBoards[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBoardSection(int boardNum) {
+    final players = _boardPlayers[boardNum] ?? [];
+    if (players.isEmpty) return const SizedBox.shrink();
+
+    final isWomen = boardNum == 3;
+    final boardLabel = isWomen ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum';
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: isWomen ? Colors.pink.shade200 : Colors.grey.shade300,
+          width: 1,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Board header
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: isWomen ? Colors.pink : Colors.indigo,
+                  child: Text(
+                    '$boardNum',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  boardLabel,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            // Cross-table and standings side by side
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Cross-table (scrollable horizontally)
+                Expanded(
+                  flex: 3,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: _buildCrossTable(boardNum, players),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Standings
+                Expanded(
+                  flex: 2,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: _buildStandings(boardNum, players),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCrossTable(
+    int boardNum,
+    List<({int teamId, String teamName, Player player})> players,
+  ) {
+    final n = players.length;
+    final headerStyle = const TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      color: Colors.black54,
+    );
+    final cellStyle = const TextStyle(fontSize: 13, color: Colors.black87);
+
+    return Table(
+      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+      defaultColumnWidth: const IntrinsicColumnWidth(),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        // Header row
+        TableRow(
+          decoration: BoxDecoration(color: Colors.grey.shade100),
+          children: [
+            _tableCell('№', style: headerStyle),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 140),
+            _tableCell('Команда', style: headerStyle, minWidth: 100),
+            for (int i = 0; i < n; i++)
+              _tableCell('${i + 1}', style: headerStyle, minWidth: 36),
+            _tableCell('Бали', style: headerStyle),
+            _tableCell('К-сть\nігор', style: headerStyle),
+            _tableCell('К.\nБергера', style: headerStyle),
+          ],
+        ),
+        // Data rows
+        for (int i = 0; i < n; i++)
+          TableRow(
+            decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
+            children: [
+              _tableCell('${i + 1}', style: cellStyle),
+              _tableCell(
+                '${players[i].player.player_surname} ${players[i].player.player_name}',
+                style: cellStyle,
+                minWidth: 140,
+                leftAlign: true,
+              ),
+              _tableCell(
+                players[i].teamName,
+                style: cellStyle,
+                minWidth: 100,
+                leftAlign: true,
+              ),
+              for (int j = 0; j < n; j++)
+                if (i == j)
+                  _diagonalCell()
+                else
+                  _resultCell(
+                    _formatResult(
+                      _boardResults[boardNum]
+                          ?[players[i].player.player_id!]
+                          ?[players[j].player.player_id!],
+                    ),
+                  ),
+              _tableCell(
+                _formatPoints(_totalPoints(boardNum, players[i].player.player_id!)),
+                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+              ),
+              _tableCell(
+                '${_gamesPlayed(boardNum, players[i].player.player_id!)}',
+                style: cellStyle,
+              ),
+              _tableCell(
+                _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
+                style: cellStyle,
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildStandings(
+    int boardNum,
+    List<({int teamId, String teamName, Player player})> players,
+  ) {
+    // Sort by points desc, then Berger desc
+    final sorted = List.of(players);
+    sorted.sort((a, b) {
+      final pa = _totalPoints(boardNum, a.player.player_id!);
+      final pb = _totalPoints(boardNum, b.player.player_id!);
+      if (pa != pb) return pb.compareTo(pa);
+      final ba = _bergerCoefficient(boardNum, a.player.player_id!);
+      final bb = _bergerCoefficient(boardNum, b.player.player_id!);
+      return bb.compareTo(ba);
+    });
+
+    final headerStyle = const TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      color: Colors.black54,
+    );
+    final cellStyle = const TextStyle(fontSize: 13, color: Colors.black87);
+
+    return Table(
+      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+      defaultColumnWidth: const IntrinsicColumnWidth(),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        // Header
+        TableRow(
+          decoration: BoxDecoration(color: Colors.grey.shade100),
+          children: [
+            _tableCell('ПІБ', style: headerStyle, minWidth: 140),
+            _tableCell('Команда', style: headerStyle, minWidth: 100),
+            _tableCell('Бали', style: headerStyle),
+            _tableCell('К.\nБергера', style: headerStyle),
+            _tableCell('Місце', style: headerStyle),
+          ],
+        ),
+        // Data rows
+        for (int i = 0; i < sorted.length; i++)
+          TableRow(
+            decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
+            children: [
+              _tableCell(
+                '${sorted[i].player.player_surname} ${sorted[i].player.player_name}',
+                style: cellStyle,
+                minWidth: 140,
+                leftAlign: true,
+              ),
+              _tableCell(
+                sorted[i].teamName,
+                style: cellStyle,
+                minWidth: 100,
+                leftAlign: true,
+              ),
+              _tableCell(
+                _formatPoints(_totalPoints(boardNum, sorted[i].player.player_id!)),
+                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+              ),
+              _tableCell(
+                _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
+                style: cellStyle,
+              ),
+              _tableCell(
+                '${i + 1}',
+                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _tableCell(
+    String text, {
+    TextStyle? style,
+    double? minWidth,
+    bool leftAlign = false,
+  }) {
+    return Container(
+      constraints: minWidth != null
+          ? BoxConstraints(minWidth: minWidth)
+          : null,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
+      child: Text(
+        text,
+        textAlign: leftAlign ? TextAlign.left : TextAlign.center,
+        style: style,
+      ),
+    );
+  }
+
+  Widget _diagonalCell() {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      color: Colors.grey.shade800,
+    );
+  }
+
+  Widget _resultCell(String text) {
+    Color? bgColor;
+    if (text == '1') {
+      bgColor = Colors.green.shade50;
+    } else if (text == '0') {
+      bgColor = Colors.red.shade50;
+    } else if (text == '½') {
+      bgColor = Colors.amber.shade50;
+    }
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      color: bgColor,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: text.isNotEmpty ? FontWeight.bold : FontWeight.normal,
+          color: text == '1'
+              ? Colors.green.shade700
+              : text == '0'
+                  ? Colors.red.shade700
+                  : text == '½'
+                      ? Colors.amber.shade800
+                      : Colors.black87,
         ),
       ),
     );
