@@ -66,6 +66,8 @@ class PlayerView extends ConsumerWidget {
                   if (players.isEmpty) {
                     return const Center(child: Text("Гравців не знайдено."));
                   }
+                  final sorted = List.of(players)
+                    ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       return SingleChildScrollView(
@@ -84,7 +86,7 @@ class PlayerView extends ConsumerWidget {
                               DataColumn(label: Text('Стать')),
                               DataColumn(label: Text('Дія')),
                             ],
-                            rows: players.map((p) {
+                            rows: sorted.map((p) {
                               return DataRow(
                                 cells: [
                                   DataCell(Text(p.fullName)),
