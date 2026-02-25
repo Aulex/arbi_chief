@@ -21,7 +21,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 4,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -124,7 +124,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 indicatorColor: Colors.indigo,
                 tabs: [
                   Tab(icon: Icon(Icons.grid_view_outlined), text: 'Огляд'),
-                  Tab(icon: Icon(Icons.dashboard_outlined), text: 'Дошки'),
                   Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
                   Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
                   Tab(
@@ -139,7 +138,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 child: TabBarView(
                   children: [
                     _buildOverviewTab(),
-                    _buildBoardsTab(),
                     _buildTableTab(),
                     _buildParticipantsTab(),
                     TournamentAddScreen(
@@ -711,8 +709,8 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
   }
 }
 
-/// Tab showing a round-robin cross-table per board with standings.
-/// Cells are tappable to enter results directly.
+/// Tab with sub-tabs: Дошка 1, Дошка 2, Дошка 3, Команди.
+/// Cross-tables are interactive — tap cells to enter results.
 class _CrossTableTab extends ConsumerStatefulWidget {
   final int tId;
   const _CrossTableTab({required this.tId});
@@ -721,16 +719,24 @@ class _CrossTableTab extends ConsumerStatefulWidget {
   ConsumerState<_CrossTableTab> createState() => _CrossTableTabState();
 }
 
-class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
+class _CrossTableTabState extends ConsumerState<_CrossTableTab>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   bool _loading = true;
   Map<int, List<({int teamId, String teamName, Player player})>> _boardPlayers = {};
-  // results[boardNum][playerId][opponentId] = score
   Map<int, Map<int, Map<int, double>>> _boardResults = {};
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -740,7 +746,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     final boards = await teamSvc.getBoardAssignmentsForTournament(widget.tId);
     final games = await tournamentSvc.getGamesGroupedByBoard(widget.tId);
 
-    // Build results matrix per board
     final results = <int, Map<int, Map<int, double>>>{};
     for (final entry in games.entries) {
       final boardNum = entry.key;
@@ -772,13 +777,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     final svc = ref.read(tournamentServiceProvider);
 
     if (result == null) {
-      // Clear: find the game and null out both results
       final eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
       if (eventId != null) {
         await svc.saveResultForPlayer(eventId, rowPlayerId, null);
       }
     } else {
-      // Find or create game, then save
       final tsId = await svc.getOrCreateDefaultStage(widget.tId);
       var eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
       eventId ??= await svc.createGame(
@@ -803,115 +806,62 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: Text(
-          '$rowPlayerName  vs  $colPlayerName',
-          style: const TextStyle(fontSize: 16),
-        ),
+        title: Text('$rowPlayerName  vs  $colPlayerName', style: const TextStyle(fontSize: 16)),
         children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 1.0),
-            child: Row(
-              children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text('1', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade800)),
-                ),
-                const SizedBox(width: 12),
-                const Text('Перемога'),
-                if (currentResult == 1.0) ...[
-                  const Spacer(),
-                  Icon(Icons.check, color: Colors.green.shade700, size: 20),
-                ],
-              ],
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 0.5),
-            child: Row(
-              children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text('½', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber.shade800)),
-                ),
-                const SizedBox(width: 12),
-                const Text('Нічия'),
-                if (currentResult == 0.5) ...[
-                  const Spacer(),
-                  Icon(Icons.check, color: Colors.amber.shade800, size: 20),
-                ],
-              ],
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 0.0),
-            child: Row(
-              children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text('0', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800)),
-                ),
-                const SizedBox(width: 12),
-                const Text('Поразка'),
-                if (currentResult == 0.0) ...[
-                  const Spacer(),
-                  Icon(Icons.check, color: Colors.red.shade700, size: 20),
-                ],
-              ],
-            ),
-          ),
+          _resultOption(ctx, label: 'Перемога', symbol: '1', color: Colors.green, value: 1.0, current: currentResult),
+          _resultOption(ctx, label: 'Нічия', symbol: '½', color: Colors.amber, value: 0.5, current: currentResult),
+          _resultOption(ctx, label: 'Поразка', symbol: '0', color: Colors.red, value: 0.0, current: currentResult),
           if (currentResult != null) ...[
             const Divider(),
             SimpleDialogOption(
               onPressed: () => Navigator.pop(ctx, -1.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32, height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(Icons.close, size: 18, color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text('Очистити'),
-                ],
-              ),
+              child: Row(children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(6)),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.close, size: 18, color: Colors.grey.shade700),
+                ),
+                const SizedBox(width: 12),
+                const Text('Очистити'),
+              ]),
             ),
           ],
         ],
       ),
     ).then((value) {
       if (value == null) return;
-      _onResultSelected(
-        rowPlayerId,
-        colPlayerId,
-        value == -1.0 ? null : value,
-      );
+      _onResultSelected(rowPlayerId, colPlayerId, value == -1.0 ? null : value);
     });
+  }
+
+  Widget _resultOption(BuildContext ctx, {
+    required String label,
+    required String symbol,
+    required MaterialColor color,
+    required double value,
+    required double? current,
+  }) {
+    return SimpleDialogOption(
+      onPressed: () => Navigator.pop(ctx, value),
+      child: Row(children: [
+        Container(
+          width: 32, height: 32,
+          decoration: BoxDecoration(color: color.shade100, borderRadius: BorderRadius.circular(6)),
+          alignment: Alignment.center,
+          child: Text(symbol, style: TextStyle(fontWeight: FontWeight.bold, color: color.shade800)),
+        ),
+        const SizedBox(width: 12),
+        Text(label),
+        if (current == value) ...[const Spacer(), Icon(Icons.check, color: color.shade700, size: 20)],
+      ]),
+    );
   }
 
   // --- Calculations ---
 
   double _totalPoints(int boardNum, int playerId) {
-    return (_boardResults[boardNum]?[playerId] ?? {})
-        .values.fold(0.0, (sum, r) => sum + r);
+    return (_boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
   }
 
   int _gamesPlayed(int boardNum, int playerId) {
@@ -927,6 +877,34 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     return sb;
   }
 
+  /// Sort players: by points desc, then head-to-head, then Berger coefficient.
+  List<({int teamId, String teamName, Player player})> _sortedStandings(
+    int boardNum,
+    List<({int teamId, String teamName, Player player})> players,
+  ) {
+    final sorted = List.of(players);
+    sorted.sort((a, b) {
+      final aId = a.player.player_id!;
+      final bId = b.player.player_id!;
+      // 1. Total points
+      final pa = _totalPoints(boardNum, aId);
+      final pb = _totalPoints(boardNum, bId);
+      if (pa != pb) return pb.compareTo(pa);
+      // 2. Head-to-head result
+      final aVsB = _boardResults[boardNum]?[aId]?[bId];
+      final bVsA = _boardResults[boardNum]?[bId]?[aId];
+      if (aVsB != null && bVsA != null) {
+        if (aVsB > bVsA) return -1; // a won head-to-head → a ranks higher
+        if (aVsB < bVsA) return 1;
+      }
+      // 3. Berger coefficient
+      final ba = _bergerCoefficient(boardNum, aId);
+      final bb = _bergerCoefficient(boardNum, bId);
+      return bb.compareTo(ba);
+    });
+    return sorted;
+  }
+
   String _formatResult(double? result) {
     if (result == null) return '';
     if (result == 1.0) return '1';
@@ -936,9 +914,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
   }
 
   String _formatPoints(double points) {
-    if (points == points.roundToDouble()) {
-      return points.toStringAsFixed(1);
-    }
+    if (points == points.roundToDouble()) return points.toStringAsFixed(1);
     String s = points.toStringAsFixed(2);
     if (s.endsWith('0')) s = s.substring(0, s.length - 1);
     return s;
@@ -948,9 +924,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_boardPlayers.isEmpty) {
       return Card(
@@ -962,121 +936,180 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
         child: Padding(
           padding: const EdgeInsets.all(32.0),
           child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.table_chart_outlined, size: 48, color: Colors.grey.shade400),
-                const SizedBox(height: 16),
-                Text(
-                  'Немає даних для таблиці',
-                  style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Додайте учасників та розподіліть їх по дошках.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.table_chart_outlined, size: 48, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text('Немає даних для таблиці', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+              const SizedBox(height: 8),
+              Text('Додайте учасників та розподіліть їх по дошках.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+            ]),
           ),
         ),
       );
     }
 
-    final sortedBoards = _boardPlayers.keys.toList()..sort();
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          labelColor: Colors.indigo,
+          indicatorColor: Colors.indigo,
+          tabs: const [
+            Tab(text: 'Дошка 1'),
+            Tab(text: 'Дошка 2'),
+            Tab(text: 'Дошка 3 (жіноча)'),
+            Tab(text: 'Команди'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildBoardTab(1),
+              _buildBoardTab(2),
+              _buildBoardTab(3),
+              _buildTeamsTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBoardTab(int boardNum) {
+    final players = _boardPlayers[boardNum] ?? [];
+    if (players.isEmpty) {
+      return Center(
+        child: Text('Немає гравців на дошці $boardNum', style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
 
     return SingleChildScrollView(
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (int i = 0; i < sortedBoards.length; i++) ...[
-            if (i > 0) const SizedBox(height: 16),
-            _buildBoardSection(sortedBoards[i]),
-          ],
+          Expanded(
+            flex: 3,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildCrossTable(boardNum, players),
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildStandings(boardNum, players),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildBoardSection(int boardNum) {
-    final players = _boardPlayers[boardNum] ?? [];
-    if (players.isEmpty) return const SizedBox.shrink();
+  // --- Teams leaderboard ---
 
-    final isWomen = boardNum == 3;
-    final boardLabel = isWomen ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum';
+  Widget _buildTeamsTab() {
+    // Collect unique teams and sum their points across all boards
+    final teamScores = <int, ({String teamName, double total, Map<int, double> perBoard})>{};
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: isWomen ? Colors.pink.shade200 : Colors.grey.shade300,
-          width: 1,
-        ),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    for (final boardEntry in _boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      for (final p in boardEntry.value) {
+        final existing = teamScores[p.teamId];
+        final pts = _totalPoints(boardNum, p.player.player_id!);
+        if (existing != null) {
+          final newPerBoard = Map<int, double>.from(existing.perBoard);
+          newPerBoard[boardNum] = (newPerBoard[boardNum] ?? 0) + pts;
+          teamScores[p.teamId] = (
+            teamName: existing.teamName,
+            total: existing.total + pts,
+            perBoard: newPerBoard,
+          );
+        } else {
+          teamScores[p.teamId] = (
+            teamName: p.teamName,
+            total: pts,
+            perBoard: {boardNum: pts},
+          );
+        }
+      }
+    }
+
+    final sortedTeams = teamScores.entries.toList()
+      ..sort((a, b) => b.value.total.compareTo(a.value.total));
+
+    if (sortedTeams.isEmpty) {
+      return Center(
+        child: Text('Немає даних для командного заліку', style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
+
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54);
+    const cellStyle = TextStyle(fontSize: 13, color: Colors.black87);
+
+    final boards = _boardPlayers.keys.toList()..sort();
+
+    return SingleChildScrollView(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Table(
+          border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
-            Row(
+            TableRow(
+              decoration: BoxDecoration(color: Colors.grey.shade100),
               children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: isWomen ? Colors.pink : Colors.indigo,
-                  child: Text(
-                    '$boardNum',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                _tableCell('Місце', style: headerStyle),
+                _tableCell('Команда', style: headerStyle, minWidth: 160),
+                for (final b in boards)
+                  _tableCell('Дошка $b', style: headerStyle),
+                _tableCell('Всього', style: headerStyle),
+              ],
+            ),
+            for (int i = 0; i < sortedTeams.length; i++)
+              TableRow(
+                decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
+                children: [
+                  _tableCell(
+                    '${i + 1}',
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  _tableCell(
+                    sortedTeams[i].value.teamName,
+                    style: cellStyle,
+                    minWidth: 160,
+                    leftAlign: true,
+                  ),
+                  for (final b in boards)
+                    _tableCell(
+                      _formatPoints(sortedTeams[i].value.perBoard[b] ?? 0),
+                      style: cellStyle,
                     ),
+                  _tableCell(
+                    _formatPoints(sortedTeams[i].value.total),
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  boardLabel,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: _buildCrossTable(boardNum, players),
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  flex: 2,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: _buildStandings(boardNum, players),
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
+
+  // --- Cross-table ---
 
   Widget _buildCrossTable(
     int boardNum,
     List<({int teamId, String teamName, Player player})> players,
   ) {
     final n = players.length;
-    const headerStyle = TextStyle(
-      fontWeight: FontWeight.bold,
-      fontSize: 12,
-      color: Colors.black54,
-    );
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
     return Table(
@@ -1104,33 +1137,19 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
               _tableCell('${i + 1}', style: cellStyle),
               _tableCell(
                 '${players[i].player.player_surname} ${players[i].player.player_name}',
-                style: cellStyle,
-                minWidth: 140,
-                leftAlign: true,
+                style: cellStyle, minWidth: 140, leftAlign: true,
               ),
-              _tableCell(
-                players[i].teamName,
-                style: cellStyle,
-                minWidth: 100,
-                leftAlign: true,
-              ),
+              _tableCell(players[i].teamName, style: cellStyle, minWidth: 100, leftAlign: true),
               for (int j = 0; j < n; j++)
                 if (i == j)
                   _diagonalCell()
                 else
-                  _tappableResultCell(
-                    boardNum: boardNum,
-                    rowPlayer: players[i],
-                    colPlayer: players[j],
-                  ),
+                  _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j]),
               _tableCell(
                 _formatPoints(_totalPoints(boardNum, players[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
-              _tableCell(
-                '${_gamesPlayed(boardNum, players[i].player.player_id!)}',
-                style: cellStyle,
-              ),
+              _tableCell('${_gamesPlayed(boardNum, players[i].player.player_id!)}', style: cellStyle),
               _tableCell(
                 _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
                 style: cellStyle,
@@ -1141,25 +1160,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     );
   }
 
+  // --- Standings ---
+
   Widget _buildStandings(
     int boardNum,
     List<({int teamId, String teamName, Player player})> players,
   ) {
-    final sorted = List.of(players);
-    sorted.sort((a, b) {
-      final pa = _totalPoints(boardNum, a.player.player_id!);
-      final pb = _totalPoints(boardNum, b.player.player_id!);
-      if (pa != pb) return pb.compareTo(pa);
-      final ba = _bergerCoefficient(boardNum, a.player.player_id!);
-      final bb = _bergerCoefficient(boardNum, b.player.player_id!);
-      return bb.compareTo(ba);
-    });
+    final sorted = _sortedStandings(boardNum, players);
 
-    const headerStyle = TextStyle(
-      fontWeight: FontWeight.bold,
-      fontSize: 12,
-      color: Colors.black54,
-    );
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 13, color: Colors.black87);
 
     return Table(
@@ -1183,16 +1192,9 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
             children: [
               _tableCell(
                 '${sorted[i].player.player_surname} ${sorted[i].player.player_name}',
-                style: cellStyle,
-                minWidth: 140,
-                leftAlign: true,
+                style: cellStyle, minWidth: 140, leftAlign: true,
               ),
-              _tableCell(
-                sorted[i].teamName,
-                style: cellStyle,
-                minWidth: 100,
-                leftAlign: true,
-              ),
+              _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 100, leftAlign: true),
               _tableCell(
                 _formatPoints(_totalPoints(boardNum, sorted[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -1201,10 +1203,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
                 _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
                 style: cellStyle,
               ),
-              _tableCell(
-                '${i + 1}',
-                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-              ),
+              _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
             ],
           ),
       ],
@@ -1213,21 +1212,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
 
   // --- Cell widgets ---
 
-  Widget _tableCell(
-    String text, {
-    TextStyle? style,
-    double? minWidth,
-    bool leftAlign = false,
-  }) {
+  Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
     return Container(
       constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
-      child: Text(
-        text,
-        textAlign: leftAlign ? TextAlign.left : TextAlign.center,
-        style: style,
-      ),
+      child: Text(text, textAlign: leftAlign ? TextAlign.left : TextAlign.center, style: style),
     );
   }
 
@@ -1243,19 +1233,13 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
     required ({int teamId, String teamName, Player player}) rowPlayer,
     required ({int teamId, String teamName, Player player}) colPlayer,
   }) {
-    final result = _boardResults[boardNum]
-        ?[rowPlayer.player.player_id!]
-        ?[colPlayer.player.player_id!];
+    final result = _boardResults[boardNum]?[rowPlayer.player.player_id!]?[colPlayer.player.player_id!];
     final text = _formatResult(result);
 
     Color? bgColor;
-    if (text == '1') {
-      bgColor = Colors.green.shade50;
-    } else if (text == '0') {
-      bgColor = Colors.red.shade50;
-    } else if (text == '½') {
-      bgColor = Colors.amber.shade50;
-    }
+    if (text == '1') bgColor = Colors.green.shade50;
+    else if (text == '0') bgColor = Colors.red.shade50;
+    else if (text == '½') bgColor = Colors.amber.shade50;
 
     return GestureDetector(
       onTap: () => _showResultPicker(
@@ -1270,9 +1254,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
         cursor: SystemMouseCursors.click,
         child: Container(
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          decoration: BoxDecoration(
-            color: bgColor ?? Colors.transparent,
-          ),
+          color: bgColor ?? Colors.transparent,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: text.isEmpty
@@ -1283,11 +1265,9 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: text == '1'
-                        ? Colors.green.shade700
-                        : text == '0'
-                            ? Colors.red.shade700
-                            : Colors.amber.shade800,
+                    color: text == '1' ? Colors.green.shade700
+                        : text == '0' ? Colors.red.shade700
+                        : Colors.amber.shade800,
                   ),
                 ),
         ),
