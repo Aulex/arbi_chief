@@ -84,10 +84,10 @@ class TeamService {
   }
 
   /// Saves player-team assignments with board numbers.
-  /// [members] - ordered list of player IDs for boards (player_state = 0).
-  ///   Position in list = board number (index + 1).
+  /// [boardMembers] - map of board number → player ID (player_state = 0).
+  ///   Boards without players should be omitted.
   /// [reserves] - list of player IDs for the bench (player_state = 1).
-  Future<void> saveAssignments(int teamId, List<int> members, List<int> reserves) async {
+  Future<void> saveAssignments(int teamId, Map<int, int> boardMembers, List<int> reserves) async {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
 
@@ -110,17 +110,17 @@ class TeamService {
     await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ?', whereArgs: [teamId]);
 
     // Insert board members with board number attribute (attr_id = 9)
-    for (int i = 0; i < members.length; i++) {
+    for (final entry in boardMembers.entries) {
       final pteId = await db.insert('CMP_PLAYER_TEAM', {
         'team_id': teamId,
-        'player_id': members[i],
+        'player_id': entry.value,
         'player_state': 0,
         'asgn_date': today,
       });
       await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
         'pte_id': pteId,
         'attr_id': 9,
-        'attr_value': '${i + 1}',
+        'attr_value': '${entry.key}',
       });
     }
 
@@ -135,18 +135,18 @@ class TeamService {
     }
   }
 
-  /// Returns board members ordered by board number.
-  Future<List<int>> getBoardMembers(int teamId) async {
+  /// Returns board assignments as map: board number → player ID.
+  Future<Map<int, int>> getBoardMembers(int teamId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
-      SELECT pt.player_id
+      SELECT pt.player_id, CAST(v.attr_value AS INTEGER) AS board_number
       FROM CMP_PLAYER_TEAM pt
       LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
         ON pt.pte_id = v.pte_id AND v.attr_id = 9
-      WHERE pt.team_id = ? AND pt.player_state = 0
-      ORDER BY CAST(v.attr_value AS INTEGER)
+      WHERE pt.team_id = ? AND pt.player_state = 0 AND v.attr_value IS NOT NULL
+      ORDER BY board_number
     ''', [teamId]);
-    return rows.map((r) => r['player_id'] as int).toList();
+    return { for (final r in rows) r['board_number'] as int: r['player_id'] as int };
   }
 
   /// Returns player IDs assigned to any team OTHER than [excludeTeamId].

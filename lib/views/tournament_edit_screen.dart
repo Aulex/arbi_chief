@@ -967,7 +967,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           tabs: const [
             Tab(text: 'Дошка 1'),
             Tab(text: 'Дошка 2'),
-            Tab(text: 'Дошка 3 (жіноча)'),
+            Tab(text: 'Дошка 3'),
             Tab(text: 'Команди'),
           ],
         ),
@@ -987,6 +987,16 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     );
   }
 
+  Future<void> _clearBoardResults(int boardNum) async {
+    final svc = ref.read(tournamentServiceProvider);
+    final games = await svc.getGamesGroupedByBoard(widget.tId);
+    final boardGames = games[boardNum] ?? [];
+    for (final game in boardGames) {
+      await svc.deleteGame(game.eventId);
+    }
+    await _loadData();
+  }
+
   Widget _buildBoardTab(int boardNum) {
     final players = _boardPlayers[boardNum] ?? [];
     if (players.isEmpty) {
@@ -995,24 +1005,60 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       );
     }
 
+    final hasResults = _boardResults[boardNum]?.isNotEmpty == true;
+
     return SingleChildScrollView(
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 3,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: _buildCrossTable(boardNum, players),
+          if (hasResults)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                label: const Text('Очистити результати'),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Очистити результати?'),
+                      content: Text('Видалити всі результати ігор на дошці $boardNum?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _clearBoardResults(boardNum);
+                          },
+                          child: const Text('Очистити', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(width: 24),
-          Expanded(
-            flex: 2,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: _buildStandings(boardNum, players),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _buildCrossTable(boardNum, players),
+                ),
+              ),
+              const SizedBox(width: 24),
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _buildStandings(boardNum, players),
+                ),
+              ),
+            ],
           ),
         ],
       ),
