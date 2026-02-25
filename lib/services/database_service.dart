@@ -277,6 +277,13 @@ class DatabaseService {
           'attr_entity_type': '1',
         });
 
+        await db.insert('CMP_ATTR', {
+          'attr_id': '9',
+          'attr_name': 'Дошка',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': '2',
+        });
+
         await db.insert('CMP_ATTR_DICT', {
           'attr_id': '1',
           'dict_value': 'Рапід',
