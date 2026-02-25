@@ -136,7 +136,7 @@ class TeamView extends ConsumerWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text("Додати команду"),
         content: TextField(
           controller: nameC,
@@ -148,16 +148,23 @@ class TeamView extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogCtx),
             child: const Text("Скасувати"),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (nameC.text.trim().isNotEmpty) {
-                ref
+                final newTeam = await ref
                     .read(teamProvider.notifier)
                     .addTeam(name: nameC.text.trim());
-                Navigator.pop(context);
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                if (context.mounted) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => TeamEditScreen(team: newTeam),
+                    ),
+                  );
+                }
               }
             },
             child: const Text("Зберегти"),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tournament_model.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/tournament_viewmodel.dart';
+import '../services/tournament_service.dart';
 
 class TournamentAddScreen extends ConsumerStatefulWidget {
   final Tournament? tournament;
@@ -60,7 +61,43 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
         _startDateTime = DateTime.parse(t.t_date_begin);
         _endDateTime = DateTime.parse(t.t_date_end);
       }
+      if (t.t_id != null) {
+        _loadAttrValues(t.t_id!);
+      }
     }
+  }
+
+  Future<void> _loadAttrValues(int tId) async {
+    final svc = ref.read(tournamentServiceProvider);
+    final timeControl = await svc.getAttrDictValue(tId, 1);
+    final pairingSystem = await svc.getAttrDictValue(tId, 2);
+    final rounds = await svc.getAttrValue(tId, 3);
+    final startingListSort = await svc.getAttrDictValue(tId, 4);
+    final scoringFormat = await svc.getAttrDictValue(tId, 5);
+    final substitutes = await svc.getAttrValue(tId, 6);
+    final scoringPoints = await svc.getAttrDictValueMap(tId, 7);
+    final tieBreakers = await svc.getAttrDictValueList(tId, 8);
+    if (!mounted) return;
+    setState(() {
+      if (timeControl != null) selectedTimeControl = timeControl;
+      if (pairingSystem != null) selectedPairingSystem = pairingSystem;
+      if (rounds != null) roundsController.text = rounds;
+      if (startingListSort != null) _startingListSort = startingListSort;
+      if (scoringFormat != null) _scoringFormat = scoringFormat;
+      if (substitutes != null) _allowSubstitutes = substitutes == '1';
+      if (scoringPoints.containsKey('Перемога')) {
+        _winPointsController.text = scoringPoints['Перемога']!;
+      }
+      if (scoringPoints.containsKey('Нічия')) {
+        _drawPointsController.text = scoringPoints['Нічия']!;
+      }
+      if (scoringPoints.containsKey('Поразка')) {
+        _lossPointsController.text = scoringPoints['Поразка']!;
+      }
+      for (final key in _tieBreakers.keys) {
+        _tieBreakers[key] = tieBreakers.contains(key);
+      }
+    });
   }
 
   String _formatDateTime(DateTime dt) {
@@ -83,6 +120,46 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
     _organizerSiteController.dispose();
     _organizerPhoneController.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveTournament() async {
+    if (tNameController.text.trim().isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    final dateBegin = _startDateTime != null
+        ? '${_startDateTime!.day.toString().padLeft(2, '0')}.${_startDateTime!.month.toString().padLeft(2, '0')}.${_startDateTime!.year}'
+        : '';
+    final dateEnd = _endDateTime != null
+        ? '${_endDateTime!.day.toString().padLeft(2, '0')}.${_endDateTime!.month.toString().padLeft(2, '0')}.${_endDateTime!.year}'
+        : '';
+
+    final selectedTieBreakers = _tieBreakers.entries
+        .where((e) => e.value)
+        .map((e) => e.key)
+        .toList();
+
+    await ref.read(tournamentProvider.notifier).addTournament(
+      existingId: widget.isEditMode ? widget.tournament?.t_id : null,
+      name: tNameController.text.trim(),
+      dateBegin: dateBegin,
+      dateEnd: dateEnd,
+      selectedTimeControl: selectedTimeControl,
+      selectedPairingSystem: selectedPairingSystem,
+      rounds: roundsController.text.trim(),
+      selectedStartingListSort: _startingListSort,
+      selectedScoringFormat: _scoringFormat,
+      allowSubstitutes: _allowSubstitutes,
+      scoringPoints: {
+        'Перемога': _winPointsController.text.trim(),
+        'Нічия': _drawPointsController.text.trim(),
+        'Поразка': _lossPointsController.text.trim(),
+      },
+      selectedTieBreakers: selectedTieBreakers,
+    );
+
+    setState(() => _isLoading = false);
+    ref.read(tournamentNavProvider.notifier).showList();
   }
 
   @override
@@ -125,12 +202,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed:
-                      _isLoading
-                          ? null
-                          : () {
-                            /* Your Save Logic */
-                          },
+                  onPressed: _isLoading ? null : _saveTournament,
                   child: Text(
                     widget.isEditMode ? "Зберегти зміни" : "Створити турнір",
                   ),
@@ -406,7 +478,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
       ),
       RadioListTile<String>(
         title: const Text('Олімпійська (на вибування)'),
-        value: 'Олімпійська',
+        value: 'Олімпійська (на вибування)',
         groupValue: selectedPairingSystem,
         onChanged: (value) => setState(() => selectedPairingSystem = value!),
       ),
