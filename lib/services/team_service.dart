@@ -161,6 +161,35 @@ class TeamService {
     return rows.map((r) => r['player_id'] as int).toSet();
   }
 
+  /// Returns board data grouped by board number.
+  /// Each entry: team name + player for that board.
+  Future<Map<int, List<({int teamId, String teamName, Player player})>>>
+      getAllBoardAssignments() async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT t.team_id, t.team_name, p.*,
+             CAST(v.attr_value AS INTEGER) AS board_number
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_TEAM t ON pt.team_id = t.team_id
+      JOIN CMP_PLAYER p ON pt.player_id = p.player_id
+      LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
+        ON pt.pte_id = v.pte_id AND v.attr_id = 9
+      WHERE pt.player_state = 0 AND v.attr_value IS NOT NULL
+      ORDER BY CAST(v.attr_value AS INTEGER), t.team_name
+    ''');
+    final result = <int, List<({int teamId, String teamName, Player player})>>{};
+    for (final r in rows) {
+      final boardNum = r['board_number'] as int;
+      final teamId = r['team_id'] as int;
+      final teamName = r['team_name'] as String;
+      final player = Player.fromJson(r);
+      result
+          .putIfAbsent(boardNum, () => [])
+          .add((teamId: teamId, teamName: teamName, player: player));
+    }
+    return result;
+  }
+
   // --- Player-Team Attribute Values (CMP_PLAYER_TEAM_ATTR_VALUE) ---
 
   /// Look up dict_id by attr_id + dict_value text.

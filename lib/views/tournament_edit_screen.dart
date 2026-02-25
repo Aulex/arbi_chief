@@ -6,6 +6,7 @@ import '../models/player_model.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
+import '../viewmodels/team_viewmodel.dart';
 
 class TournamentEditScreen extends ConsumerStatefulWidget {
   final Tournament tournament;
@@ -179,10 +180,127 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildPairingTab() {
+    final tId = widget.tournament.t_id!;
+    final svc = ref.read(tournamentServiceProvider);
+    final teamSvc = ref.read(teamServiceProvider);
+
+    return FutureBuilder<String?>(
+      future: svc.getAttrDictValue(tId, 2), // attr_id=2: Система жеребкування
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final pairingSystem = snapshot.data;
+
+        if (pairingSystem == 'Колова') {
+          return _buildRoundRobinPairing(teamSvc);
+        }
+
+        // Placeholder for other systems
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Colors.grey.shade300, width: 1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Жеребкування та результати',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  pairingSystem != null
+                      ? 'Система жеребкування: $pairingSystem (в розробці)'
+                      : 'Система жеребкування не обрана.',
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRoundRobinPairing(dynamic teamSvc) {
+    return FutureBuilder<
+        Map<int, List<({int teamId, String teamName, Player player})>>>(
+      future: teamSvc.getAllBoardAssignments(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final boards = snapshot.data ?? {};
+
+        return SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.grey.shade300, width: 1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Жеребкування — Колова система',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Розподіл гравців по дошках з командних складів.',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 3 boards in a row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (int boardNum = 1; boardNum <= 3; boardNum++) ...[
+                    if (boardNum > 1) const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildBoardPairingCard(
+                        boardNum,
+                        boards[boardNum] ?? [],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBoardPairingCard(
+    int boardNum,
+    List<({int teamId, String teamName, Player player})> entries,
+  ) {
+    final isWomenBoard = boardNum == 3;
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        side: BorderSide(
+          color: isWomenBoard ? Colors.pink.shade200 : Colors.grey.shade300,
+          width: 1,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -190,29 +308,44 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Жеребкування та результати',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Створюйте пари для наступного туру та вводьте результати матчів.',
-            ),
-            const Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Жеребкування ще не розпочато.'),
-                    SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: null, // Logic to be added
-                      child: Text('Розпочати 1-й тур'),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor:
+                      isWomenBoard ? Colors.pink : Colors.indigo,
+                  child: Text(
+                    '$boardNum',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Text(
+                  isWomenBoard
+                      ? 'Дошка $boardNum (жіноча)'
+                      : 'Дошка $boardNum',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
+            const Divider(height: 24),
+            if (entries.isEmpty)
+              Text(
+                'Немає гравців на цій дошці',
+                style: TextStyle(color: Colors.grey.shade500),
+              )
+            else
+              ...entries.map((e) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(e.player.fullName),
+                    subtitle: Text(e.teamName),
+                  )),
           ],
         ),
       ),
