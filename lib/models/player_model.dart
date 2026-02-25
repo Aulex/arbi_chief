@@ -35,7 +35,7 @@ class Player {
   // --- Logic Helpers ---
 
   String get fullName =>
-      "$player_name $player_surname $player_lastname"
+      "$player_surname $player_name $player_lastname"
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 

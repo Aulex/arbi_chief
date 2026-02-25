@@ -168,11 +168,13 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     final used = _usedIds;
     // Current player on this board is also "available" (to keep selection)
     final currentId = _boards[boardNum];
-    return allPlayers
+    final list = allPlayers
         .where((p) =>
             p.player_id == currentId ||
             (!used.contains(p.player_id) && !_takenByOtherTeams.contains(p.player_id)))
         .toList();
+    list.sort((a, b) => a.player_surname.compareTo(b.player_surname));
+    return list;
   }
 
   Widget _buildBoardCard(List<Player> allPlayers) {
@@ -270,7 +272,8 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     final available = allPlayers
         .where((p) => !used.contains(p.player_id))
         .where((p) => !_takenByOtherTeams.contains(p.player_id))
-        .toList();
+        .toList()
+      ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
 
     return Card(
       elevation: 0,

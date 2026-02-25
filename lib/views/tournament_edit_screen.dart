@@ -371,7 +371,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
           data: (allPlayers) {
             final available = allPlayers
                 .where((p) => !participantIds.contains(p.player_id))
-                .toList();
+                .toList()
+              ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
