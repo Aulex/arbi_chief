@@ -72,12 +72,12 @@ class TeamView extends ConsumerWidget {
                     return const Center(child: Text("Команд не знайдено."));
                   }
 
-                  final players = playersAsync.valueOrNull ?? [];
-                  final playerMap = {
+                  final players = playersAsync.asData?.value ?? [];
+                  final Map<int, Player> playerMap = {
                     for (final p in players)
                       if (p.player_id != null) p.player_id!: p
                   };
-                  final boardsMap = boardsAsync.valueOrNull ?? {};
+                  final boardsMap = boardsAsync.asData?.value ?? <int, Map<int, int>>{};
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
