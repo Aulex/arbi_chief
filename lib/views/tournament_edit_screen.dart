@@ -1233,11 +1233,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
             _tableCell('№', style: headerStyle),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
-              _highlightableNameCell(
-                '${i + 1}\n${players[i].player.player_surname}',
+              _verticalHeaderCell(
+                number: i + 1,
+                surname: players[i].player.player_surname,
                 isHighlighted: _hoveredCol == i,
                 style: headerStyle,
-                minWidth: 36,
               ),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
@@ -1335,6 +1335,29 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   }
 
   // --- Cell widgets ---
+
+  Widget _verticalHeaderCell({required int number, required String surname, required bool isHighlighted, TextStyle? style}) {
+    final effectiveStyle = isHighlighted
+        ? (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade800)
+        : style;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36),
+      color: isHighlighted ? Colors.indigo.shade100 : null,
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$number', style: effectiveStyle),
+          const SizedBox(height: 2),
+          RotatedBox(
+            quarterTurns: 3,
+            child: Text(surname, style: effectiveStyle),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _highlightableNameCell(String text, {required bool isHighlighted, TextStyle? style, double? minWidth}) {
     return Container(
