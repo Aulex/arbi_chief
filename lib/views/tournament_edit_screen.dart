@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'tournament_add_screen.dart';
 import '../models/tournament_model.dart';
 import '../models/player_model.dart';
@@ -21,7 +24,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -127,6 +130,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
                   Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
                   Tab(
+                      icon: Icon(Icons.summarize_outlined), text: 'Звіти'),
+                  Tab(
                     icon: Icon(Icons.settings_outlined),
                     text: 'Налаштування',
                   ),
@@ -140,6 +145,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     _buildOverviewTab(),
                     _buildTableTab(),
                     _buildParticipantsTab(),
+                    _ReportsTab(tournament: widget.tournament),
                     TournamentAddScreen(
                       tournament: widget.tournament,
                       isEditMode: true,
@@ -1328,6 +1334,412 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                         : Colors.amber.shade800,
                   ),
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Reports tab — generates and exports a PDF with board cross-tables and team ratings.
+class _ReportsTab extends ConsumerStatefulWidget {
+  final Tournament tournament;
+  const _ReportsTab({required this.tournament});
+
+  @override
+  ConsumerState<_ReportsTab> createState() => _ReportsTabState();
+}
+
+class _ReportsTabState extends ConsumerState<_ReportsTab> {
+  bool _loading = true;
+  Map<int, List<({int teamId, String teamName, Player player})>> _boardPlayers = {};
+  Map<int, Map<int, Map<int, double>>> _boardResults = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final tournamentSvc = ref.read(tournamentServiceProvider);
+    final tId = widget.tournament.t_id!;
+
+    final boards = await teamSvc.getBoardAssignmentsForTournament(tId);
+    final games = await tournamentSvc.getGamesGroupedByBoard(tId);
+
+    final results = <int, Map<int, Map<int, double>>>{};
+    for (final entry in games.entries) {
+      final boardNum = entry.key;
+      results.putIfAbsent(boardNum, () => {});
+      for (final game in entry.value) {
+        final wId = game.white.player_id!;
+        final bId = game.black.player_id!;
+        if (game.whiteResult != null) {
+          results[boardNum]!.putIfAbsent(wId, () => {})[bId] = game.whiteResult!;
+        }
+        if (game.blackResult != null) {
+          results[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackResult!;
+        }
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _boardPlayers = boards;
+        _boardResults = results;
+        _loading = false;
+      });
+    }
+  }
+
+  double _totalPoints(int boardNum, int playerId) {
+    return (_boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
+  }
+
+  double _bergerCoefficient(int boardNum, int playerId) {
+    final results = _boardResults[boardNum]?[playerId] ?? {};
+    double sb = 0;
+    for (final entry in results.entries) {
+      final result = entry.value;
+      final opponentPoints = _totalPoints(boardNum, entry.key);
+      if (result == 1.0) {
+        sb += opponentPoints;
+      } else if (result == 0.5) {
+        sb += opponentPoints * 0.5;
+      }
+    }
+    return sb;
+  }
+
+  List<({int teamId, String teamName, Player player})> _sortedStandings(
+    int boardNum,
+    List<({int teamId, String teamName, Player player})> players,
+  ) {
+    final sorted = List.of(players);
+    sorted.sort((a, b) {
+      final aId = a.player.player_id!;
+      final bId = b.player.player_id!;
+      final pa = _totalPoints(boardNum, aId);
+      final pb = _totalPoints(boardNum, bId);
+      if (pa != pb) return pb.compareTo(pa);
+      final aVsB = _boardResults[boardNum]?[aId]?[bId];
+      final bVsA = _boardResults[boardNum]?[bId]?[aId];
+      if (aVsB != null && bVsA != null) {
+        if (aVsB > bVsA) return -1;
+        if (aVsB < bVsA) return 1;
+      }
+      final ba = _bergerCoefficient(boardNum, aId);
+      final bb = _bergerCoefficient(boardNum, bId);
+      return bb.compareTo(ba);
+    });
+    return sorted;
+  }
+
+  String _fmtPts(double points) {
+    if (points == points.roundToDouble()) return points.toStringAsFixed(1);
+    String s = points.toStringAsFixed(2);
+    if (s.endsWith('0')) s = s.substring(0, s.length - 1);
+    return s;
+  }
+
+  String _fmtResult(double? result) {
+    if (result == null) return '';
+    if (result == 1.0) return '1';
+    if (result == 0.0) return '0';
+    if (result == 0.5) return '1/2';
+    return result.toString();
+  }
+
+  Future<pw.Document> _buildPdf() async {
+    final pdf = pw.Document();
+    final tournamentName = widget.tournament.t_name;
+    final boards = _boardPlayers.keys.toList()..sort();
+
+    // Board cross-tables (landscape pages)
+    for (final boardNum in boards) {
+      final players = _boardPlayers[boardNum] ?? [];
+      if (players.isEmpty) continue;
+      final sorted = _sortedStandings(boardNum, players);
+      final n = sorted.length;
+      final isWomen = boardNum == 3;
+      final boardLabel = isWomen ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum';
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.all(24),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 4),
+              pw.Text(boardLabel, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+            ],
+          ),
+          build: (context) {
+            final headerRow = [
+              '№',
+              'ПІБ',
+              'Команда',
+              for (int i = 1; i <= n; i++) '$i',
+              'Бали',
+              'К.Б.',
+              'Місце',
+            ];
+
+            final dataRows = <List<String>>[];
+            for (int i = 0; i < n; i++) {
+              final p = sorted[i];
+              final pId = p.player.player_id!;
+              final row = <String>[
+                '${i + 1}',
+                '${p.player.player_surname} ${p.player.player_name}',
+                p.teamName,
+              ];
+              for (int j = 0; j < n; j++) {
+                if (i == j) {
+                  row.add('X');
+                } else {
+                  final result = _boardResults[boardNum]?[pId]?[sorted[j].player.player_id!];
+                  row.add(_fmtResult(result));
+                }
+              }
+              row.add(_fmtPts(_totalPoints(boardNum, pId)));
+              row.add(_fmtPts(_bergerCoefficient(boardNum, pId)));
+              row.add('${i + 1}');
+              dataRows.add(row);
+            }
+
+            return [
+              pw.TableHelper.fromTextArray(
+                headers: headerRow,
+                data: dataRows,
+                headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                cellStyle: const pw.TextStyle(fontSize: 8),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                cellAlignment: pw.Alignment.center,
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(24),
+                  1: const pw.FlexColumnWidth(3),
+                  2: const pw.FlexColumnWidth(2),
+                  for (int i = 3; i < 3 + n; i++)
+                    i: const pw.FixedColumnWidth(22),
+                  3 + n: const pw.FixedColumnWidth(32),
+                  4 + n: const pw.FixedColumnWidth(32),
+                  5 + n: const pw.FixedColumnWidth(32),
+                },
+                border: pw.TableBorder.all(color: PdfColors.grey400),
+              ),
+            ];
+          },
+        ),
+      );
+    }
+
+    // Team ratings page
+    final teamScores = <int, ({String teamName, double total, Map<int, double> perBoard})>{};
+    for (final boardEntry in _boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      for (final p in boardEntry.value) {
+        final existing = teamScores[p.teamId];
+        final pts = _totalPoints(boardNum, p.player.player_id!);
+        if (existing != null) {
+          final newPerBoard = Map<int, double>.from(existing.perBoard);
+          newPerBoard[boardNum] = (newPerBoard[boardNum] ?? 0) + pts;
+          teamScores[p.teamId] = (
+            teamName: existing.teamName,
+            total: existing.total + pts,
+            perBoard: newPerBoard,
+          );
+        } else {
+          teamScores[p.teamId] = (
+            teamName: p.teamName,
+            total: pts,
+            perBoard: {boardNum: pts},
+          );
+        }
+      }
+    }
+    final sortedTeams = teamScores.entries.toList()
+      ..sort((a, b) => b.value.total.compareTo(a.value.total));
+
+    if (sortedTeams.isNotEmpty) {
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 4),
+              pw.Text('Командний залік', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+            ],
+          ),
+          build: (context) {
+            final headerRow = [
+              'Місце',
+              'Команда',
+              for (final b in boards) 'Дошка $b',
+              'Всього',
+            ];
+            final dataRows = <List<String>>[];
+            for (int i = 0; i < sortedTeams.length; i++) {
+              final team = sortedTeams[i].value;
+              dataRows.add([
+                '${i + 1}',
+                team.teamName,
+                for (final b in boards) _fmtPts(team.perBoard[b] ?? 0),
+                _fmtPts(team.total),
+              ]);
+            }
+
+            return [
+              pw.TableHelper.fromTextArray(
+                headers: headerRow,
+                data: dataRows,
+                headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                cellAlignment: pw.Alignment.center,
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(36),
+                  1: const pw.FlexColumnWidth(3),
+                  for (int i = 2; i < 2 + boards.length; i++)
+                    i: const pw.FixedColumnWidth(52),
+                  2 + boards.length: const pw.FixedColumnWidth(52),
+                },
+                border: pw.TableBorder.all(color: PdfColors.grey400),
+              ),
+            ];
+          },
+        ),
+      );
+    }
+
+    return pdf;
+  }
+
+  Future<void> _exportPdf() async {
+    final doc = await _buildPdf();
+    final bytes = await doc.save();
+    final name = widget.tournament.t_name.replaceAll(RegExp(r'[^\w\s\-]'), '').trim();
+    await Printing.sharePdf(bytes: bytes, filename: 'Звіт_$name.pdf');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
+    final hasData = _boardPlayers.isNotEmpty;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.summarize_outlined, color: Colors.indigo.shade400),
+                const SizedBox(width: 12),
+                const Text(
+                  'Звіти турніру',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Експорт поточного стану турніру у PDF-документ.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+            const Divider(height: 32),
+            if (!hasData)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Немає даних для звіту',
+                        style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Додайте учасників та розподіліть їх по дошках.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              _reportCard(
+                icon: Icons.picture_as_pdf,
+                title: 'Повний звіт',
+                description: 'Крос-таблиці всіх дошок та командний залік.',
+                onTap: _exportPdf,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _reportCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.indigo.shade100, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: Colors.red.shade400, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(description, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  ],
+                ),
+              ),
+              Icon(Icons.download_outlined, color: Colors.indigo.shade300),
+            ],
+          ),
         ),
       ),
     );
