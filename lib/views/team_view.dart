@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/team_viewmodel.dart';
+import '../viewmodels/player_viewmodel.dart';
 import '../models/team_model.dart';
+import '../models/player_model.dart';
 import 'team_edit_screen.dart';
 
 class TeamView extends ConsumerWidget {
@@ -10,6 +12,8 @@ class TeamView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final teamsAsync = ref.watch(teamProvider);
+    final playersAsync = ref.watch(playerProvider);
+    final boardsAsync = ref.watch(allTeamBoardsProvider);
 
     return Card(
       margin: const EdgeInsets.all(24),
@@ -67,6 +71,14 @@ class TeamView extends ConsumerWidget {
                   if (teams.isEmpty) {
                     return const Center(child: Text("Команд не знайдено."));
                   }
+
+                  final players = playersAsync.valueOrNull ?? [];
+                  final playerMap = {
+                    for (final p in players)
+                      if (p.player_id != null) p.player_id!: p
+                  };
+                  final boardsMap = boardsAsync.valueOrNull ?? {};
+
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       return SingleChildScrollView(
@@ -80,12 +92,19 @@ class TeamView extends ConsumerWidget {
                             ),
                             columns: const [
                               DataColumn(label: Text('Назва команди')),
+                              DataColumn(label: Text('Дошка 1')),
+                              DataColumn(label: Text('Дошка 2')),
+                              DataColumn(label: Text('Дошка 3')),
                               DataColumn(label: Text('Дія')),
                             ],
                             rows: teams.map((t) {
+                              final boards = boardsMap[t.team_id] ?? {};
                               return DataRow(
                                 cells: [
                                   DataCell(Text(t.team_name)),
+                                  DataCell(Text(_playerLabel(boards[1], playerMap))),
+                                  DataCell(Text(_playerLabel(boards[2], playerMap))),
+                                  DataCell(Text(_playerLabel(boards[3], playerMap))),
                                   DataCell(
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -93,13 +112,14 @@ class TeamView extends ConsumerWidget {
                                         IconButton(
                                           icon: const Icon(Icons.edit,
                                               color: Colors.blue),
-                                          onPressed: () {
-                                            Navigator.of(context).push(
+                                          onPressed: () async {
+                                            await Navigator.of(context).push(
                                               MaterialPageRoute(
                                                 builder: (_) =>
                                                     TeamEditScreen(team: t),
                                               ),
                                             );
+                                            ref.invalidate(allTeamBoardsProvider);
                                           },
                                         ),
                                         IconButton(
@@ -131,6 +151,14 @@ class TeamView extends ConsumerWidget {
     );
   }
 
+  String _playerLabel(int? playerId, Map<int, Player> playerMap) {
+    if (playerId == null) return '—';
+    final p = playerMap[playerId];
+    if (p == null) return '—';
+    final initName = p.player_name.isNotEmpty ? ' ${p.player_name[0]}.' : '';
+    return '${p.player_surname}$initName';
+  }
+
   void _showAddDialog(BuildContext context, WidgetRef ref) {
     final nameC = TextEditingController();
 
@@ -159,11 +187,12 @@ class TeamView extends ConsumerWidget {
                     .addTeam(name: nameC.text.trim());
                 if (dialogCtx.mounted) Navigator.pop(dialogCtx);
                 if (context.mounted) {
-                  Navigator.of(context).push(
+                  await Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => TeamEditScreen(team: newTeam),
                     ),
                   );
+                  ref.invalidate(allTeamBoardsProvider);
                 }
               }
             },
