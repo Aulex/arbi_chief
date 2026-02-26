@@ -1348,12 +1348,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$number', style: effectiveStyle),
-          const SizedBox(height: 2),
           RotatedBox(
             quarterTurns: 3,
             child: Text(surname, style: effectiveStyle),
           ),
+          const SizedBox(height: 2),
+          Text('$number', style: effectiveStyle),
         ],
       ),
     );
