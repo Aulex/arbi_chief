@@ -1486,7 +1486,6 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
           ),
           build: (context) {
             final headerRow = [
-              '№',
               'ПІБ',
               'Команда',
               for (int i = 1; i <= n; i++) '$i',
@@ -1500,7 +1499,6 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
               final p = sorted[i];
               final pId = p.player.player_id!;
               final row = <String>[
-                '${i + 1}',
                 '${p.player.player_surname} ${p.player.player_name}',
                 p.teamName,
               ];
@@ -1527,14 +1525,13 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 cellAlignment: pw.Alignment.center,
                 columnWidths: {
-                  0: const pw.FixedColumnWidth(24),
-                  1: const pw.FlexColumnWidth(3),
-                  2: const pw.FlexColumnWidth(2),
-                  for (int i = 3; i < 3 + n; i++)
+                  0: const pw.FlexColumnWidth(3),
+                  1: const pw.FlexColumnWidth(2),
+                  for (int i = 2; i < 2 + n; i++)
                     i: const pw.FixedColumnWidth(22),
+                  2 + n: const pw.FixedColumnWidth(32),
                   3 + n: const pw.FixedColumnWidth(32),
-                  4 + n: const pw.FixedColumnWidth(32),
-                  5 + n: const pw.FixedColumnWidth(32),
+                  4 + n: const pw.FixedColumnWidth(40),
                 },
                 border: pw.TableBorder.all(color: PdfColors.grey400),
               ),
@@ -1613,7 +1610,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 cellAlignment: pw.Alignment.center,
                 columnWidths: {
-                  0: const pw.FixedColumnWidth(36),
+                  0: const pw.FixedColumnWidth(44),
                   1: const pw.FlexColumnWidth(3),
                   for (int i = 2; i < 2 + boards.length; i++)
                     i: const pw.FixedColumnWidth(52),
