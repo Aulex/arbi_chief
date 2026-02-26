@@ -1456,6 +1456,11 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     final tournamentName = widget.tournament.t_name;
     final boards = _boardPlayers.keys.toList()..sort();
 
+    // Load a font that supports Cyrillic (Ukrainian) characters
+    final fontRegular = await PdfGoogleFonts.notoSansRegular();
+    final fontBold = await PdfGoogleFonts.notoSansBold();
+    final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+
     // Board cross-tables (landscape pages)
     for (final boardNum in boards) {
       final players = _boardPlayers[boardNum] ?? [];
@@ -1469,6 +1474,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4.landscape,
           margin: const pw.EdgeInsets.all(24),
+          theme: theme,
           header: (context) => pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -1517,7 +1523,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
                 headers: headerRow,
                 data: dataRows,
                 headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-                cellStyle: const pw.TextStyle(fontSize: 8),
+                cellStyle: pw.TextStyle(fontSize: 8, font: fontRegular),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 cellAlignment: pw.Alignment.center,
                 columnWidths: {
@@ -1570,6 +1576,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(24),
+          theme: theme,
           header: (context) => pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -1602,7 +1609,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
                 headers: headerRow,
                 data: dataRows,
                 headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-                cellStyle: const pw.TextStyle(fontSize: 9),
+                cellStyle: pw.TextStyle(fontSize: 9, font: fontRegular),
                 headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 cellAlignment: pw.Alignment.center,
                 columnWidths: {
