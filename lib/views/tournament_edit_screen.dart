@@ -1235,7 +1235,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
             for (int i = 0; i < n; i++)
               _highlightableNameCell(
                 '${i + 1}\n${players[i].player.player_surname}',
-                isHighlighted: _hoveredCol == i || _hoveredRow == i,
+                isHighlighted: _hoveredCol == i,
                 style: headerStyle,
                 minWidth: 36,
               ),
@@ -1255,7 +1255,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               _tableCell('${i + 1}', style: cellStyle),
               _highlightableNameCell(
                 '${players[i].player.player_surname} ${players[i].player.player_name}',
-                isHighlighted: _hoveredRow == i || _hoveredCol == i,
+                isHighlighted: _hoveredRow == i,
                 style: cellStyle,
                 minWidth: 130,
               ),
