@@ -1034,19 +1034,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    flex: 2,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: _buildStandings(boardNum, players),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 3,
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: _buildCrossTable(boardNum, players),
                     ),
+                  ),
+                  const SizedBox(width: 16),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: _buildStandings(boardNum, players),
                   ),
                 ],
               ),
@@ -1237,7 +1233,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
             _tableCell('№', style: headerStyle),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
-              _tableCell('${i + 1}\n${players[i].player.player_surname}', style: headerStyle, minWidth: 36),
+              _highlightableNameCell(
+                '${i + 1}\n${players[i].player.player_surname}',
+                isHighlighted: _hoveredCol == i || _hoveredRow == i,
+                style: headerStyle,
+                minWidth: 36,
+              ),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
             _tableCell('К.Б.', style: headerStyle),
@@ -1245,21 +1246,18 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         ),
         for (int i = 0; i < n; i++)
           TableRow(
-            decoration: _hoveredRow == i
-                ? BoxDecoration(color: Colors.indigo.shade50)
-                : (i.isEven ? null : BoxDecoration(color: Colors.grey.shade50)),
+            decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
             children: [
               _tableCell(
                 '${players[i].teamNumber ?? ''}',
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell('${i + 1}', style: cellStyle),
-              _tableCell(
+              _highlightableNameCell(
                 '${players[i].player.player_surname} ${players[i].player.player_name}',
-                style: _hoveredRow == i
-                    ? cellStyle.copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade700)
-                    : cellStyle,
-                minWidth: 130, leftAlign: true,
+                isHighlighted: _hoveredRow == i || _hoveredCol == i,
+                style: cellStyle,
+                minWidth: 130,
               ),
               for (int j = 0; j < n; j++)
                 if (i == j)
@@ -1337,6 +1335,22 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   }
 
   // --- Cell widgets ---
+
+  Widget _highlightableNameCell(String text, {required bool isHighlighted, TextStyle? style, double? minWidth}) {
+    return Container(
+      constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      color: isHighlighted ? Colors.indigo.shade100 : null,
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        textAlign: TextAlign.left,
+        style: isHighlighted
+            ? (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade800)
+            : style,
+      ),
+    );
+  }
 
   Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
     return Container(
@@ -1537,13 +1551,8 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
     );
 
     if (result != null && mounted) {
-      // Set team number first, then navigate to board edit
       final service = ref.read(teamServiceProvider);
-      // Create empty assignment so team_number is stored
-      await service.saveAssignments(
-        result.team.team_id!, widget.tournament.t_id!, {}, [],
-        teamNumber: result.number,
-      );
+      // Navigate to board edit first so rows get created
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TeamEditScreen(
@@ -1551,6 +1560,10 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
             tId: widget.tournament.t_id!,
           ),
         ),
+      );
+      // Now set team_number on the newly created rows
+      await service.setTeamNumber(
+        result.team.team_id!, widget.tournament.t_id!, result.number,
       );
       _reloadData();
     }
@@ -1657,20 +1670,24 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
               )
             else
               Expanded(
-                child: SingleChildScrollView(
-                  child: DataTable(
-                    headingTextStyle: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black54,
-                    ),
-                    columns: const [
-                      DataColumn(label: Text('№')),
-                      DataColumn(label: Text('Команда')),
-                      DataColumn(label: Text('Дошка 1')),
-                      DataColumn(label: Text('Дошка 2')),
-                      DataColumn(label: Text('Дошка 3')),
-                      DataColumn(label: Text('Дія')),
-                    ],
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: DataTable(
+                        headingTextStyle: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black54,
+                        ),
+                        columnSpacing: 24,
+                        columns: const [
+                          DataColumn(label: Text('№')),
+                          DataColumn(label: Text('Команда')),
+                          DataColumn(label: Text('Дошка 1')),
+                          DataColumn(label: Text('Дошка 2')),
+                          DataColumn(label: Text('Дошка 3')),
+                          DataColumn(label: Text('Дія')),
+                        ],
                     rows: _teamData.map((d) {
                       return DataRow(cells: [
                         DataCell(Text('${d.teamNumber ?? ''}')),
@@ -1705,6 +1722,8 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                         )),
                       ]);
                     }).toList(),
+                      ),
+                    ),
                   ),
                 ),
               ),

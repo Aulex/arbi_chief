@@ -125,14 +125,18 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   }
 
   /// Available players for a given board (excludes taken, used, other teams).
+  /// Board 3 is women-only (player_gender == 1).
   List<Player> _availableForBoard(int boardNum, List<Player> allPlayers) {
     final used = _usedIds;
     // Current player on this board is also "available" (to keep selection)
     final currentId = _boards[boardNum];
     final list = allPlayers
-        .where((p) =>
-            p.player_id == currentId ||
-            (!used.contains(p.player_id) && !_takenByOtherTeams.contains(p.player_id)))
+        .where((p) {
+          // Board 3: women only
+          if (boardNum == 3 && p.player_gender != 1 && p.player_id != currentId) return false;
+          return p.player_id == currentId ||
+              (!used.contains(p.player_id) && !_takenByOtherTeams.contains(p.player_id));
+        })
         .toList();
     list.sort((a, b) => a.player_surname.compareTo(b.player_surname));
     return list;
