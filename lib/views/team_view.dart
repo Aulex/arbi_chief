@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/team_viewmodel.dart';
-import '../viewmodels/player_viewmodel.dart';
 import '../models/team_model.dart';
-import '../models/player_model.dart';
-import 'team_edit_screen.dart';
 
 class TeamView extends ConsumerWidget {
   const TeamView({super.key});
@@ -12,8 +9,6 @@ class TeamView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final teamsAsync = ref.watch(teamProvider);
-    final playersAsync = ref.watch(playerProvider);
-    final boardsAsync = ref.watch(allTeamBoardsProvider);
 
     return Card(
       margin: const EdgeInsets.all(24),
@@ -37,7 +32,7 @@ class TeamView extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Перегляд та керування всіма командами.',
+                      'Перегляд та керування командами. Склад команд налаштовується в турнірі.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.grey.shade600,
                       ),
@@ -72,13 +67,6 @@ class TeamView extends ConsumerWidget {
                     return const Center(child: Text("Команд не знайдено."));
                   }
 
-                  final players = playersAsync.asData?.value ?? [];
-                  final Map<int, Player> playerMap = {
-                    for (final p in players)
-                      if (p.player_id != null) p.player_id!: p
-                  };
-                  final boardsMap = boardsAsync.asData?.value ?? <int, Map<int, int>>{};
-
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       return SingleChildScrollView(
@@ -92,19 +80,12 @@ class TeamView extends ConsumerWidget {
                             ),
                             columns: const [
                               DataColumn(label: Text('Назва команди')),
-                              DataColumn(label: Text('Дошка 1')),
-                              DataColumn(label: Text('Дошка 2')),
-                              DataColumn(label: Text('Дошка 3')),
                               DataColumn(label: Text('Дія')),
                             ],
                             rows: teams.map((t) {
-                              final boards = boardsMap[t.team_id] ?? {};
                               return DataRow(
                                 cells: [
                                   DataCell(Text(t.team_name)),
-                                  DataCell(Text(_playerLabel(boards[1], playerMap))),
-                                  DataCell(Text(_playerLabel(boards[2], playerMap))),
-                                  DataCell(Text(_playerLabel(boards[3], playerMap))),
                                   DataCell(
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -112,15 +93,8 @@ class TeamView extends ConsumerWidget {
                                         IconButton(
                                           icon: const Icon(Icons.edit,
                                               color: Colors.blue),
-                                          onPressed: () async {
-                                            await Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    TeamEditScreen(team: t),
-                                              ),
-                                            );
-                                            ref.invalidate(allTeamBoardsProvider);
-                                          },
+                                          onPressed: () =>
+                                              _showRenameDialog(context, ref, t),
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete,
@@ -151,14 +125,6 @@ class TeamView extends ConsumerWidget {
     );
   }
 
-  String _playerLabel(int? playerId, Map<int, Player> playerMap) {
-    if (playerId == null) return '—';
-    final p = playerMap[playerId];
-    if (p == null) return '—';
-    final initName = p.player_name.isNotEmpty ? ' ${p.player_name[0]}.' : '';
-    return '${p.player_surname}$initName';
-  }
-
   void _showAddDialog(BuildContext context, WidgetRef ref) {
     final nameC = TextEditingController();
 
@@ -182,18 +148,46 @@ class TeamView extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               if (nameC.text.trim().isNotEmpty) {
-                final newTeam = await ref
+                await ref
                     .read(teamProvider.notifier)
                     .addTeam(name: nameC.text.trim());
                 if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                if (context.mounted) {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => TeamEditScreen(team: newTeam),
-                    ),
-                  );
-                  ref.invalidate(allTeamBoardsProvider);
-                }
+              }
+            },
+            child: const Text("Зберегти"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameDialog(BuildContext context, WidgetRef ref, Team team) {
+    final nameC = TextEditingController(text: team.team_name);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text("Перейменувати команду"),
+        content: TextField(
+          controller: nameC,
+          decoration: const InputDecoration(
+            labelText: "Назва команди",
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text("Скасувати"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameC.text.trim().isNotEmpty) {
+                await ref
+                    .read(teamProvider.notifier)
+                    .updateTeam(team.copyWith(team_name: nameC.text.trim()));
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
               }
             },
             child: const Text("Зберегти"),

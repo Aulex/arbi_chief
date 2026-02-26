@@ -4,7 +4,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'tournament_add_screen.dart';
+import 'team_edit_screen.dart';
 import '../models/tournament_model.dart';
+import '../models/team_model.dart';
 import '../models/player_model.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/player_viewmodel.dart';
@@ -24,7 +26,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -129,6 +131,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   Tab(icon: Icon(Icons.grid_view_outlined), text: 'Огляд'),
                   Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
                   Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
+                  Tab(icon: Icon(Icons.groups_outlined), text: 'Команди'),
                   Tab(
                       icon: Icon(Icons.summarize_outlined), text: 'Звіти'),
                   Tab(
@@ -145,6 +148,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     _buildOverviewTab(),
                     _buildTableTab(),
                     _buildParticipantsTab(),
+                    _TournamentTeamsTab(tournament: widget.tournament),
                     _ReportsTab(tournament: widget.tournament),
                     TournamentAddScreen(
                       tournament: widget.tournament,
@@ -1334,6 +1338,251 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                         : Colors.amber.shade800,
                   ),
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Teams tab — manage team compositions within this tournament.
+class _TournamentTeamsTab extends ConsumerStatefulWidget {
+  final Tournament tournament;
+  const _TournamentTeamsTab({required this.tournament});
+
+  @override
+  ConsumerState<_TournamentTeamsTab> createState() => _TournamentTeamsTabState();
+}
+
+class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
+  bool _loading = true;
+  List<({Team team, Map<int, int> boards})> _teamData = [];
+  Map<int, Player> _playerMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final tId = widget.tournament.t_id!;
+    final data = await teamSvc.getTeamsForTournament(tId);
+
+    final players = await ref.read(playerProvider.future);
+    final pMap = <int, Player>{
+      for (final p in players)
+        if (p.player_id != null) p.player_id!: p
+    };
+
+    if (mounted) {
+      setState(() {
+        _teamData = data;
+        _playerMap = pMap;
+        _loading = false;
+      });
+    }
+  }
+
+  String _playerLabel(int? playerId) {
+    if (playerId == null) return '—';
+    final p = _playerMap[playerId];
+    if (p == null) return '—';
+    final initName = p.player_name.isNotEmpty ? ' ${p.player_name[0]}.' : '';
+    return '${p.player_surname}$initName';
+  }
+
+  Future<void> _addTeamToTournament() async {
+    final allTeams = await ref.read(teamProvider.future);
+    final existingIds = _teamData.map((d) => d.team.team_id).toSet();
+    final available = allTeams.where((t) => !existingIds.contains(t.team_id)).toList();
+
+    if (available.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Всі команди вже додані до турніру.')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    final selected = await showDialog<Team>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Додати команду до турніру'),
+        children: available.map((t) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, t),
+          child: Text(t.team_name),
+        )).toList(),
+      ),
+    );
+
+    if (selected != null && mounted) {
+      // Navigate to team edit screen to configure boards
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TeamEditScreen(
+            team: selected,
+            tId: widget.tournament.t_id!,
+          ),
+        ),
+      );
+      _reloadData();
+    }
+  }
+
+  void _reloadData() {
+    setState(() => _loading = true);
+    _loadData();
+  }
+
+  Future<void> _removeTeamFromTournament(Team team) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Видалити команду з турніру?'),
+        content: Text('Видалити склад команди "${team.team_name}" з цього турніру?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Скасувати')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Видалити', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final service = ref.read(teamServiceProvider);
+      await service.saveAssignments(team.team_id!, widget.tournament.t_id!, {}, []);
+      _reloadData();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Команди турніру',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Склад команд у цьому турнірі.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: _addTeamToTournament,
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text('Додати команду'),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.indigo,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            if (_teamData.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.groups_outlined, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Команд у турнірі поки немає',
+                        style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Натисніть "Додати команду", щоб налаштувати склад.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    headingTextStyle: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                    columns: const [
+                      DataColumn(label: Text('Команда')),
+                      DataColumn(label: Text('Дошка 1')),
+                      DataColumn(label: Text('Дошка 2')),
+                      DataColumn(label: Text('Дошка 3')),
+                      DataColumn(label: Text('Дія')),
+                    ],
+                    rows: _teamData.map((d) {
+                      return DataRow(cells: [
+                        DataCell(Text(d.team.team_name)),
+                        DataCell(Text(_playerLabel(d.boards[1]))),
+                        DataCell(Text(_playerLabel(d.boards[2]))),
+                        DataCell(Text(_playerLabel(d.boards[3]))),
+                        DataCell(Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              tooltip: 'Редагувати склад',
+                              onPressed: () async {
+                                await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => TeamEditScreen(
+                                      team: d.team,
+                                      tId: widget.tournament.t_id!,
+                                    ),
+                                  ),
+                                );
+                                _reloadData();
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                              tooltip: 'Видалити з турніру',
+                              onPressed: () => _removeTeamFromTournament(d.team),
+                            ),
+                          ],
+                        )),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

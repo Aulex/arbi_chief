@@ -322,7 +322,7 @@ class TournamentService {
       JOIN CMP_PLAYER_EVENT pe2 ON pe2.event_id = e.event_id AND pe2.pe_id > pe1.pe_id
       JOIN CMP_PLAYER p1 ON pe1.player_id = p1.player_id
       JOIN CMP_PLAYER p2 ON pe2.player_id = p2.player_id
-      LEFT JOIN CMP_PLAYER_TEAM pt1 ON pt1.player_id = p1.player_id AND pt1.player_state = 0
+      LEFT JOIN CMP_PLAYER_TEAM pt1 ON pt1.player_id = p1.player_id AND pt1.player_state = 0 AND pt1.t_id = ts.t_id
       LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v1 ON pt1.pte_id = v1.pte_id AND v1.attr_id = 9
       WHERE ts.t_id = ?
       ORDER BY board_number, e.event_id

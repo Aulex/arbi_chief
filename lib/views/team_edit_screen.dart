@@ -4,19 +4,17 @@ import '../models/team_model.dart';
 import '../models/player_model.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/player_viewmodel.dart';
-import '../services/team_service.dart';
 
 class TeamEditScreen extends ConsumerStatefulWidget {
   final Team team;
-  const TeamEditScreen({super.key, required this.team});
+  final int tId;
+  const TeamEditScreen({super.key, required this.team, required this.tId});
 
   @override
   ConsumerState<TeamEditScreen> createState() => _TeamEditScreenState();
 }
 
 class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
-  late TextEditingController _nameC;
-
   /// Board assignments: board number → player ID (null = empty board)
   Map<int, int?> _boards = {1: null, 2: null, 3: null};
 
@@ -31,19 +29,18 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   @override
   void initState() {
     super.initState();
-    _nameC = TextEditingController(text: widget.team.team_name);
     _loadAssignments();
   }
 
   Future<void> _loadAssignments() async {
     final service = ref.read(teamServiceProvider);
-    final boardMembers = await service.getBoardMembers(widget.team.team_id!);
-    final assignments = await service.getTeamAssignments(widget.team.team_id!);
+    final boardMembers = await service.getBoardMembers(widget.team.team_id!, widget.tId);
+    final assignments = await service.getTeamAssignments(widget.team.team_id!, widget.tId);
     final reserves = assignments
         .where((a) => a.player_state == 1)
         .map((a) => a.player_id)
         .toList();
-    final taken = await service.getPlayersInOtherTeams(widget.team.team_id!);
+    final taken = await service.getPlayersInOtherTeams(widget.team.team_id!, widget.tId);
     setState(() {
       _boards = {
         1: boardMembers[1],
@@ -57,18 +54,12 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   }
 
   @override
-  void dispose() {
-    _nameC.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final playersAsync = ref.watch(playerProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Редагування команди'),
+        title: Text('Склад: ${widget.team.team_name}'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -90,36 +81,6 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Team name card
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              side: BorderSide(color: Colors.grey.shade300, width: 1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Назва команди',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _nameC,
-                    decoration: const InputDecoration(
-                      labelText: 'Назва команди',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           // Boards & Bench
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,24 +306,17 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameC.text.trim();
-    if (name.isEmpty) return;
-
-    final updatedTeam = widget.team.copyWith(team_name: name);
     final service = ref.read(teamServiceProvider);
-    await service.saveTeam(updatedTeam);
 
     // Build non-null board assignments
     final boardMembers = <int, int>{};
     for (final entry in _boards.entries) {
       if (entry.value != null) boardMembers[entry.key] = entry.value!;
     }
-    await service.saveAssignments(widget.team.team_id!, boardMembers, _reserves);
-
-    ref.invalidate(teamProvider);
+    await service.saveAssignments(widget.team.team_id!, widget.tId, boardMembers, _reserves);
 
     if (mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true); // return true to signal changes saved
     }
   }
 }

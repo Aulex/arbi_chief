@@ -37,17 +37,3 @@ class TeamNotifier extends AsyncNotifier<List<Team>> {
 final teamProvider = AsyncNotifierProvider<TeamNotifier, List<Team>>(
   TeamNotifier.new,
 );
-
-/// Board assignments for all teams: teamId → { boardNumber → playerId }
-final allTeamBoardsProvider =
-    FutureProvider<Map<int, Map<int, int>>>((ref) async {
-  final teams = await ref.watch(teamProvider.future);
-  final service = ref.watch(teamServiceProvider);
-  final result = <int, Map<int, int>>{};
-  for (final t in teams) {
-    if (t.team_id != null) {
-      result[t.team_id!] = await service.getBoardMembers(t.team_id!);
-    }
-  }
-  return result;
-});
