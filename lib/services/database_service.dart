@@ -16,7 +16,7 @@ class DatabaseService {
         Platform.isWindows ? Directory.current.path : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v13.db');
+    final path = join(dbPath, 'tournament_blueprint_v14.db');
 
     return await openDatabase(
       path,
@@ -181,6 +181,7 @@ class DatabaseService {
             team_id INTEGER,
             player_id INTEGER,
             t_id INTEGER,
+            team_number INTEGER,
             asgn_date TEXT,
             player_state INTEGER,
             FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id),

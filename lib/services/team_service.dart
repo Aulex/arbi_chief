@@ -86,9 +86,24 @@ class TeamService {
   /// Saves player-team assignments with board numbers for a specific tournament.
   /// [boardMembers] - map of board number → player ID (player_state = 0).
   /// [reserves] - list of player IDs for the bench (player_state = 1).
-  Future<void> saveAssignments(int teamId, int tId, Map<int, int> boardMembers, List<int> reserves) async {
+  /// [teamNumber] - optional team number within the tournament.
+  Future<void> saveAssignments(int teamId, int tId, Map<int, int> boardMembers, List<int> reserves, {int? teamNumber}) async {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
+
+    // Preserve existing team_number if not provided
+    if (teamNumber == null) {
+      final existing = await db.query(
+        'CMP_PLAYER_TEAM',
+        columns: ['team_number'],
+        where: 'team_id = ? AND t_id = ? AND team_number IS NOT NULL',
+        whereArgs: [teamId, tId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        teamNumber = existing.first['team_number'] as int?;
+      }
+    }
 
     // Clean up old attr values before deleting assignments
     final oldAssignments = await db.query(
@@ -114,6 +129,7 @@ class TeamService {
         'team_id': teamId,
         'player_id': entry.value,
         't_id': tId,
+        'team_number': teamNumber,
         'player_state': 0,
         'asgn_date': today,
       });
@@ -130,10 +146,34 @@ class TeamService {
         'team_id': teamId,
         'player_id': playerId,
         't_id': tId,
+        'team_number': teamNumber,
         'player_state': 1,
         'asgn_date': today,
       });
     }
+  }
+
+  /// Get team number for a team in a tournament.
+  Future<int?> getTeamNumber(int teamId, int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['team_number'],
+      where: 'team_id = ? AND t_id = ? AND team_number IS NOT NULL',
+      whereArgs: [teamId, tId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['team_number'] as int?;
+  }
+
+  /// Set team number for a team in a tournament.
+  Future<void> setTeamNumber(int teamId, int tId, int teamNumber) async {
+    final db = await _dbService.database;
+    await db.rawUpdate(
+      'UPDATE CMP_PLAYER_TEAM SET team_number = ? WHERE team_id = ? AND t_id = ?',
+      [teamNumber, teamId, tId],
+    );
   }
 
   /// Returns board assignments as map: board number → player ID.
@@ -163,11 +203,11 @@ class TeamService {
   }
 
   /// Returns board data grouped by board number for a tournament.
-  Future<Map<int, List<({int teamId, String teamName, Player player})>>>
+  Future<Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>>>
       getBoardAssignmentsForTournament(int tId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
-      SELECT t.team_id, t.team_name, p.*,
+      SELECT t.team_id, t.team_name, pt.team_number, p.*,
              CAST(v.attr_value AS INTEGER) AS board_number
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_TEAM t ON pt.team_id = t.team_id
@@ -175,40 +215,42 @@ class TeamService {
       LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
         ON pt.pte_id = v.pte_id AND v.attr_id = 9
       WHERE pt.t_id = ? AND pt.player_state = 0 AND v.attr_value IS NOT NULL
-      ORDER BY CAST(v.attr_value AS INTEGER), t.team_name
+      ORDER BY CAST(v.attr_value AS INTEGER), pt.team_number, t.team_name
     ''', [tId]);
-    final result = <int, List<({int teamId, String teamName, Player player})>>{};
+    final result = <int, List<({int teamId, String teamName, int? teamNumber, Player player})>>{};
     for (final r in rows) {
       final boardNum = r['board_number'] as int;
       final teamId = r['team_id'] as int;
       final teamName = r['team_name'] as String;
+      final teamNumber = r['team_number'] as int?;
       final player = Player.fromJson(r);
       result
           .putIfAbsent(boardNum, () => [])
-          .add((teamId: teamId, teamName: teamName, player: player));
+          .add((teamId: teamId, teamName: teamName, teamNumber: teamNumber, player: player));
     }
     return result;
   }
 
   /// Returns all teams that have assignments in a given tournament.
-  Future<List<({Team team, Map<int, int> boards})>> getTeamsForTournament(int tId) async {
+  Future<List<({Team team, int? teamNumber, Map<int, int> boards})>> getTeamsForTournament(int tId) async {
     final db = await _dbService.database;
     // Get distinct team IDs that have assignments in this tournament
     final rows = await db.rawQuery('''
-      SELECT DISTINCT t.team_id, t.team_name
+      SELECT DISTINCT t.team_id, t.team_name, pt.team_number
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_TEAM t ON pt.team_id = t.team_id
       WHERE pt.t_id = ?
-      ORDER BY t.team_name
+      ORDER BY pt.team_number, t.team_name
     ''', [tId]);
-    final result = <({Team team, Map<int, int> boards})>[];
+    final result = <({Team team, int? teamNumber, Map<int, int> boards})>[];
     for (final r in rows) {
       final team = Team(
         team_id: r['team_id'] as int,
         team_name: r['team_name'] as String,
       );
+      final teamNumber = r['team_number'] as int?;
       final boards = await getBoardMembers(team.team_id!, tId);
-      result.add((team: team, boards: boards));
+      result.add((team: team, teamNumber: teamNumber, boards: boards));
     }
     return result;
   }

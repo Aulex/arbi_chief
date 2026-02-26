@@ -26,7 +26,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 5,
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -39,14 +39,14 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back),
+                            icon: const Icon(Icons.arrow_back, size: 20),
                             onPressed: () {
                               ref
                                   .read(tournamentNavProvider.notifier)
@@ -59,12 +59,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                             children: [
                               Text(
                                 'Керування турніром: ${widget.tournament.t_name}',
-                                style: Theme.of(context).textTheme.titleLarge
+                                style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.bold),
                               ),
-                              const SizedBox(height: 4),
                               SelectableText(
-                                'Ідентифікатор турніру: ${widget.tournament.t_id}',
+                                'ID: ${widget.tournament.t_id}',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -107,45 +106,40 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                             ),
                           );
                         },
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Видалити турнір'),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Видалити'),
                         style: ElevatedButton.styleFrom(
                           foregroundColor: Colors.white,
                           backgroundColor: Colors.red,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               // Tab Bar
               const TabBar(
                 isScrollable: true,
                 labelColor: Colors.indigo,
                 indicatorColor: Colors.indigo,
                 tabs: [
-                  Tab(icon: Icon(Icons.grid_view_outlined), text: 'Огляд'),
-                  Tab(icon: Icon(Icons.leaderboard_outlined), text: 'Таблиця'),
-                  Tab(icon: Icon(Icons.people_outline), text: 'Учасники'),
-                  Tab(icon: Icon(Icons.groups_outlined), text: 'Команди'),
-                  Tab(
-                      icon: Icon(Icons.summarize_outlined), text: 'Звіти'),
-                  Tab(
-                    icon: Icon(Icons.settings_outlined),
-                    text: 'Налаштування',
-                  ),
+                  Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
+                  Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
+                  Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
+                  Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
+                  Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               // Tab Bar View
               Expanded(
                 child: TabBarView(
                   children: [
-                    _buildOverviewTab(),
                     _buildTableTab(),
                     _buildParticipantsTab(),
                     _TournamentTeamsTab(tournament: widget.tournament),
@@ -160,30 +154,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
             ],
           ),
         ),
-    );
-  }
-
-  Widget _buildOverviewTab() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Огляд турніру',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text('Тут буде відображатися загальна інформація про турнір.'),
-          ],
-        ),
-      ),
     );
   }
 
