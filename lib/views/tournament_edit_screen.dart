@@ -141,7 +141,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 child: TabBarView(
                   children: [
                     _buildTableTab(),
-                    _buildParticipantsTab(),
+                    _TournamentParticipantsTab(tId: widget.tournament.t_id!),
                     _TournamentTeamsTab(tournament: widget.tournament),
                     _ReportsTab(tournament: widget.tournament),
                     TournamentAddScreen(
@@ -338,65 +338,98 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     return _CrossTableTab(tId: widget.tournament.t_id!);
   }
 
-  Widget _buildParticipantsTab() {
-    final tId = widget.tournament.t_id!;
-    final participantsAsync = ref.watch(participantsProvider(tId));
-    final allPlayersAsync = ref.watch(playerProvider);
+}
 
-    return participantsAsync.when(
-      data: (participants) {
-        final participantIds = participants.map((p) => p.player_id).toSet();
+/// Participants tab with optimistic local state for instant add/remove.
+class _TournamentParticipantsTab extends ConsumerStatefulWidget {
+  final int tId;
+  const _TournamentParticipantsTab({required this.tId});
 
-        return allPlayersAsync.when(
-          data: (allPlayers) {
-            final available = allPlayers
-                .where((p) => !participantIds.contains(p.player_id))
-                .toList()
-              ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+  @override
+  ConsumerState<_TournamentParticipantsTab> createState() => _TournamentParticipantsTabState();
+}
 
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _buildPlayerListCard(
-                    title: 'Учасники (${participants.length})',
-                    subtitle: 'Гравці, зареєстровані в цьому турнірі.',
-                    players: participants,
-                    emptyText: 'Немає учасників',
-                    actionIcon: Icons.remove_circle_outline,
-                    actionColor: Colors.redAccent,
-                    onAction: (player) async {
-                      final svc = ref.read(tournamentServiceProvider);
-                      await svc.removeParticipant(tId, player.player_id!);
-                      ref.invalidate(participantsProvider(tId));
-                    },
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: _buildPlayerListCard(
-                    title: 'Доступні гравці (${available.length})',
-                    subtitle: 'Додайте гравців із загального списку.',
-                    players: available,
-                    emptyText: 'Немає доступних гравців',
-                    actionIcon: Icons.add_circle_outline,
-                    actionColor: Colors.green,
-                    onAction: (player) async {
-                      final svc = ref.read(tournamentServiceProvider);
-                      await svc.addParticipant(tId, player.player_id!);
-                      ref.invalidate(participantsProvider(tId));
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, s) => Center(child: Text('Помилка: $e')),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, s) => Center(child: Text('Помилка: $e')),
+class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipantsTab> {
+  List<Player> _participants = [];
+  List<Player> _available = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final svc = ref.read(tournamentServiceProvider);
+    final participants = await svc.getParticipants(widget.tId);
+    final allPlayers = await ref.read(playerProvider.future);
+    final participantIds = participants.map((p) => p.player_id).toSet();
+    final available = allPlayers
+        .where((p) => !participantIds.contains(p.player_id))
+        .toList()
+      ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+
+    if (mounted) {
+      setState(() {
+        _participants = participants;
+        _available = available;
+        _loading = false;
+      });
+    }
+  }
+
+  void _removeParticipant(Player player) {
+    setState(() {
+      _participants.removeWhere((p) => p.player_id == player.player_id);
+      _available
+        ..add(player)
+        ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+    });
+    ref.read(tournamentServiceProvider).removeParticipant(widget.tId, player.player_id!);
+  }
+
+  void _addParticipant(Player player) {
+    setState(() {
+      _available.removeWhere((p) => p.player_id == player.player_id);
+      _participants
+        ..add(player)
+        ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+    });
+    ref.read(tournamentServiceProvider).addParticipant(widget.tId, player.player_id!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _buildPlayerListCard(
+            title: 'Учасники (${_participants.length})',
+            subtitle: 'Гравці, зареєстровані в цьому турнірі.',
+            players: _participants,
+            emptyText: 'Немає учасників',
+            actionIcon: Icons.remove_circle_outline,
+            actionColor: Colors.redAccent,
+            onAction: _removeParticipant,
+          ),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          child: _buildPlayerListCard(
+            title: 'Доступні гравці (${_available.length})',
+            subtitle: 'Додайте гравців із загального списку.',
+            players: _available,
+            emptyText: 'Немає доступних гравців',
+            actionIcon: Icons.add_circle_outline,
+            actionColor: Colors.green,
+            onAction: _addParticipant,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1145,9 +1178,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 _tableCell('№', style: headerStyle),
                 _tableCell('Команда', style: headerStyle, minWidth: 140),
                 for (int i = 0; i < n; i++)
-                  _tableCell(
-                    '${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}\n${teamMap[teamIds[i]]!.teamName}',
-                    style: headerStyle, minWidth: 50,
+                  _verticalHeaderCell(
+                    number: teamMap[teamIds[i]]!.teamNumber ?? (i + 1),
+                    surname: teamMap[teamIds[i]]!.teamName,
+                    isHighlighted: false,
+                    style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
                 _tableCell('Д.1', style: headerStyle),
@@ -1218,8 +1253,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     List<({int teamId, String teamName, int? teamNumber, Player player})> players,
   ) {
     final n = players.length;
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54);
+    const cellStyle = TextStyle(fontSize: 14, color: Colors.black87);
 
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
@@ -1230,8 +1265,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
             _tableCell('№к', style: headerStyle),
-            _tableCell('№', style: headerStyle),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            _tableCell('Команда', style: headerStyle, minWidth: 70),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 160),
             for (int i = 0; i < n; i++)
               _verticalHeaderCell(
                 number: i + 1,
@@ -1252,12 +1287,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 '${players[i].teamNumber ?? ''}',
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
               ),
-              _tableCell('${i + 1}', style: cellStyle),
+              _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               _highlightableNameCell(
                 '${players[i].player.player_surname} ${players[i].player.player_name}',
                 isHighlighted: _hoveredRow == i,
                 style: cellStyle,
-                minWidth: 130,
+                minWidth: 160,
               ),
               for (int j = 0; j < n; j++)
                 if (i == j)
@@ -1287,8 +1322,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   ) {
     final sorted = _sortedStandings(boardNum, players);
 
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54);
+    const cellStyle = TextStyle(fontSize: 14, color: Colors.black87);
 
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
@@ -1299,7 +1334,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
             _tableCell('№к', style: headerStyle),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 160),
             _tableCell('Команда', style: headerStyle, minWidth: 90),
             _tableCell('Бали', style: headerStyle),
             _tableCell('К.Б.', style: headerStyle),
@@ -1338,14 +1373,14 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Widget _verticalHeaderCell({required int number, required String surname, required bool isHighlighted, TextStyle? style}) {
     final effectiveStyle = isHighlighted
-        ? (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade800)
+        ? (style ?? const TextStyle()).copyWith(color: Colors.indigo.shade800)
         : style;
     return TableCell(
       verticalAlignment: TableCellVerticalAlignment.bottom,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 36),
+        constraints: const BoxConstraints(minWidth: 44),
         color: isHighlighted ? Colors.indigo.shade100 : null,
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1364,14 +1399,14 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   Widget _highlightableNameCell(String text, {required bool isHighlighted, TextStyle? style, double? minWidth}) {
     return Container(
       constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       color: isHighlighted ? Colors.indigo.shade100 : null,
       alignment: Alignment.centerLeft,
       child: Text(
         text,
         textAlign: TextAlign.left,
         style: isHighlighted
-            ? (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade800)
+            ? (style ?? const TextStyle()).copyWith(color: Colors.indigo.shade800)
             : style,
       ),
     );
@@ -1380,7 +1415,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
     return Container(
       constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
       child: Text(text, textAlign: leftAlign ? TextAlign.left : TextAlign.center, style: style),
     );
@@ -1388,7 +1423,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Widget _diagonalCell() {
     return Container(
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
       color: Colors.grey.shade800,
     );
   }
@@ -1429,17 +1464,17 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           currentResult: result,
         ),
         child: Container(
-          constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
           color: bgColor ?? Colors.transparent,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: text.isEmpty
-              ? Icon(Icons.edit_outlined, size: 12, color: Colors.grey.shade400)
+              ? Icon(Icons.edit_outlined, size: 14, color: Colors.grey.shade400)
               : Text(
                   text,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: text == '1' ? Colors.green.shade700
                         : text == '0' ? Colors.red.shade700
