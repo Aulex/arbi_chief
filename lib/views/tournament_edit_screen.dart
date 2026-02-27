@@ -1064,15 +1064,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           child: SingleChildScrollView(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildCrossTable(boardNum, players),
-                    _buildStandings(boardNum, players),
-                  ],
-                ),
-              ),
+              child: _buildCombinedTable(boardNum, players),
             ),
           ),
         ),
@@ -1242,11 +1234,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   // --- Cross-table ---
 
-  Widget _buildCrossTable(
+  Widget _buildCombinedTable(
     int boardNum,
     List<({int teamId, String teamName, int? teamNumber, Player player})> players,
   ) {
     final n = players.length;
+    final sorted = _sortedStandings(boardNum, players);
     const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
@@ -1255,9 +1248,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       defaultColumnWidth: const IntrinsicColumnWidth(),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
+        // Header row
         TableRow(
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
+            // Cross table headers
             _tableCell('№к', style: headerStyle),
             _tableCell('Команда', style: headerStyle, minWidth: 70),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
@@ -1271,12 +1266,21 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
             _tableCell('К.Б.', style: headerStyle),
+            // Standings headers
+            _tableCell('№к', style: headerStyle),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            _tableCell('Команда', style: headerStyle, minWidth: 90),
+            _tableCell('Бали', style: headerStyle),
+            _tableCell('К.Б.', style: headerStyle),
+            _tableCell('Місце', style: headerStyle),
           ],
         ),
+        // Data rows
         for (int i = 0; i < n; i++)
           TableRow(
             decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
             children: [
+              // Cross table cells
               _tableCell(
                 '${players[i].teamNumber ?? ''}',
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
@@ -1302,51 +1306,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
                 style: cellStyle,
               ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  // --- Standings ---
-
-  Widget _buildStandings(
-    int boardNum,
-    List<({int teamId, String teamName, int? teamNumber, Player player})> players,
-  ) {
-    final sorted = _sortedStandings(boardNum, players);
-
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-
-    final borderSide = BorderSide(color: Colors.grey.shade300, width: 1);
-    return Table(
-      border: TableBorder(
-        top: borderSide,
-        right: borderSide,
-        bottom: borderSide,
-        left: BorderSide.none,
-        horizontalInside: borderSide,
-        verticalInside: borderSide,
-      ),
-      defaultColumnWidth: const IntrinsicColumnWidth(),
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      children: [
-        TableRow(
-          decoration: BoxDecoration(color: Colors.grey.shade100),
-          children: [
-            _tableCell('№к', style: headerStyle),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
-            _tableCell('Команда', style: headerStyle, minWidth: 90),
-            _tableCell('Бали', style: headerStyle),
-            _tableCell('К.Б.', style: headerStyle),
-            _tableCell('Місце', style: headerStyle),
-          ],
-        ),
-        for (int i = 0; i < sorted.length; i++)
-          TableRow(
-            decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
-            children: [
+              // Standings cells (sorted order)
               _tableCell(
                 '${sorted[i].teamNumber ?? ''}',
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
