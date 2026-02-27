@@ -1285,11 +1285,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
-              _highlightableNameCell(
+              _tappableNameCell(
                 '${players[i].player.player_surname} ${players[i].player.player_name}',
                 isHighlighted: _hoveredRow == i,
                 style: cellStyle,
                 minWidth: 130,
+                onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
               ),
               for (int j = 0; j < n; j++)
                 if (i == j)
@@ -1371,6 +1372,84 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
             : style,
       ),
     );
+  }
+
+  Widget _tappableNameCell(String text, {required bool isHighlighted, TextStyle? style, double? minWidth, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          color: isHighlighted ? Colors.indigo.shade100 : null,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            text,
+            textAlign: TextAlign.left,
+            style: isHighlighted
+                ? (style ?? const TextStyle()).copyWith(color: Colors.indigo.shade800)
+                : style,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPlayerOptions(
+    BuildContext context,
+    int boardNum,
+    ({int teamId, String teamName, int? teamNumber, Player player}) player,
+    List<({int teamId, String teamName, int? teamNumber, Player player})> allPlayers,
+  ) {
+    final name = '${player.player.player_surname} ${player.player.player_name}';
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(name, style: const TextStyle(fontSize: 16)),
+        children: [
+          SimpleDialogOption(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _markPlayerNoShow(boardNum, player, allPlayers);
+            },
+            child: Row(children: [
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
+                alignment: Alignment.center,
+                child: Icon(Icons.person_off, size: 18, color: Colors.red.shade800),
+              ),
+              const SizedBox(width: 12),
+              const Text('Неявка'),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _markPlayerNoShow(
+    int boardNum,
+    ({int teamId, String teamName, int? teamNumber, Player player}) player,
+    List<({int teamId, String teamName, int? teamNumber, Player player})> allPlayers,
+  ) async {
+    final svc = ref.read(tournamentServiceProvider);
+    final playerId = player.player.player_id!;
+    final tsId = await svc.getOrCreateDefaultStage(widget.tId);
+
+    for (final opponent in allPlayers) {
+      if (opponent.player.player_id == playerId) continue;
+      final opponentId = opponent.player.player_id!;
+
+      var eventId = await svc.findGameBetweenPlayers(widget.tId, playerId, opponentId);
+      eventId ??= await svc.createGame(tsId: tsId, whitePlayerId: playerId, blackPlayerId: opponentId);
+
+      await svc.saveResultForPlayer(eventId, playerId, 0.0);
+      await svc.saveResultForPlayer(eventId, opponentId, 1.0);
+    }
+
+    await _loadData();
   }
 
   Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
