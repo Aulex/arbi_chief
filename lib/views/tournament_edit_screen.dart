@@ -1072,7 +1072,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                       child: _buildCrossTable(boardNum, players),
                     ),
                   ),
-                  const SizedBox(width: 16),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: _buildStandings(boardNum, players),
@@ -1325,8 +1324,16 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
+    final borderSide = BorderSide(color: Colors.grey.shade300, width: 1);
     return Table(
-      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+      border: TableBorder(
+        top: borderSide,
+        right: borderSide,
+        bottom: borderSide,
+        left: BorderSide.none,
+        horizontalInside: borderSide,
+        verticalInside: borderSide,
+      ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
