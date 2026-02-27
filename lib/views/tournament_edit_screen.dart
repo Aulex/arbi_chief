@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'tv_display_screen.dart';
 import 'tournament_add_screen.dart';
 import 'team_edit_screen.dart';
 import '../models/tournament_model.dart';
@@ -336,7 +335,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildTableTab() {
-    return _CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name);
+    return _CrossTableTab(tId: widget.tournament.t_id!);
   }
 
   Widget _buildParticipantsTab() {
@@ -695,8 +694,7 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
 /// Cross-tables are interactive — tap cells to enter results.
 class _CrossTableTab extends ConsumerStatefulWidget {
   final int tId;
-  final String tournamentName;
-  const _CrossTableTab({required this.tId, required this.tournamentName});
+  const _CrossTableTab({required this.tId});
 
   @override
   ConsumerState<_CrossTableTab> createState() => _CrossTableTabState();
@@ -943,38 +941,17 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                labelColor: Colors.indigo,
-                indicatorColor: Colors.indigo,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-                tabs: const [
-                  Tab(text: 'Дошка 1', height: 36),
-                  Tab(text: 'Дошка 2', height: 36),
-                  Tab(text: 'Дошка 3', height: 36),
-                  Tab(text: 'Команди', height: 36),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.tv, size: 20),
-              tooltip: 'Відкрити для трансляції',
-              color: Colors.indigo,
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TvDisplayScreen(
-                      tournamentId: widget.tId,
-                      tournamentName: widget.tournamentName,
-                    ),
-                  ),
-                );
-              },
-            ),
+        TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          labelColor: Colors.indigo,
+          indicatorColor: Colors.indigo,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+          tabs: const [
+            Tab(text: 'Дошка 1', height: 36),
+            Tab(text: 'Дошка 2', height: 36),
+            Tab(text: 'Дошка 3', height: 36),
+            Tab(text: 'Команди', height: 36),
           ],
         ),
         const SizedBox(height: 6),
@@ -1168,11 +1145,9 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 _tableCell('№', style: headerStyle),
                 _tableCell('Команда', style: headerStyle, minWidth: 140),
                 for (int i = 0; i < n; i++)
-                  _verticalHeaderCell(
-                    number: teamMap[teamIds[i]]!.teamNumber ?? (i + 1),
-                    surname: teamMap[teamIds[i]]!.teamName,
-                    isHighlighted: false,
-                    style: headerStyle,
+                  _tableCell(
+                    '${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}\n${teamMap[teamIds[i]]!.teamName}',
+                    style: headerStyle, minWidth: 50,
                   ),
                 _tableCell('Очки', style: headerStyle),
                 _tableCell('Д.1', style: headerStyle),
