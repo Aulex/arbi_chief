@@ -1285,8 +1285,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Widget _buildCombinedTable(
     int boardNum,
-    List<({int teamId, String teamName, int? teamNumber, Player player})> players,
+    List<({int teamId, String teamName, int? teamNumber, Player player})> rawPlayers,
   ) {
+    final players = List.of(rawPlayers)
+      ..sort((a, b) {
+        final aNum = a.teamNumber ?? 9999;
+        final bNum = b.teamNumber ?? 9999;
+        if (aNum != bNum) return aNum.compareTo(bNum);
+        return a.teamName.compareTo(b.teamName);
+      });
     final n = players.length;
     final sorted = _sortedStandings(boardNum, players);
     const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
