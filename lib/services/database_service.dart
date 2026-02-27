@@ -12,8 +12,9 @@ class DatabaseService {
   }
 
   Future<Database> _initDB() async {
-    final dbPath =
-        Platform.isWindows ? Directory.current.path : await getDatabasesPath();
+    final dbPath = Platform.isWindows
+        ? File(Platform.resolvedExecutable).parent.path
+        : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
     final path = join(dbPath, 'tournament_blueprint_v14.db');
