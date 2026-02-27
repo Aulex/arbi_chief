@@ -800,8 +800,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           teamNumber: team.teamNumber,
           player: Player(
             player_id: phantomId,
-            player_surname: 'Відсутній',
-            player_name: 'відсутня',
+            player_surname: 'Відсутн.',
+            player_name: '',
             player_lastname: '',
             player_gender: 0,
             player_date_birth: '',
@@ -2128,6 +2128,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
 
     final boards = await teamSvc.getBoardAssignmentsForTournament(tId);
     final games = await tournamentSvc.getGamesGroupedByBoard(tId);
+    final allTeams = await teamSvc.getTeamListForTournament(tId);
 
     final results = <int, Map<int, Map<int, double>>>{};
     for (final entry in games.entries) {
@@ -2141,6 +2142,54 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         }
         if (game.blackResult != null) {
           results[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackResult!;
+        }
+      }
+    }
+
+    // Load no-show players so phantom logic treats them as absent too
+    final noShowIds = await teamSvc.getNoShowPlayerIds(tId);
+
+    // Add phantom "absent" entries for teams missing from each board.
+    final absentIds = <int>{...noShowIds};
+    for (final boardNum in boards.keys) {
+      final presentTeamIds = boards[boardNum]!.map((p) => p.teamId).toSet();
+      for (final team in allTeams) {
+        if (presentTeamIds.contains(team.teamId)) continue;
+        final phantomId = -(team.teamId * 100 + boardNum);
+        absentIds.add(phantomId);
+        boards[boardNum]!.add((
+          teamId: team.teamId,
+          teamName: team.teamName,
+          teamNumber: team.teamNumber,
+          player: Player(
+            player_id: phantomId,
+            player_surname: 'Відсутн.',
+            player_name: '',
+            player_lastname: '',
+            player_gender: 0,
+            player_date_birth: '',
+          ),
+        ));
+        results.putIfAbsent(boardNum, () => {});
+        results[boardNum]!.putIfAbsent(phantomId, () => {});
+        for (final realPlayer in boards[boardNum]!) {
+          final realId = realPlayer.player.player_id!;
+          if (realId == phantomId || absentIds.contains(realId)) continue;
+          results[boardNum]![phantomId]![realId] = 0.0;
+          results[boardNum]!.putIfAbsent(realId, () => {})[phantomId] = 1.0;
+        }
+      }
+    }
+    // Cross-set absent vs absent (phantom + no-show): both get 0
+    for (final boardNum in boards.keys) {
+      final absentOnBoard = boards[boardNum]!
+          .where((p) => absentIds.contains(p.player.player_id))
+          .map((p) => p.player.player_id!)
+          .toList();
+      for (int i = 0; i < absentOnBoard.length; i++) {
+        for (int j = i + 1; j < absentOnBoard.length; j++) {
+          results[boardNum]!.putIfAbsent(absentOnBoard[i], () => {})[absentOnBoard[j]] = 0.0;
+          results[boardNum]!.putIfAbsent(absentOnBoard[j], () => {})[absentOnBoard[i]] = 0.0;
         }
       }
     }
@@ -2329,7 +2378,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
           // Cross-table part
           _pdfCell('${p.teamNumber ?? ''}', cellSt),
           _pdfCell(p.teamName, cellSt, align: pw.Alignment.centerLeft),
-          _pdfCell('${p.player.player_surname} ${p.player.player_name}', nameStyle, align: pw.Alignment.centerLeft),
+          _pdfCell('${p.player.player_surname} ${p.player.player_name}'.trim(), nameStyle, align: pw.Alignment.centerLeft),
           for (int j = 0; j < n; j++)
             if (i == j)
               _pdfDiagonalCell()
@@ -2343,7 +2392,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
           _pdfCell(_fmtPts(_bergerCoefficient(boardNum, pId)), cellSt),
           // Standings part
           _pdfCell('${s.teamNumber ?? ''}', cellSt),
-          _pdfCell('${s.player.player_surname} ${s.player.player_name}', cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell('${s.player.player_surname} ${s.player.player_name}'.trim(), cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(_fmtPts(_totalPoints(boardNum, sId)), cellBold),
           _pdfCell(_fmtPts(_bergerCoefficient(boardNum, sId)), cellSt),
