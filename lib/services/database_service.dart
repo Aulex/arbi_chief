@@ -288,6 +288,14 @@ class DatabaseService {
           'attr_entity_type': '2',
         });
 
+        // Неявка attribute for player-team (1 = no-show)
+        await db.insert('CMP_ATTR', {
+          'attr_id': '10',
+          'attr_name': 'Неявка',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': '2',
+        });
+
         await db.insert('CMP_ATTR_DICT', {
           'attr_id': '1',
           'dict_value': 'Рапід',

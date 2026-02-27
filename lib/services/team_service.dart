@@ -386,4 +386,37 @@ class TeamService {
       });
     }
   }
+
+  /// Find pte_id for a player in a tournament.
+  Future<int?> getPteId(int playerId, int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?',
+      whereArgs: [playerId, tId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['pte_id'] as int;
+  }
+
+  /// Get all player IDs marked as no-show (attr_id=10, attr_value='1') in a tournament.
+  Future<Set<int>> getNoShowPlayerIds(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.t_id = ? AND v.attr_id = 10 AND v.attr_value = '1'
+    ''', [tId]);
+    return rows.map((r) => r['player_id'] as int).toSet();
+  }
+
+  /// Mark a player as no-show by saving attr_id=10 with value '1'.
+  Future<void> markPlayerNoShowAttr(int playerId, int tId) async {
+    final pteId = await getPteId(playerId, tId);
+    if (pteId == null) return;
+    await savePteAttrValue(pteId: pteId, attrId: 10, attrValue: '1');
+  }
 }

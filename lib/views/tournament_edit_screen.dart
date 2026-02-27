@@ -827,6 +827,10 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       }
     }
 
+    // Load no-show players from CMP_PLAYER_TEAM_ATTR_VALUE (attr_id=10)
+    final noShowIds = await teamSvc.getNoShowPlayerIds(widget.tId);
+    absentIds.addAll(noShowIds);
+
     if (mounted) {
       setState(() {
         _boardPlayers = boards;
@@ -1598,6 +1602,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     List<({int teamId, String teamName, int? teamNumber, Player player})> allPlayers,
   ) async {
     final svc = ref.read(tournamentServiceProvider);
+    final teamSvc = ref.read(teamServiceProvider);
     final playerId = player.player.player_id!;
     final tsId = await svc.getOrCreateDefaultStage(widget.tId);
     final opponentIds = allPlayers
@@ -1605,6 +1610,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         .map((p) => p.player.player_id!)
         .toList();
     await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds);
+    await teamSvc.markPlayerNoShowAttr(playerId, widget.tId);
     await _loadData();
   }
 
