@@ -20,7 +20,10 @@ class TournamentAddScreen extends ConsumerStatefulWidget {
       _TournamentAddScreenState();
 }
 
-class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
+class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
   // All your controllers...
   final tNameController = TextEditingController();
   final roundsController = TextEditingController(text: "1");
@@ -54,6 +57,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
     if (widget.isEditMode && widget.tournament != null) {
       final t = widget.tournament!;
       tNameController.text = t.t_name;
@@ -109,6 +113,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     tNameController.dispose();
     roundsController.dispose();
     _winPointsController.dispose();
@@ -164,23 +169,30 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: Column(
+    const _disabledTabs = {1, 2, 3}; // Б, В, Г
+    return Column(
         children: [
-          const TabBar(
+          TabBar(
+            controller: _tabController,
             isScrollable: true,
             labelColor: Colors.blue,
             indicatorColor: Colors.blue,
+            onTap: (index) {
+              if (_disabledTabs.contains(index)) {
+                _tabController.index = _tabController.previousIndex;
+              }
+            },
             tabs: [
-              Tab(text: "А: Загальна інформація"),
-              Tab(text: "Б: Система проведення"),
-              Tab(text: "В: Командні налаштування"),
-              Tab(text: "Г: Очки та Тай-брейки"),
+              const Tab(text: "А: Загальна інформація"),
+              Tab(child: Text("Б: Система проведення", style: TextStyle(color: Colors.grey.shade400))),
+              Tab(child: Text("В: Командні налаштування", style: TextStyle(color: Colors.grey.shade400))),
+              Tab(child: Text("Г: Очки та Тай-брейки", style: TextStyle(color: Colors.grey.shade400))),
             ],
           ),
           Expanded(
             child: TabBarView(
+              controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildGeneralInfoTab(),
                 _buildConductionSystemTab(),
@@ -211,7 +223,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen> {
             ),
           ),
         ],
-      ),
     );
   }
 
