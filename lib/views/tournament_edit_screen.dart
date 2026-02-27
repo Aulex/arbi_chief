@@ -780,8 +780,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       }
     }
 
+    // Load no-show players first so phantom logic treats them as absent too
+    final noShowIds = await teamSvc.getNoShowPlayerIds(widget.tId);
+
     // Add phantom "absent" entries for teams missing from each board.
-    final absentIds = <int>{};
+    final absentIds = <int>{...noShowIds};
     for (final boardNum in boards.keys) {
       final presentTeamIds = boards[boardNum]!.map((p) => p.teamId).toSet();
       for (final team in allTeams) {
@@ -803,6 +806,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           ),
         ));
         // Set results: absent=0 vs every real player, real player=1 vs absent
+        // No-show players (in absentIds) also get 0 vs phantom
         results.putIfAbsent(boardNum, () => {});
         results[boardNum]!.putIfAbsent(phantomId, () => {});
         for (final realPlayer in boards[boardNum]!) {
@@ -813,7 +817,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         }
       }
     }
-    // Cross-set absent vs absent: both get 0
+    // Cross-set absent vs absent (phantom + no-show): both get 0
     for (final boardNum in boards.keys) {
       final absentOnBoard = boards[boardNum]!
           .where((p) => absentIds.contains(p.player.player_id))
@@ -826,10 +830,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         }
       }
     }
-
-    // Load no-show players from CMP_PLAYER_TEAM_ATTR_VALUE (attr_id=10)
-    final noShowIds = await teamSvc.getNoShowPlayerIds(widget.tId);
-    absentIds.addAll(noShowIds);
 
     if (mounted) {
       setState(() {
