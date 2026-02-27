@@ -1007,9 +1007,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final svc = ref.read(tournamentServiceProvider);
     final games = await svc.getGamesGroupedByBoard(widget.tId);
     final boardGames = games[boardNum] ?? [];
-    for (final game in boardGames) {
-      await svc.deleteGame(game.eventId);
-    }
+    final eventIds = boardGames.map((g) => g.eventId).toList();
+    await svc.deleteGames(eventIds);
     await _loadData();
   }
 

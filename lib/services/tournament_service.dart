@@ -301,6 +301,18 @@ class TournamentService {
     await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
   }
 
+  /// Delete multiple games in a single transaction.
+  Future<void> deleteGames(List<int> eventIds) async {
+    if (eventIds.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final eventId in eventIds) {
+        await txn.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+        await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+      }
+    });
+  }
+
   /// Get all games for a tournament grouped by board number, including results.
   Future<Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult})>>>
       getGamesGroupedByBoard(int tId) async {
