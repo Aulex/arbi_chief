@@ -739,6 +739,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   bool _loading = true;
   Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>> _boardPlayers = {};
   Map<int, Map<int, Map<int, double>>> _boardResults = {};
+  Set<int> _absentPlayerIds = {};
   int? _hoveredRow;
   int? _hoveredCol;
 
@@ -761,6 +762,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
     final boards = await teamSvc.getBoardAssignmentsForTournament(widget.tId);
     final games = await tournamentSvc.getGamesGroupedByBoard(widget.tId);
+    final allTeams = await teamSvc.getTeamListForTournament(widget.tId);
 
     final results = <int, Map<int, Map<int, double>>>{};
     for (final entry in games.entries) {
@@ -778,10 +780,58 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       }
     }
 
+    // Add phantom "absent" entries for teams missing from each board.
+    final absentIds = <int>{};
+    for (final boardNum in boards.keys) {
+      final presentTeamIds = boards[boardNum]!.map((p) => p.teamId).toSet();
+      for (final team in allTeams) {
+        if (presentTeamIds.contains(team.teamId)) continue;
+        // Sentinel ID: negative, unique per team+board
+        final phantomId = -(team.teamId * 100 + boardNum);
+        absentIds.add(phantomId);
+        boards[boardNum]!.add((
+          teamId: team.teamId,
+          teamName: team.teamName,
+          teamNumber: team.teamNumber,
+          player: Player(
+            player_id: phantomId,
+            player_surname: 'Відсутній',
+            player_name: 'відсутня',
+            player_lastname: '',
+            player_gender: 0,
+            player_date_birth: '',
+          ),
+        ));
+        // Set results: absent=0 vs every real player, real player=1 vs absent
+        results.putIfAbsent(boardNum, () => {});
+        results[boardNum]!.putIfAbsent(phantomId, () => {});
+        for (final realPlayer in boards[boardNum]!) {
+          final realId = realPlayer.player.player_id!;
+          if (realId == phantomId || absentIds.contains(realId)) continue;
+          results[boardNum]![phantomId]![realId] = 0.0;
+          results[boardNum]!.putIfAbsent(realId, () => {})[phantomId] = 1.0;
+        }
+      }
+    }
+    // Cross-set absent vs absent: both get 0
+    for (final boardNum in boards.keys) {
+      final absentOnBoard = boards[boardNum]!
+          .where((p) => absentIds.contains(p.player.player_id))
+          .map((p) => p.player.player_id!)
+          .toList();
+      for (int i = 0; i < absentOnBoard.length; i++) {
+        for (int j = i + 1; j < absentOnBoard.length; j++) {
+          results[boardNum]!.putIfAbsent(absentOnBoard[i], () => {})[absentOnBoard[j]] = 0.0;
+          results[boardNum]!.putIfAbsent(absentOnBoard[j], () => {})[absentOnBoard[i]] = 0.0;
+        }
+      }
+    }
+
     if (mounted) {
       setState(() {
         _boardPlayers = boards;
         _boardResults = results;
+        _absentPlayerIds = absentIds;
         _loading = false;
       });
     }
@@ -1285,16 +1335,25 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
-              _tappableNameCell(
-                '${players[i].player.player_surname} ${players[i].player.player_name}',
-                isHighlighted: _hoveredRow == i,
-                style: cellStyle,
-                minWidth: 130,
-                onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
-              ),
+              if (_absentPlayerIds.contains(players[i].player.player_id))
+                _tableCell(
+                  '${players[i].player.player_surname} ${players[i].player.player_name}',
+                  style: cellStyle.copyWith(color: Colors.red.shade400, fontStyle: FontStyle.italic),
+                  minWidth: 130, leftAlign: true,
+                )
+              else
+                _tappableNameCell(
+                  '${players[i].player.player_surname} ${players[i].player.player_name}',
+                  isHighlighted: _hoveredRow == i,
+                  style: cellStyle,
+                  minWidth: 130,
+                  onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
+                ),
               for (int j = 0; j < n; j++)
                 if (i == j)
                   _diagonalCell()
+                else if (_absentPlayerIds.contains(players[i].player.player_id) || _absentPlayerIds.contains(players[j].player.player_id))
+                  _staticResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j)
                 else
                   _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j),
               _tableCell(
@@ -1438,7 +1497,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final playerId = player.player.player_id!;
     final tsId = await svc.getOrCreateDefaultStage(widget.tId);
     final opponentIds = allPlayers
-        .where((p) => p.player.player_id != playerId)
+        .where((p) => p.player.player_id != playerId && !_absentPlayerIds.contains(p.player.player_id))
         .map((p) => p.player.player_id!)
         .toList();
     await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds);
@@ -1458,6 +1517,46 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     return Container(
       constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
       color: Colors.grey.shade800,
+    );
+  }
+
+  Widget _staticResultCell({
+    required int boardNum,
+    required ({int teamId, String teamName, int? teamNumber, Player player}) rowPlayer,
+    required ({int teamId, String teamName, int? teamNumber, Player player}) colPlayer,
+    required int rowIdx,
+    required int colIdx,
+  }) {
+    final result = _boardResults[boardNum]?[rowPlayer.player.player_id!]?[colPlayer.player.player_id!];
+    final text = _formatResult(result);
+
+    Color? bgColor;
+    if (text == '1') {
+      bgColor = Colors.green.shade50;
+    } else if (text == '0') {
+      bgColor = Colors.red.shade50;
+    } else if (text == '½') {
+      bgColor = Colors.amber.shade50;
+    }
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      color: bgColor ?? Colors.transparent,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      child: text.isEmpty
+          ? const SizedBox.shrink()
+          : Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: text == '1' ? Colors.green.shade700
+                    : text == '0' ? Colors.red.shade700
+                    : Colors.amber.shade800,
+              ),
+            ),
     );
   }
 

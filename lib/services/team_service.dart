@@ -202,6 +202,24 @@ class TeamService {
     return rows.map((r) => r['player_id'] as int).toSet();
   }
 
+  /// Returns all distinct teams in a tournament (id, name, number).
+  Future<List<({int teamId, String teamName, int? teamNumber})>>
+      getTeamListForTournament(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT t.team_id, t.team_name, pt.team_number
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_TEAM t ON pt.team_id = t.team_id
+      WHERE pt.t_id = ?
+      ORDER BY pt.team_number, t.team_name
+    ''', [tId]);
+    return rows.map((r) => (
+      teamId: r['team_id'] as int,
+      teamName: r['team_name'] as String,
+      teamNumber: r['team_number'] as int?,
+    )).toList();
+  }
+
   /// Returns board data grouped by board number for a tournament.
   Future<Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>>>
       getBoardAssignmentsForTournament(int tId) async {
