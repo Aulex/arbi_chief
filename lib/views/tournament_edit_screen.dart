@@ -1421,7 +1421,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 child: Icon(Icons.person_off, size: 18, color: Colors.red.shade800),
               ),
               const SizedBox(width: 12),
-              const Text('Неявка'),
+              const Text('Відсутній'),
             ]),
           ),
         ],
