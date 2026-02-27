@@ -1059,10 +1059,23 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Future<void> _clearBoardResults(int boardNum) async {
     final svc = ref.read(tournamentServiceProvider);
+    final teamSvc = ref.read(teamServiceProvider);
+
+    // Reset game results to null (keep the game records)
     final games = await svc.getGamesGroupedByBoard(widget.tId);
     final boardGames = games[boardNum] ?? [];
     final eventIds = boardGames.map((g) => g.eventId).toList();
-    await svc.deleteGames(eventIds);
+    await svc.resetGameResults(eventIds);
+
+    // Clear неявка attribute for no-show players on this board
+    final players = _boardPlayers[boardNum] ?? [];
+    for (final p in players) {
+      final pid = p.player.player_id!;
+      if (_absentPlayerIds.contains(pid) && pid > 0) {
+        await teamSvc.clearNoShowAttr(pid, widget.tId);
+      }
+    }
+
     await _loadData();
   }
 

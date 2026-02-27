@@ -313,6 +313,22 @@ class TournamentService {
     });
   }
 
+  /// Reset results to null for multiple games (keep the game records).
+  Future<void> resetGameResults(List<int> eventIds) async {
+    if (eventIds.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final eventId in eventIds) {
+        await txn.update(
+          'CMP_PLAYER_EVENT',
+          {'event_result': null},
+          where: 'event_id = ?',
+          whereArgs: [eventId],
+        );
+      }
+    });
+  }
+
   /// Get all games for a tournament grouped by board number, including results.
   Future<Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult})>>>
       getGamesGroupedByBoard(int tId) async {
