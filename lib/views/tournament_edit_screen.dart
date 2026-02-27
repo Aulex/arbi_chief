@@ -1235,7 +1235,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                     if (i == j)
                       _diagonalCell()
                     else
-                      _teamResultCell(teamIds[i], teamIds[j]),
+                      _teamResultCell(teamIds[i], teamIds[j], teamMap),
                   _tableCell(
                     _formatPoints(teamPoints[teamIds[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -1251,7 +1251,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     );
   }
 
-  Widget _teamResultCell(int teamAId, int teamBId) {
+  Widget _teamResultCell(int teamAId, int teamBId, Map<int, ({String teamName, int? teamNumber})> teamMap) {
     final matchPts = _teamMatchPoints(teamAId, teamBId);
     final boardScore = _teamMatchScore(teamAId, teamBId);
     final pts = matchPts.a;
@@ -1262,22 +1262,119 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     else if (pts == 0.0 && (boardScore.a > 0 || boardScore.b > 0)) bgColor = Colors.red.shade50;
     else if (pts == 1.0) bgColor = Colors.amber.shade50;
 
-    return Container(
-      constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
-      color: bgColor ?? Colors.transparent,
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: pts == 2.0 ? Colors.green.shade700
-              : pts == 0.0 ? Colors.red.shade700
-              : Colors.amber.shade800,
+    return GestureDetector(
+      onTap: () => _showTeamMatchDetails(context, teamAId, teamBId, teamMap),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+          color: bgColor ?? Colors.transparent,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: pts == 2.0 ? Colors.green.shade700
+                  : pts == 0.0 ? Colors.red.shade700
+                  : Colors.amber.shade800,
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  void _showTeamMatchDetails(
+    BuildContext context,
+    int teamAId,
+    int teamBId,
+    Map<int, ({String teamName, int? teamNumber})> teamMap,
+  ) {
+    final teamAName = teamMap[teamAId]!.teamName;
+    final teamBName = teamMap[teamBId]!.teamName;
+    final boardNums = _boardPlayers.keys.toList()..sort();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$teamAName  —  $teamBName', style: const TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: 420,
+          child: Table(
+            border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.grey.shade100),
+                children: [
+                  _tableCell('Дошка', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54)),
+                  _tableCell(teamAName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54), minWidth: 120, leftAlign: true),
+                  _tableCell('', style: const TextStyle(fontSize: 12)),
+                  _tableCell(teamBName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54), minWidth: 120, leftAlign: true),
+                ],
+              ),
+              for (final boardNum in boardNums)
+                _buildBoardMatchRow(boardNum, teamAId, teamBId),
+              // Total row
+              TableRow(
+                decoration: BoxDecoration(color: Colors.grey.shade100),
+                children: [
+                  _tableCell('', style: const TextStyle(fontSize: 12)),
+                  _tableCell('Разом', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87), minWidth: 120, leftAlign: true),
+                  _tableCell(
+                    '${_formatPoints(_teamMatchScore(teamAId, teamBId).a)} : ${_formatPoints(_teamMatchScore(teamAId, teamBId).b)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                  ),
+                  _tableCell('', style: const TextStyle(fontSize: 12), minWidth: 120),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрити')),
+        ],
+      ),
+    );
+  }
+
+  TableRow _buildBoardMatchRow(int boardNum, int teamAId, int teamBId) {
+    final playersOnBoard = _boardPlayers[boardNum] ?? [];
+    final playerA = playersOnBoard.where((p) => p.teamId == teamAId).firstOrNull;
+    final playerB = playersOnBoard.where((p) => p.teamId == teamBId).firstOrNull;
+
+    final aName = playerA != null
+        ? '${playerA.player.player_surname} ${playerA.player.player_name}'
+        : '—';
+    final bName = playerB != null
+        ? '${playerB.player.player_surname} ${playerB.player.player_name}'
+        : '—';
+
+    String scoreText = '';
+    Color scoreColor = Colors.black87;
+    if (playerA != null && playerB != null) {
+      final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
+      final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
+      if (aResult != null && bResult != null) {
+        scoreText = '${_formatResult(aResult)} : ${_formatResult(bResult)}';
+        if (aResult > bResult) scoreColor = Colors.green.shade700;
+        else if (aResult < bResult) scoreColor = Colors.red.shade700;
+        else scoreColor = Colors.amber.shade800;
+      }
+    }
+
+    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    return TableRow(
+      children: [
+        _tableCell('$boardNum', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
+        _tableCell(aName, style: cellStyle, minWidth: 120, leftAlign: true),
+        _tableCell(scoreText, style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: scoreColor)),
+        _tableCell(bName, style: cellStyle, minWidth: 120, leftAlign: true),
+      ],
     );
   }
 
