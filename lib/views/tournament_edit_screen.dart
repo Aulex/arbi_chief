@@ -1253,8 +1253,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     List<({int teamId, String teamName, int? teamNumber, Player player})> players,
   ) {
     final n = players.length;
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 14, color: Colors.black87);
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
+    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
@@ -1266,7 +1266,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           children: [
             _tableCell('№к', style: headerStyle),
             _tableCell('Команда', style: headerStyle, minWidth: 70),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 160),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
               _verticalHeaderCell(
                 number: i + 1,
@@ -1292,7 +1292,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 '${players[i].player.player_surname} ${players[i].player.player_name}',
                 isHighlighted: _hoveredRow == i,
                 style: cellStyle,
-                minWidth: 160,
+                minWidth: 130,
               ),
               for (int j = 0; j < n; j++)
                 if (i == j)
@@ -1322,8 +1322,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   ) {
     final sorted = _sortedStandings(boardNum, players);
 
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 14, color: Colors.black87);
+    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
+    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
@@ -1334,7 +1334,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           decoration: BoxDecoration(color: Colors.grey.shade100),
           children: [
             _tableCell('№к', style: headerStyle),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 160),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             _tableCell('Команда', style: headerStyle, minWidth: 90),
             _tableCell('Бали', style: headerStyle),
             _tableCell('К.Б.', style: headerStyle),
@@ -1378,9 +1378,9 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     return TableCell(
       verticalAlignment: TableCellVerticalAlignment.bottom,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 44),
+        constraints: const BoxConstraints(minWidth: 36),
         color: isHighlighted ? Colors.indigo.shade100 : null,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1399,7 +1399,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   Widget _highlightableNameCell(String text, {required bool isHighlighted, TextStyle? style, double? minWidth}) {
     return Container(
       constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       color: isHighlighted ? Colors.indigo.shade100 : null,
       alignment: Alignment.centerLeft,
       child: Text(
@@ -1415,7 +1415,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
     return Container(
       constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
       child: Text(text, textAlign: leftAlign ? TextAlign.left : TextAlign.center, style: style),
     );
@@ -1423,7 +1423,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Widget _diagonalCell() {
     return Container(
-      constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
       color: Colors.grey.shade800,
     );
   }
@@ -1464,17 +1464,17 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           currentResult: result,
         ),
         child: Container(
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 40),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           color: bgColor ?? Colors.transparent,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           child: text.isEmpty
-              ? Icon(Icons.edit_outlined, size: 14, color: Colors.grey.shade400)
+              ? Icon(Icons.edit_outlined, size: 12, color: Colors.grey.shade400)
               : Text(
                   text,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: text == '1' ? Colors.green.shade700
                         : text == '0' ? Colors.red.shade700
