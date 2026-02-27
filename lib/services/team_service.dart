@@ -419,4 +419,16 @@ class TeamService {
     if (pteId == null) return;
     await savePteAttrValue(pteId: pteId, attrId: 10, attrValue: '1');
   }
+
+  /// Clear no-show attribute for a player.
+  Future<void> clearNoShowAttr(int playerId, int tId) async {
+    final pteId = await getPteId(playerId, tId);
+    if (pteId == null) return;
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = 10',
+      whereArgs: [pteId],
+    );
+  }
 }

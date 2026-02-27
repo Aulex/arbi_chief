@@ -1443,11 +1443,21 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
-              if (_absentPlayerIds.contains(players[i].player.player_id))
+              if (_absentPlayerIds.contains(players[i].player.player_id) && players[i].player.player_id! < 0)
+                // Phantom absent (team missing from board) — not tappable
                 _tableCell(
                   '${players[i].player.player_surname} ${players[i].player.player_name}',
                   style: cellStyle.copyWith(color: Colors.red.shade400, fontStyle: FontStyle.italic),
                   minWidth: 130, leftAlign: true,
+                )
+              else if (_absentPlayerIds.contains(players[i].player.player_id))
+                // Real no-show player — tappable to clear
+                _tappableNameCell(
+                  '${players[i].player.player_surname} ${players[i].player.player_name}',
+                  isHighlighted: _hoveredRow == i,
+                  style: cellStyle.copyWith(color: Colors.red.shade700, fontStyle: FontStyle.italic),
+                  minWidth: 130,
+                  onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
                 )
               else
                 _tappableNameCell(
@@ -1570,27 +1580,46 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     List<({int teamId, String teamName, int? teamNumber, Player player})> allPlayers,
   ) {
     final name = '${player.player.player_surname} ${player.player.player_name}';
+    final isNoShow = _absentPlayerIds.contains(player.player.player_id);
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(name, style: const TextStyle(fontSize: 16)),
         children: [
-          SimpleDialogOption(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _markPlayerNoShow(boardNum, player, allPlayers);
-            },
-            child: Row(children: [
-              Container(
-                width: 32, height: 32,
-                decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
-                alignment: Alignment.center,
-                child: Icon(Icons.person_off, size: 18, color: Colors.red.shade800),
-              ),
-              const SizedBox(width: 12),
-              const Text('Неявка'),
-            ]),
-          ),
+          if (!isNoShow)
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _markPlayerNoShow(boardNum, player, allPlayers);
+              },
+              child: Row(children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.person_off, size: 18, color: Colors.red.shade800),
+                ),
+                const SizedBox(width: 12),
+                const Text('Неявка'),
+              ]),
+            ),
+          if (isNoShow)
+            SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _clearPlayerNoShow(player);
+              },
+              child: Row(children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(6)),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.person_add, size: 18, color: Colors.blue.shade800),
+                ),
+                const SizedBox(width: 12),
+                const Text('Очистити'),
+              ]),
+            ),
         ],
       ),
     );
@@ -1606,11 +1635,22 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final playerId = player.player.player_id!;
     final tsId = await svc.getOrCreateDefaultStage(widget.tId);
     final opponentIds = allPlayers
-        .where((p) => p.player.player_id != playerId && !_absentPlayerIds.contains(p.player.player_id))
+        .where((p) => p.player.player_id != playerId)
         .map((p) => p.player.player_id!)
         .toList();
-    await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds);
+    await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds, alsoAbsentIds: _absentPlayerIds);
     await teamSvc.markPlayerNoShowAttr(playerId, widget.tId);
+    await _loadData();
+  }
+
+  Future<void> _clearPlayerNoShow(
+    ({int teamId, String teamName, int? teamNumber, Player player}) player,
+  ) async {
+    final svc = ref.read(tournamentServiceProvider);
+    final teamSvc = ref.read(teamServiceProvider);
+    final playerId = player.player.player_id!;
+    await svc.clearPlayerNoShow(widget.tId, playerId);
+    await teamSvc.clearNoShowAttr(playerId, widget.tId);
     await _loadData();
   }
 

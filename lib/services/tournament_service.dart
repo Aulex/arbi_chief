@@ -372,7 +372,7 @@ class TournamentService {
 
   /// Mark a player as no-show: set all their games as losses (0) and opponents as wins (1).
   /// Creates games if they don't exist yet. All in a single transaction.
-  Future<void> markPlayerNoShow(int tId, int tsId, int playerId, List<int> opponentIds) async {
+  Future<void> markPlayerNoShow(int tId, int tsId, int playerId, List<int> opponentIds, {Set<int> alsoAbsentIds = const {}}) async {
     if (opponentIds.isEmpty) return;
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
@@ -411,17 +411,32 @@ class TournamentService {
           });
         }
 
-        // Set results: player=0, opponent=1
+        // Both no-show → 0:0, otherwise no-show player=0, opponent=1
+        final opponentResult = alsoAbsentIds.contains(opponentId) ? 0.0 : 1.0;
         await txn.rawUpdate('''
           UPDATE CMP_PLAYER_EVENT SET event_result = 0.0
           WHERE event_id = ? AND player_id = ?
         ''', [eventId, playerId]);
         await txn.rawUpdate('''
-          UPDATE CMP_PLAYER_EVENT SET event_result = 1.0
+          UPDATE CMP_PLAYER_EVENT SET event_result = ?
           WHERE event_id = ? AND player_id = ?
-        ''', [eventId, opponentId]);
+        ''', [opponentResult, eventId, opponentId]);
       }
     });
+  }
+
+  /// Clear no-show: delete all games where this player's result is 0.0 (no-show losses).
+  Future<void> clearPlayerNoShow(int tId, int playerId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT e.event_id
+      FROM CMP_EVENT e
+      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
+      JOIN CMP_PLAYER_EVENT pe ON pe.event_id = e.event_id AND pe.player_id = ?
+      WHERE ts.t_id = ? AND pe.event_result = 0.0
+    ''', [playerId, tId]);
+    final eventIds = rows.map((r) => r['event_id'] as int).toList();
+    await deleteGames(eventIds);
   }
 
   /// Find a game between two players in a tournament, return eventId if found.
