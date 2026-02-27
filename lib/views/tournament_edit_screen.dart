@@ -1341,13 +1341,13 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         ? (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade800)
         : style;
     return TableCell(
-      verticalAlignment: TableCellVerticalAlignment.fill,
+      verticalAlignment: TableCellVerticalAlignment.bottom,
       child: Container(
         constraints: const BoxConstraints(minWidth: 36),
         color: isHighlighted ? Colors.indigo.shade100 : null,
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
             RotatedBox(
               quarterTurns: 3,
