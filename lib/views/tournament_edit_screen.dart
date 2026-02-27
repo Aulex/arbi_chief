@@ -1,9 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'tv_display_screen.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'tournament_add_screen.dart';
 import 'team_edit_screen.dart';
 import '../models/tournament_model.dart';
@@ -964,15 +965,16 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               icon: const Icon(Icons.tv, size: 20),
               tooltip: 'Відкрити для трансляції',
               color: Colors.indigo,
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TvDisplayScreen(
-                      tournamentId: widget.tId,
-                      tournamentName: widget.tournamentName,
-                    ),
-                  ),
-                );
+              onPressed: () async {
+                final window = await DesktopMultiWindow.createWindow(jsonEncode({
+                  'type': 'tv_display',
+                  'tournamentId': widget.tId,
+                  'tournamentName': widget.tournamentName,
+                }));
+                window
+                  ..setFrame(const Offset(0, 0) & const Size(1280, 720))
+                  ..setTitle('Результати - ${widget.tournamentName}')
+                  ..show();
               },
             ),
           ],
