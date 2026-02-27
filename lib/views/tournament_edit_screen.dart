@@ -1062,21 +1062,16 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           ),
         Expanded(
           child: SingleChildScrollView(
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: _buildCrossTable(boardNum, players),
-                    ),
-                  ),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: _buildStandings(boardNum, players),
-                  ),
-                ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildCrossTable(boardNum, players),
+                    _buildStandings(boardNum, players),
+                  ],
+                ),
               ),
             ),
           ),
