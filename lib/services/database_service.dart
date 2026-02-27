@@ -6,9 +6,19 @@ class DatabaseService {
   static Database? _db;
 
   Future<Database> get database async {
-    if (_db != null) return _db!;
+    if (_db != null) {
+      if (_db!.isOpen) return _db!;
+      _db = null;
+    }
     _db = await _initDB();
     return _db!;
+  }
+
+  /// Re-open the connection when it becomes invalid (e.g. SQLITE_MISUSE).
+  Future<Database> reopenDatabase() async {
+    try { await _db?.close(); } catch (_) {}
+    _db = null;
+    return database;
   }
 
   Future<Database> _initDB() async {

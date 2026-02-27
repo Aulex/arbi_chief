@@ -14,6 +14,7 @@ import '../viewmodels/nav_provider.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
+import '../viewmodels/shared_providers.dart';
 
 class TournamentEditScreen extends ConsumerStatefulWidget {
   final Tournament tournament;
@@ -997,10 +998,21 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Future<void> _clearBoardResults(int boardNum) async {
     final svc = ref.read(tournamentServiceProvider);
-    final games = await svc.getGamesGroupedByBoard(widget.tId);
-    final boardGames = games[boardNum] ?? [];
-    for (final game in boardGames) {
-      await svc.deleteGame(game.eventId);
+    try {
+      final games = await svc.getGamesGroupedByBoard(widget.tId);
+      final boardGames = games[boardNum] ?? [];
+      for (final game in boardGames) {
+        await svc.deleteGame(game.eventId);
+      }
+    } catch (_) {
+      // Re-open DB connection on SQLITE_MISUSE and retry once
+      final dbSvc = ref.read(dbServiceProvider);
+      await dbSvc.reopenDatabase();
+      final games = await svc.getGamesGroupedByBoard(widget.tId);
+      final boardGames = games[boardNum] ?? [];
+      for (final game in boardGames) {
+        await svc.deleteGame(game.eventId);
+      }
     }
     await _loadData();
   }
