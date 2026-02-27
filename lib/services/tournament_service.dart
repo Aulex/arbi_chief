@@ -370,6 +370,60 @@ class TournamentService {
     return result;
   }
 
+  /// Mark a player as no-show: set all their games as losses (0) and opponents as wins (1).
+  /// Creates games if they don't exist yet. All in a single transaction.
+  Future<void> markPlayerNoShow(int tId, int tsId, int playerId, List<int> opponentIds) async {
+    if (opponentIds.isEmpty) return;
+    final db = await _dbService.database;
+    final today = DateTime.now().toIso8601String().split('T').first;
+
+    await db.transaction((txn) async {
+      for (final opponentId in opponentIds) {
+        // Find existing game
+        final rows = await txn.rawQuery('''
+          SELECT e.event_id
+          FROM CMP_EVENT e
+          JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
+          JOIN CMP_PLAYER_EVENT pe1 ON pe1.event_id = e.event_id AND pe1.player_id = ?
+          JOIN CMP_PLAYER_EVENT pe2 ON pe2.event_id = e.event_id AND pe2.player_id = ?
+          WHERE ts.t_id = ?
+          LIMIT 1
+        ''', [playerId, opponentId, tId]);
+
+        int eventId;
+        if (rows.isNotEmpty) {
+          eventId = rows.first['event_id'] as int;
+        } else {
+          // Create game
+          eventId = await txn.insert('CMP_EVENT', {
+            'ts_id': tsId,
+            'event_date_begin': today,
+          });
+          await txn.insert('CMP_PLAYER_EVENT', {
+            'event_id': eventId,
+            'player_id': playerId,
+            'asgn_date': today,
+          });
+          await txn.insert('CMP_PLAYER_EVENT', {
+            'event_id': eventId,
+            'player_id': opponentId,
+            'asgn_date': today,
+          });
+        }
+
+        // Set results: player=0, opponent=1
+        await txn.rawUpdate('''
+          UPDATE CMP_PLAYER_EVENT SET event_result = 0.0
+          WHERE event_id = ? AND player_id = ?
+        ''', [eventId, playerId]);
+        await txn.rawUpdate('''
+          UPDATE CMP_PLAYER_EVENT SET event_result = 1.0
+          WHERE event_id = ? AND player_id = ?
+        ''', [eventId, opponentId]);
+      }
+    });
+  }
+
   /// Find a game between two players in a tournament, return eventId if found.
   Future<int?> findGameBetweenPlayers(int tId, int player1Id, int player2Id) async {
     final db = await _dbService.database;

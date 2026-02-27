@@ -1437,18 +1437,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final svc = ref.read(tournamentServiceProvider);
     final playerId = player.player.player_id!;
     final tsId = await svc.getOrCreateDefaultStage(widget.tId);
-
-    for (final opponent in allPlayers) {
-      if (opponent.player.player_id == playerId) continue;
-      final opponentId = opponent.player.player_id!;
-
-      var eventId = await svc.findGameBetweenPlayers(widget.tId, playerId, opponentId);
-      eventId ??= await svc.createGame(tsId: tsId, whitePlayerId: playerId, blackPlayerId: opponentId);
-
-      await svc.saveResultForPlayer(eventId, playerId, 0.0);
-      await svc.saveResultForPlayer(eventId, opponentId, 1.0);
-    }
-
+    final opponentIds = allPlayers
+        .where((p) => p.player.player_id != playerId)
+        .map((p) => p.player.player_id!)
+        .toList();
+    await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds);
     await _loadData();
   }
 
