@@ -962,22 +962,23 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 ],
               ),
             ),
-            IconButton(
-              icon: const Icon(Icons.tv, size: 20),
-              tooltip: 'Відкрити для трансляції',
-              color: Colors.indigo,
-              onPressed: () async {
-                final window = await DesktopMultiWindow.createWindow(jsonEncode({
-                  'type': 'tv_display',
-                  'tournamentId': widget.tId,
-                  'tournamentName': widget.tournamentName,
-                }));
-                window
-                  ..setFrame(const Offset(0, 0) & const Size(1280, 720))
-                  ..setTitle('Результати - ${widget.tournamentName}')
-                  ..show();
-              },
-            ),
+            // TODO: re-enable when multi-window is stable
+            // IconButton(
+            //   icon: const Icon(Icons.tv, size: 20),
+            //   tooltip: 'Відкрити для трансляції',
+            //   color: Colors.indigo,
+            //   onPressed: () async {
+            //     final window = await DesktopMultiWindow.createWindow(jsonEncode({
+            //       'type': 'tv_display',
+            //       'tournamentId': widget.tId,
+            //       'tournamentName': widget.tournamentName,
+            //     }));
+            //     window
+            //       ..setFrame(const Offset(0, 0) & const Size(1280, 720))
+            //       ..setTitle('Результати - ${widget.tournamentName}')
+            //       ..show();
+            //   },
+            // ),
           ],
         ),
         const SizedBox(height: 6),
