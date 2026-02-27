@@ -2197,6 +2197,34 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     return sorted;
   }
 
+  int _gamesPlayed(int boardNum, int playerId) {
+    return (_boardResults[boardNum]?[playerId] ?? {}).length;
+  }
+
+  ({double a, double b}) _teamMatchScore(int teamAId, int teamBId) {
+    double aTotal = 0;
+    double bTotal = 0;
+    for (final boardEntry in _boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
+      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
+      if (playerA == null || playerB == null) continue;
+      final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
+      final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
+      if (aResult != null) aTotal += aResult;
+      if (bResult != null) bTotal += bResult;
+    }
+    return (a: aTotal, b: bTotal);
+  }
+
+  ({double a, double b}) _teamMatchPoints(int teamAId, int teamBId) {
+    final score = _teamMatchScore(teamAId, teamBId);
+    if (score.a > score.b) return (a: 2.0, b: 0.0);
+    if (score.b > score.a) return (a: 0.0, b: 2.0);
+    if (score.a > 0 || score.b > 0) return (a: 1.0, b: 1.0);
+    return (a: 0.0, b: 0.0);
+  }
+
   String _fmtPts(double points) {
     if (points == points.roundToDouble()) return points.toStringAsFixed(1);
     String s = points.toStringAsFixed(2);
@@ -2290,7 +2318,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         final pId = p.player.player_id!;
         final s = sorted[i];
         final sId = s.player.player_id!;
-        final isAbsent = _absentPlayerIds.contains(pId);
+        final isAbsent = pId < 0;
         final nameStyle = isAbsent
             ? pw.TextStyle(fontSize: 7, font: fontRegular, fontStyle: pw.FontStyle.italic, color: PdfColors.red)
             : cellSt;
