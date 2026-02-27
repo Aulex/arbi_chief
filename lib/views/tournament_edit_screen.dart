@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -1127,10 +1129,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
             ),
           ),
         Expanded(
-          child: SingleChildScrollView(
+          child: Scrollbar(
             child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: _buildCombinedTable(boardNum, players),
+              child: Scrollbar(
+                notificationPredicate: (n) => n.depth == 1,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _buildCombinedTable(boardNum, players),
+                ),
+              ),
             ),
           ),
         ),
@@ -1216,13 +1223,16 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
-    return SingleChildScrollView(
+    return Scrollbar(
       child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Table(
-          border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-          defaultColumnWidth: const IntrinsicColumnWidth(),
-          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        child: Scrollbar(
+          notificationPredicate: (n) => n.depth == 1,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Table(
+              border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+              defaultColumnWidth: const IntrinsicColumnWidth(),
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
             TableRow(
               decoration: BoxDecoration(color: Colors.grey.shade100),
@@ -1264,6 +1274,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -2205,175 +2217,319 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     final tournamentName = widget.tournament.t_name;
     final boards = _boardPlayers.keys.toList()..sort();
 
-    // Load a font that supports Cyrillic (Ukrainian) characters
-    final fontRegular = await PdfGoogleFonts.notoSansRegular();
-    final fontBold = await PdfGoogleFonts.notoSansBold();
+    // Load Times New Roman from Windows system fonts (available on all Windows PCs)
+    pw.Font fontRegular;
+    pw.Font fontBold;
+    try {
+      final regBytes = await File('C:\\Windows\\Fonts\\times.ttf').readAsBytes();
+      final boldBytes = await File('C:\\Windows\\Fonts\\timesbd.ttf').readAsBytes();
+      fontRegular = pw.Font.ttf(ByteData.sublistView(regBytes));
+      fontBold = pw.Font.ttf(ByteData.sublistView(boldBytes));
+    } catch (_) {
+      // Fallback to Noto Sans if not on Windows
+      fontRegular = await PdfGoogleFonts.notoSansRegular();
+      fontBold = await PdfGoogleFonts.notoSansBold();
+    }
     final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
 
-    // Board cross-tables (landscape pages)
+    // --- Board cross-tables (landscape pages) ---
+    // Matches the UI's _buildCombinedTable: cross-table + standings side by side
     for (final boardNum in boards) {
-      final players = _boardPlayers[boardNum] ?? [];
-      if (players.isEmpty) continue;
+      final rawPlayers = _boardPlayers[boardNum] ?? [];
+      if (rawPlayers.isEmpty) continue;
+
+      // Sort by team number (same as UI _buildCombinedTable)
+      final players = List.of(rawPlayers)
+        ..sort((a, b) {
+          final aNum = a.teamNumber ?? 9999;
+          final bNum = b.teamNumber ?? 9999;
+          if (aNum != bNum) return aNum.compareTo(bNum);
+          return a.teamName.compareTo(b.teamName);
+        });
+      final n = players.length;
       final sorted = _sortedStandings(boardNum, players);
-      final n = sorted.length;
       final isWomen = boardNum == 3;
       final boardLabel = isWomen ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum';
 
+      // Build cross-table + standings as one wide table (identical to UI)
+      final hdrStyle = pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold);
+      final cellSt = pw.TextStyle(fontSize: 7, font: fontRegular);
+      final cellBold = pw.TextStyle(fontSize: 7, font: fontBold, fontWeight: pw.FontWeight.bold);
+
+      // Cross-table columns: №к, Команда, ПІБ, [1..n], Бали, Ігор, К.Б.
+      // Standings columns: №к, ПІБ, Команда, Бали, К.Б., Місце
+      final totalCols = 3 + n + 3 + 6; // cross(3+n+3) + standings(6)
+
+      final headerCells = <pw.Widget>[
+        _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('ПІБ', hdrStyle, align: pw.Alignment.center),
+        for (int i = 0; i < n; i++)
+          _pdfCell('${i + 1}', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Ігор', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
+        // Standings
+        _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('ПІБ', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Місце', hdrStyle, align: pw.Alignment.center),
+      ];
+
+      final dataTableRows = <pw.TableRow>[];
+      // Header
+      dataTableRows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        children: headerCells,
+      ));
+
+      for (int i = 0; i < n; i++) {
+        final p = players[i];
+        final pId = p.player.player_id!;
+        final s = sorted[i];
+        final sId = s.player.player_id!;
+        final isAbsent = _absentPlayerIds.contains(pId);
+        final nameStyle = isAbsent
+            ? pw.TextStyle(fontSize: 7, font: fontRegular, fontStyle: pw.FontStyle.italic, color: PdfColors.red)
+            : cellSt;
+
+        final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
+
+        final cells = <pw.Widget>[
+          // Cross-table part
+          _pdfCell('${p.teamNumber ?? ''}', cellSt),
+          _pdfCell(p.teamName, cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell('${p.player.player_surname} ${p.player.player_name}', nameStyle, align: pw.Alignment.centerLeft),
+          for (int j = 0; j < n; j++)
+            if (i == j)
+              _pdfDiagonalCell()
+            else
+              _pdfCell(
+                _fmtResult(_boardResults[boardNum]?[pId]?[players[j].player.player_id!]),
+                cellSt,
+              ),
+          _pdfCell(_fmtPts(_totalPoints(boardNum, pId)), cellBold),
+          _pdfCell('${_gamesPlayed(boardNum, pId)}', cellSt),
+          _pdfCell(_fmtPts(_bergerCoefficient(boardNum, pId)), cellSt),
+          // Standings part
+          _pdfCell('${s.teamNumber ?? ''}', cellSt),
+          _pdfCell('${s.player.player_surname} ${s.player.player_name}', cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell(_fmtPts(_totalPoints(boardNum, sId)), cellBold),
+          _pdfCell(_fmtPts(_bergerCoefficient(boardNum, sId)), cellSt),
+          _pdfCell('${i + 1}', cellBold),
+        ];
+
+        dataTableRows.add(pw.TableRow(decoration: rowBg, children: cells));
+      }
+
+      // Column widths
+      final colWidths = <int, pw.TableColumnWidth>{
+        0: const pw.FixedColumnWidth(22),  // №к
+        1: const pw.FlexColumnWidth(2),    // Команда
+        2: const pw.FlexColumnWidth(3),    // ПІБ
+        for (int i = 0; i < n; i++)
+          3 + i: const pw.FixedColumnWidth(20),
+        3 + n: const pw.FixedColumnWidth(28),     // Бали
+        3 + n + 1: const pw.FixedColumnWidth(24), // Ігор
+        3 + n + 2: const pw.FixedColumnWidth(28), // К.Б.
+        // Standings
+        3 + n + 3: const pw.FixedColumnWidth(22),  // №к
+        3 + n + 4: const pw.FlexColumnWidth(3),    // ПІБ
+        3 + n + 5: const pw.FlexColumnWidth(2),    // Команда
+        3 + n + 6: const pw.FixedColumnWidth(28),  // Бали
+        3 + n + 7: const pw.FixedColumnWidth(28),  // К.Б.
+        3 + n + 8: const pw.FixedColumnWidth(30),  // Місце
+      };
+
       pdf.addPage(
-        pw.MultiPage(
+        pw.Page(
           pageFormat: PdfPageFormat.a4.landscape,
-          margin: const pw.EdgeInsets.all(24),
+          margin: const pw.EdgeInsets.all(20),
           theme: theme,
-          header: (context) => pw.Column(
+          build: (context) => pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 4),
-              pw.Text(boardLabel, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 8),
+              pw.Text(boardLabel, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey400),
+                columnWidths: colWidths,
+                defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+                children: dataTableRows,
+              ),
             ],
           ),
-          build: (context) {
-            final headerRow = [
-              'ПІБ',
-              'Команда',
-              for (int i = 1; i <= n; i++) '$i',
-              'Бали',
-              'К.Б.',
-              'Місце',
-            ];
-
-            final dataRows = <List<String>>[];
-            for (int i = 0; i < n; i++) {
-              final p = sorted[i];
-              final pId = p.player.player_id!;
-              final row = <String>[
-                '${p.player.player_surname} ${p.player.player_name}',
-                p.teamName,
-              ];
-              for (int j = 0; j < n; j++) {
-                if (i == j) {
-                  row.add('X');
-                } else {
-                  final result = _boardResults[boardNum]?[pId]?[sorted[j].player.player_id!];
-                  row.add(_fmtResult(result));
-                }
-              }
-              row.add(_fmtPts(_totalPoints(boardNum, pId)));
-              row.add(_fmtPts(_bergerCoefficient(boardNum, pId)));
-              row.add('${i + 1}');
-              dataRows.add(row);
-            }
-
-            return [
-              pw.TableHelper.fromTextArray(
-                headers: headerRow,
-                data: dataRows,
-                headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-                cellStyle: pw.TextStyle(fontSize: 8, font: fontRegular),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                cellAlignment: pw.Alignment.center,
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(3),
-                  1: const pw.FlexColumnWidth(2),
-                  for (int i = 2; i < 2 + n; i++)
-                    i: const pw.FixedColumnWidth(22),
-                  2 + n: const pw.FixedColumnWidth(32),
-                  3 + n: const pw.FixedColumnWidth(32),
-                  4 + n: const pw.FixedColumnWidth(40),
-                },
-                border: pw.TableBorder.all(color: PdfColors.grey400),
-              ),
-            ];
-          },
         ),
       );
     }
 
-    // Team ratings page
-    final teamScores = <int, ({String teamName, double total, Map<int, double> perBoard})>{};
+    // --- Team standings page (matches UI _buildTeamsTab) ---
+    final teamMap = <int, ({String teamName, int? teamNumber})>{};
     for (final boardEntry in _boardPlayers.entries) {
-      final boardNum = boardEntry.key;
       for (final p in boardEntry.value) {
-        final existing = teamScores[p.teamId];
-        final pts = _totalPoints(boardNum, p.player.player_id!);
-        if (existing != null) {
-          final newPerBoard = Map<int, double>.from(existing.perBoard);
-          newPerBoard[boardNum] = (newPerBoard[boardNum] ?? 0) + pts;
-          teamScores[p.teamId] = (
-            teamName: existing.teamName,
-            total: existing.total + pts,
-            perBoard: newPerBoard,
-          );
-        } else {
-          teamScores[p.teamId] = (
-            teamName: p.teamName,
-            total: pts,
-            perBoard: {boardNum: pts},
-          );
-        }
+        teamMap.putIfAbsent(p.teamId, () => (teamName: p.teamName, teamNumber: p.teamNumber));
       }
     }
-    final sortedTeams = teamScores.entries.toList()
-      ..sort((a, b) => b.value.total.compareTo(a.value.total));
 
-    if (sortedTeams.isNotEmpty) {
+    if (teamMap.isNotEmpty) {
+      final teamIds = teamMap.keys.toList();
+      final teamPoints = <int, double>{};
+      final teamBoard1Pts = <int, double>{};
+      final teamBoard3Pts = <int, double>{};
+      for (final aId in teamIds) {
+        double total = 0;
+        for (final bId in teamIds) {
+          if (aId == bId) continue;
+          total += _teamMatchPoints(aId, bId).a;
+        }
+        teamPoints[aId] = total;
+        final b1p = (_boardPlayers[1] ?? []).where((p) => p.teamId == aId).firstOrNull;
+        teamBoard1Pts[aId] = b1p != null ? _totalPoints(1, b1p.player.player_id!) : 0;
+        final b3p = (_boardPlayers[3] ?? []).where((p) => p.teamId == aId).firstOrNull;
+        teamBoard3Pts[aId] = b3p != null ? _totalPoints(3, b3p.player.player_id!) : 0;
+      }
+
+      // Sort: points desc, then h2h, board 1, board 3 (same as UI)
+      teamIds.sort((a, b) {
+        final pa = teamPoints[a]!;
+        final pb = teamPoints[b]!;
+        if (pa != pb) return pb.compareTo(pa);
+        final h2h = _teamMatchPoints(a, b);
+        if (h2h.a > h2h.b) return -1;
+        if (h2h.b > h2h.a) return 1;
+        final b1a = teamBoard1Pts[a]!;
+        final b1b = teamBoard1Pts[b]!;
+        if (b1a != b1b) return b1b.compareTo(b1a);
+        return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+      });
+
+      final tn = teamIds.length;
+      final hdrStyle = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
+      final cellSt = pw.TextStyle(fontSize: 8, font: fontRegular);
+      final cellBold = pw.TextStyle(fontSize: 8, font: fontBold, fontWeight: pw.FontWeight.bold);
+
+      // Header: №, Команда, [team1..teamN], Очки, Д.1, Д.3, Місце
+      final teamHdrCells = <pw.Widget>[
+        _pdfCell('№', hdrStyle),
+        _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
+        for (int i = 0; i < tn; i++)
+          _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
+        _pdfCell('Очки', hdrStyle),
+        _pdfCell('Д.1', hdrStyle),
+        _pdfCell('Д.3', hdrStyle),
+        _pdfCell('Місце', hdrStyle),
+      ];
+
+      final teamTableRows = <pw.TableRow>[
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: teamHdrCells,
+        ),
+      ];
+
+      for (int i = 0; i < tn; i++) {
+        final tid = teamIds[i];
+        final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
+
+        final cells = <pw.Widget>[
+          _pdfCell('${teamMap[tid]!.teamNumber ?? (i + 1)}', cellSt),
+          _pdfCell(teamMap[tid]!.teamName, cellSt, align: pw.Alignment.centerLeft),
+          for (int j = 0; j < tn; j++)
+            if (i == j)
+              _pdfDiagonalCell()
+            else
+              _pdfTeamResultCell(tid, teamIds[j], cellSt, cellBold),
+          _pdfCell(_fmtPts(teamPoints[tid]!), cellBold),
+          _pdfCell(_fmtPts(teamBoard1Pts[tid]!), cellSt),
+          _pdfCell(_fmtPts(teamBoard3Pts[tid]!), cellSt),
+          _pdfCell('${i + 1}', cellBold),
+        ];
+
+        teamTableRows.add(pw.TableRow(decoration: rowBg, children: cells));
+      }
+
+      final teamColWidths = <int, pw.TableColumnWidth>{
+        0: const pw.FixedColumnWidth(28), // №
+        1: const pw.FlexColumnWidth(3),   // Команда
+        for (int i = 0; i < tn; i++)
+          2 + i: const pw.FixedColumnWidth(44),
+        2 + tn: const pw.FixedColumnWidth(36),     // Очки
+        2 + tn + 1: const pw.FixedColumnWidth(32), // Д.1
+        2 + tn + 2: const pw.FixedColumnWidth(32), // Д.3
+        2 + tn + 3: const pw.FixedColumnWidth(36), // Місце
+      };
+
       pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(24),
+        pw.Page(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.all(20),
           theme: theme,
-          header: (context) => pw.Column(
+          build: (context) => pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 4),
-              pw.Text('Командний залік', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 8),
+              pw.Text('Командний залік', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey400),
+                columnWidths: teamColWidths,
+                defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+                children: teamTableRows,
+              ),
             ],
           ),
-          build: (context) {
-            final headerRow = [
-              'Місце',
-              'Команда',
-              for (final b in boards) 'Дошка $b',
-              'Всього',
-            ];
-            final dataRows = <List<String>>[];
-            for (int i = 0; i < sortedTeams.length; i++) {
-              final team = sortedTeams[i].value;
-              dataRows.add([
-                '${i + 1}',
-                team.teamName,
-                for (final b in boards) _fmtPts(team.perBoard[b] ?? 0),
-                _fmtPts(team.total),
-              ]);
-            }
-
-            return [
-              pw.TableHelper.fromTextArray(
-                headers: headerRow,
-                data: dataRows,
-                headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-                cellStyle: pw.TextStyle(fontSize: 9, font: fontRegular),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                cellAlignment: pw.Alignment.center,
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(44),
-                  1: const pw.FlexColumnWidth(3),
-                  for (int i = 2; i < 2 + boards.length; i++)
-                    i: const pw.FixedColumnWidth(52),
-                  2 + boards.length: const pw.FixedColumnWidth(52),
-                },
-                border: pw.TableBorder.all(color: PdfColors.grey400),
-              ),
-            ];
-          },
         ),
       );
     }
 
     return pdf;
+  }
+
+  pw.Widget _pdfCell(String text, pw.TextStyle style, {pw.Alignment align = pw.Alignment.center}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+      alignment: align,
+      child: pw.Text(text, style: style, textAlign: align == pw.Alignment.centerLeft ? pw.TextAlign.left : pw.TextAlign.center),
+    );
+  }
+
+  pw.Widget _pdfDiagonalCell() {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+      color: PdfColors.grey600,
+      alignment: pw.Alignment.center,
+      child: pw.Text(''),
+    );
+  }
+
+  pw.Widget _pdfTeamResultCell(int teamAId, int teamBId, pw.TextStyle cellSt, pw.TextStyle cellBold) {
+    final matchPts = _teamMatchPoints(teamAId, teamBId);
+    final boardScore = _teamMatchScore(teamAId, teamBId);
+    final pts = matchPts.a;
+    final label = '${_fmtPts(boardScore.a)} (${pts.toInt()})';
+
+    PdfColor? bgColor;
+    if (pts == 2.0) bgColor = PdfColors.green50;
+    else if (pts == 0.0 && (boardScore.a > 0 || boardScore.b > 0)) bgColor = PdfColors.red50;
+    else if (pts == 1.0) bgColor = PdfColors.amber50;
+
+    PdfColor textColor = PdfColors.black;
+    if (pts == 2.0) textColor = PdfColors.green800;
+    else if (pts == 0.0) textColor = PdfColors.red800;
+    else if (pts == 1.0) textColor = PdfColors.amber800;
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      color: bgColor,
+      alignment: pw.Alignment.center,
+      child: pw.Text(label, style: cellBold.copyWith(color: textColor), textAlign: pw.TextAlign.center),
+    );
   }
 
   Future<void> _exportPdf() async {
