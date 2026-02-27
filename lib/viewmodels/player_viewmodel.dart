@@ -59,7 +59,7 @@ class PlayerNotifier extends AsyncNotifier<List<Player>> {
 
   Future<void> removePlayer(int id) async {
     // Optimistic update: remove from local list immediately
-    final current = state.valueOrNull ?? [];
+    final current = state.value ?? [];
     state = AsyncData(current.where((p) => p.player_id != id).toList());
     await ref.read(playerServiceProvider).deletePlayer(id);
   }
