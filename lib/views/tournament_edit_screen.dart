@@ -1340,21 +1340,23 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final effectiveStyle = isHighlighted
         ? (style ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold, color: Colors.indigo.shade800)
         : style;
-    return Container(
-      constraints: const BoxConstraints(minWidth: 36),
-      color: isHighlighted ? Colors.indigo.shade100 : null,
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          RotatedBox(
-            quarterTurns: 3,
-            child: Text(surname, style: effectiveStyle),
-          ),
-          const SizedBox(height: 2),
-          Text('$number', style: effectiveStyle),
-        ],
+    return TableCell(
+      verticalAlignment: TableCellVerticalAlignment.fill,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 36),
+        color: isHighlighted ? Colors.indigo.shade100 : null,
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            RotatedBox(
+              quarterTurns: 3,
+              child: Text(surname, style: effectiveStyle),
+            ),
+            const SizedBox(height: 2),
+            Text('$number', style: effectiveStyle),
+          ],
+        ),
       ),
     );
   }
