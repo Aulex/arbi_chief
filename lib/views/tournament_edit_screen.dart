@@ -1635,7 +1635,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final playerId = player.player.player_id!;
     final tsId = await svc.getOrCreateDefaultStage(widget.tId);
     final opponentIds = allPlayers
-        .where((p) => p.player.player_id != playerId)
+        .where((p) => p.player.player_id != playerId && p.player.player_id! > 0)
         .map((p) => p.player.player_id!)
         .toList();
     await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds, alsoAbsentIds: _absentPlayerIds);
