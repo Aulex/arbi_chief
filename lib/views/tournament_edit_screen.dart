@@ -1,10 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'tv_display_screen.dart';
 import 'tournament_add_screen.dart';
 import 'team_edit_screen.dart';
 import '../models/tournament_model.dart';
@@ -14,7 +13,6 @@ import '../viewmodels/nav_provider.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
-import '../viewmodels/shared_providers.dart';
 
 class TournamentEditScreen extends ConsumerStatefulWidget {
   final Tournament tournament;
@@ -962,23 +960,21 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 ],
               ),
             ),
-            // TODO: re-enable when multi-window is stable
-            // IconButton(
-            //   icon: const Icon(Icons.tv, size: 20),
-            //   tooltip: 'Відкрити для трансляції',
-            //   color: Colors.indigo,
-            //   onPressed: () async {
-            //     final window = await DesktopMultiWindow.createWindow(jsonEncode({
-            //       'type': 'tv_display',
-            //       'tournamentId': widget.tId,
-            //       'tournamentName': widget.tournamentName,
-            //     }));
-            //     window
-            //       ..setFrame(const Offset(0, 0) & const Size(1280, 720))
-            //       ..setTitle('Результати - ${widget.tournamentName}')
-            //       ..show();
-            //   },
-            // ),
+            IconButton(
+              icon: const Icon(Icons.tv, size: 20),
+              tooltip: 'Відкрити для трансляції',
+              color: Colors.indigo,
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TvDisplayScreen(
+                      tournamentId: widget.tId,
+                      tournamentName: widget.tournamentName,
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -999,21 +995,10 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
   Future<void> _clearBoardResults(int boardNum) async {
     final svc = ref.read(tournamentServiceProvider);
-    try {
-      final games = await svc.getGamesGroupedByBoard(widget.tId);
-      final boardGames = games[boardNum] ?? [];
-      for (final game in boardGames) {
-        await svc.deleteGame(game.eventId);
-      }
-    } catch (_) {
-      // Re-open DB connection on SQLITE_MISUSE and retry once
-      final dbSvc = ref.read(dbServiceProvider);
-      await dbSvc.reopenDatabase();
-      final games = await svc.getGamesGroupedByBoard(widget.tId);
-      final boardGames = games[boardNum] ?? [];
-      for (final game in boardGames) {
-        await svc.deleteGame(game.eventId);
-      }
+    final games = await svc.getGamesGroupedByBoard(widget.tId);
+    final boardGames = games[boardNum] ?? [];
+    for (final game in boardGames) {
+      await svc.deleteGame(game.eventId);
     }
     await _loadData();
   }
