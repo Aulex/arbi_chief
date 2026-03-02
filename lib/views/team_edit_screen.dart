@@ -4,26 +4,24 @@ import '../models/team_model.dart';
 import '../models/player_model.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/player_viewmodel.dart';
-import '../services/team_service.dart';
 
 class TeamEditScreen extends ConsumerStatefulWidget {
   final Team team;
-  const TeamEditScreen({super.key, required this.team});
+  final int tId;
+  const TeamEditScreen({super.key, required this.team, required this.tId});
 
   @override
   ConsumerState<TeamEditScreen> createState() => _TeamEditScreenState();
 }
 
 class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
-  late TextEditingController _nameC;
-
-  /// Board members ordered by board number (index 0 = board 1, etc.)
-  List<int> _members = [];
+  /// Board assignments: board number → player ID (null = empty board)
+  Map<int, int?> _boards = {1: null, 2: null, 3: null};
 
   /// Bench (reserve) players
   List<int> _reserves = [];
 
-  /// Players already assigned to other teams (cannot be added here).
+  /// Players already assigned to other teams.
   Set<int> _takenByOtherTeams = {};
 
   bool _loading = true;
@@ -31,34 +29,28 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   @override
   void initState() {
     super.initState();
-    _nameC = TextEditingController(text: widget.team.team_name);
     _loadAssignments();
   }
 
   Future<void> _loadAssignments() async {
     final service = ref.read(teamServiceProvider);
-    // Load board members in board-number order
-    final boardMembers = await service.getBoardMembers(widget.team.team_id!);
-    // Load reserves
-    final assignments = await service.getTeamAssignments(widget.team.team_id!);
+    final boardMembers = await service.getBoardMembers(widget.team.team_id!, widget.tId);
+    final assignments = await service.getTeamAssignments(widget.team.team_id!, widget.tId);
     final reserves = assignments
         .where((a) => a.player_state == 1)
         .map((a) => a.player_id)
         .toList();
-    // Load players taken by other teams
-    final taken = await service.getPlayersInOtherTeams(widget.team.team_id!);
+    final taken = await service.getPlayersInOtherTeams(widget.team.team_id!, widget.tId);
     setState(() {
-      _members = boardMembers;
+      _boards = {
+        1: boardMembers[1],
+        2: boardMembers[2],
+        3: boardMembers[3],
+      };
       _reserves = reserves;
       _takenByOtherTeams = taken;
       _loading = false;
     });
-  }
-
-  @override
-  void dispose() {
-    _nameC.dispose();
-    super.dispose();
   }
 
   @override
@@ -67,7 +59,7 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Редагування команди'),
+        title: Text('Склад: ${widget.team.team_name}'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -77,8 +69,7 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
           ? const Center(child: CircularProgressIndicator())
           : playersAsync.when(
               data: (allPlayers) => _buildForm(context, allPlayers),
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, s) => Center(child: Text('Помилка: $e')),
             ),
     );
@@ -90,47 +81,13 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Team name card
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              side: BorderSide(color: Colors.grey.shade300, width: 1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Назва команди',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _nameC,
-                    decoration: const InputDecoration(
-                      labelText: 'Назва команди',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
           // Boards & Bench
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: _buildBoardCard(allPlayers),
-              ),
+              Expanded(child: _buildBoardCard(allPlayers)),
               const SizedBox(width: 20),
-              Expanded(
-                child: _buildBenchCard(allPlayers),
-              ),
+              Expanded(child: _buildBenchCard(allPlayers)),
             ],
           ),
           const SizedBox(height: 24),
@@ -157,23 +114,36 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     );
   }
 
-  /// Card for board assignments (main roster with board numbers).
-  Widget _buildBoardCard(List<Player> allPlayers) {
-    final assigned = allPlayers
-        .where((p) => _members.contains(p.player_id))
-        .toList();
-    // Sort assigned by their position in _members
-    assigned.sort((a, b) =>
-        _members.indexOf(a.player_id!).compareTo(_members.indexOf(b.player_id!)));
+  /// IDs of all players currently used (boards + bench).
+  Set<int> get _usedIds {
+    final ids = <int>{};
+    for (final id in _boards.values) {
+      if (id != null) ids.add(id);
+    }
+    ids.addAll(_reserves);
+    return ids;
+  }
 
-    final usedIds = {..._members, ..._reserves};
-    final nextBoard = _members.length + 1;
-    // Exclude players in this team + other teams; board 3 is women-only
-    final available = allPlayers
-        .where((p) => !usedIds.contains(p.player_id))
-        .where((p) => !_takenByOtherTeams.contains(p.player_id))
-        .where((p) => nextBoard != 3 || p.player_gender == 1)
+  /// Available players for a given board (excludes taken, used, other teams).
+  /// Board 3 is women-only (player_gender == 1).
+  List<Player> _availableForBoard(int boardNum, List<Player> allPlayers) {
+    final used = _usedIds;
+    // Current player on this board is also "available" (to keep selection)
+    final currentId = _boards[boardNum];
+    final list = allPlayers
+        .where((p) {
+          // Board 3: women only
+          if (boardNum == 3 && p.player_gender != 1 && p.player_id != currentId) return false;
+          return p.player_id == currentId ||
+              (!used.contains(p.player_id) && !_takenByOtherTeams.contains(p.player_id));
+        })
         .toList();
+    list.sort((a, b) => a.player_surname.compareTo(b.player_surname));
+    return list;
+  }
+
+  Widget _buildBoardCard(List<Player> allPlayers) {
+    final assignedCount = _boards.values.where((id) => id != null).length;
 
     return Card(
       elevation: 0,
@@ -187,130 +157,74 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Дошки (${_members.length})',
+              'Дошки ($assignedCount)',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
-              'Гравці основного складу з номерами дошок.',
+              'Оберіть гравця для кожної дошки.',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const Divider(height: 24),
-            // Add player dropdown
-            DropdownButtonFormField<int?>(
-              key: ValueKey('board_${usedIds.length}'),
-              value: null,
-              isExpanded: true,
-              decoration: InputDecoration(
-                isDense: true,
-                border: const OutlineInputBorder(),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                hintText: nextBoard == 3
-                    ? 'Додати гравця на дошку 3 (лише жінки)...'
-                    : 'Додати гравця на дошку...',
-              ),
-              items: available.map((p) => DropdownMenuItem<int?>(
-                    value: p.player_id,
-                    child: Text(p.fullName),
-                  )).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => _members.add(value));
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            // Board list
-            ...List.generate(assigned.length, (index) {
-              final player = assigned[index];
-              final boardNum = index + 1;
-              final isWomenBoard = boardNum == 3;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  radius: 16,
-                  backgroundColor: isWomenBoard ? Colors.pink : Colors.indigo,
-                  child: Text(
-                    '$boardNum',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                title: Text(player.fullName),
-                subtitle: Text(
-                  isWomenBoard ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum',
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Move up
-                    IconButton(
-                      icon: const Icon(Icons.arrow_upward, size: 20),
-                      onPressed: index > 0 && _canSwapBoards(index, index - 1, allPlayers)
-                          ? () {
-                              setState(() {
-                                final id = _members.removeAt(index);
-                                _members.insert(index - 1, id);
-                              });
-                            }
-                          : null,
-                    ),
-                    // Move down
-                    IconButton(
-                      icon: const Icon(Icons.arrow_downward, size: 20),
-                      onPressed: index < assigned.length - 1 && _canSwapBoards(index, index + 1, allPlayers)
-                          ? () {
-                              setState(() {
-                                final id = _members.removeAt(index);
-                                _members.insert(index + 1, id);
-                              });
-                            }
-                          : null,
-                    ),
-                    // Remove
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline,
-                          color: Colors.red),
-                      onPressed: () =>
-                          setState(() => _members.remove(player.player_id!)),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            if (assigned.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Немає гравців на дошках',
-                  style: TextStyle(color: Colors.grey.shade500),
-                ),
-              ),
+            for (int boardNum = 1; boardNum <= 3; boardNum++)
+              _buildBoardRow(boardNum, allPlayers),
           ],
         ),
       ),
     );
   }
 
-  /// Check whether two players can swap board positions.
-  /// Board 3 (index 2) only allows women (player_gender == 1).
-  bool _canSwapBoards(int fromIndex, int toIndex, List<Player> allPlayers) {
-    final movingId = _members[fromIndex];
-    final targetId = _members[toIndex];
-    final movingPlayer = allPlayers.firstWhere((p) => p.player_id == movingId);
-    final targetPlayer = allPlayers.firstWhere((p) => p.player_id == targetId);
+  Widget _buildBoardRow(int boardNum, List<Player> allPlayers) {
+    final available = _availableForBoard(boardNum, allPlayers);
+    final currentId = _boards[boardNum];
 
-    // After swap: movingPlayer goes to toIndex, targetPlayer goes to fromIndex
-    final movingNewBoard = toIndex + 1;
-    final targetNewBoard = fromIndex + 1;
-
-    if (movingNewBoard == 3 && movingPlayer.player_gender != 1) return false;
-    if (targetNewBoard == 3 && targetPlayer.player_gender != 1) return false;
-    return true;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.indigo,
+            child: Text(
+              '$boardNum',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonFormField<int?>(
+              key: ValueKey('board_${boardNum}_${_usedIds.length}'),
+              value: currentId,
+              isExpanded: true,
+              decoration: InputDecoration(
+                isDense: true,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                labelText: 'Дошка $boardNum',
+              ),
+              items: [
+                const DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('— Не обрано —', style: TextStyle(color: Colors.grey)),
+                ),
+                ...available.map((p) => DropdownMenuItem<int?>(
+                      value: p.player_id,
+                      child: Text(p.fullName),
+                    )),
+              ],
+              onChanged: (value) {
+                setState(() => _boards[boardNum] = value);
+              },
+            ),
+          ),
+          if (currentId != null)
+            IconButton(
+              icon: const Icon(Icons.clear, color: Colors.red, size: 20),
+              onPressed: () => setState(() => _boards[boardNum] = null),
+            ),
+        ],
+      ),
+    );
   }
 
   /// Card for bench (reserve) players.
@@ -319,11 +233,12 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
         .where((p) => _reserves.contains(p.player_id))
         .toList();
 
-    final usedIds = {..._members, ..._reserves};
+    final used = _usedIds;
     final available = allPlayers
-        .where((p) => !usedIds.contains(p.player_id))
+        .where((p) => !used.contains(p.player_id))
         .where((p) => !_takenByOtherTeams.contains(p.player_id))
-        .toList();
+        .toList()
+      ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
 
     return Card(
       elevation: 0,
@@ -346,16 +261,14 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const Divider(height: 24),
-            // Add player dropdown
             DropdownButtonFormField<int?>(
-              key: ValueKey('bench_${usedIds.length}'),
+              key: ValueKey('bench_${used.length}'),
               value: null,
               isExpanded: true,
               decoration: const InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 hintText: 'Додати запасного гравця...',
               ),
               items: available.map((p) => DropdownMenuItem<int?>(
@@ -369,7 +282,6 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
               },
             ),
             const SizedBox(height: 12),
-            // Bench list
             ...assigned.map((p) => ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
@@ -379,10 +291,8 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
                   ),
                   title: Text(p.fullName),
                   trailing: IconButton(
-                    icon: const Icon(Icons.remove_circle_outline,
-                        color: Colors.red),
-                    onPressed: () =>
-                        setState(() => _reserves.remove(p.player_id!)),
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                    onPressed: () => setState(() => _reserves.remove(p.player_id!)),
                   ),
                 )),
             if (assigned.isEmpty)
@@ -400,18 +310,17 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameC.text.trim();
-    if (name.isEmpty) return;
-
-    final updatedTeam = widget.team.copyWith(team_name: name);
     final service = ref.read(teamServiceProvider);
-    await service.saveTeam(updatedTeam);
-    await service.saveAssignments(widget.team.team_id!, _members, _reserves);
 
-    ref.invalidate(teamProvider);
+    // Build non-null board assignments
+    final boardMembers = <int, int>{};
+    for (final entry in _boards.entries) {
+      if (entry.value != null) boardMembers[entry.key] = entry.value!;
+    }
+    await service.saveAssignments(widget.team.team_id!, widget.tId, boardMembers, _reserves);
 
     if (mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true); // return true to signal changes saved
     }
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../models/team_model.dart';
-import 'team_edit_screen.dart';
 
 class TeamView extends ConsumerWidget {
   const TeamView({super.key});
@@ -33,7 +32,7 @@ class TeamView extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Перегляд та керування всіма командами.',
+                      'Перегляд та керування командами. Склад команд налаштовується в турнірі.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Colors.grey.shade600,
                       ),
@@ -67,6 +66,7 @@ class TeamView extends ConsumerWidget {
                   if (teams.isEmpty) {
                     return const Center(child: Text("Команд не знайдено."));
                   }
+
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       return SingleChildScrollView(
@@ -93,14 +93,8 @@ class TeamView extends ConsumerWidget {
                                         IconButton(
                                           icon: const Icon(Icons.edit,
                                               color: Colors.blue),
-                                          onPressed: () {
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    TeamEditScreen(team: t),
-                                              ),
-                                            );
-                                          },
+                                          onPressed: () =>
+                                              _showRenameDialog(context, ref, t),
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete,
@@ -154,17 +148,46 @@ class TeamView extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               if (nameC.text.trim().isNotEmpty) {
-                final newTeam = await ref
+                await ref
                     .read(teamProvider.notifier)
                     .addTeam(name: nameC.text.trim());
                 if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                if (context.mounted) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => TeamEditScreen(team: newTeam),
-                    ),
-                  );
-                }
+              }
+            },
+            child: const Text("Зберегти"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameDialog(BuildContext context, WidgetRef ref, Team team) {
+    final nameC = TextEditingController(text: team.team_name);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text("Перейменувати команду"),
+        content: TextField(
+          controller: nameC,
+          decoration: const InputDecoration(
+            labelText: "Назва команди",
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text("Скасувати"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameC.text.trim().isNotEmpty) {
+                await ref
+                    .read(teamProvider.notifier)
+                    .updateTeam(team.copyWith(team_name: nameC.text.trim()));
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
               }
             },
             child: const Text("Зберегти"),

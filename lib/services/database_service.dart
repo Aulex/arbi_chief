@@ -12,11 +12,12 @@ class DatabaseService {
   }
 
   Future<Database> _initDB() async {
-    final dbPath =
-        Platform.isWindows ? Directory.current.path : await getDatabasesPath();
+    final dbPath = Platform.isWindows
+        ? File(Platform.resolvedExecutable).parent.path
+        : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v12.db');
+    final path = join(dbPath, 'tournament_blueprint_v14.db');
 
     return await openDatabase(
       path,
@@ -180,10 +181,13 @@ class DatabaseService {
             pte_id INTEGER PRIMARY KEY AUTOINCREMENT,
             team_id INTEGER,
             player_id INTEGER,
+            t_id INTEGER,
+            team_number INTEGER,
             asgn_date TEXT,
             player_state INTEGER,
             FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id),
-            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
+            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
+            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id)
           )
         ''');
 
@@ -280,6 +284,14 @@ class DatabaseService {
         await db.insert('CMP_ATTR', {
           'attr_id': '9',
           'attr_name': 'Дошка',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': '2',
+        });
+
+        // Неявка attribute for player-team (1 = no-show)
+        await db.insert('CMP_ATTR', {
+          'attr_id': '10',
+          'attr_name': 'Неявка',
           'attr_data_type': 'INTEGER',
           'attr_entity_type': '2',
         });
