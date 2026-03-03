@@ -43,6 +43,10 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     'Бухгольц (усічений)': false,
     'Зоннеборн-Бергер': false,
     'Кількість перемог': false,
+    'Різниця партій (між командами)': false,
+    'Різниця м\'ячів (між командами)': false,
+    'Різниця партій (у турнірі)': false,
+    'Результат жіночої ракетки': false,
   };
 
   // Controllers for the first tab

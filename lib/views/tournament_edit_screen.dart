@@ -1190,32 +1190,45 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
     final teamIds = teamMap.keys.toList();
     final teamPoints = <int, double>{};
-    final teamBoard1Pts = <int, double>{};
-    final teamBoard3Pts = <int, double>{};
+    final teamBoardDiff = <int, double>{}; // total board win diff across tournament
+    final teamBoard3Pts = <int, double>{}; // women's racket (last board)
     for (final aId in teamIds) {
       double total = 0;
+      double boardWins = 0;
+      double boardLosses = 0;
       for (final bId in teamIds) {
         if (aId == bId) continue;
         total += _teamMatchPoints(aId, bId).a;
+        final score = _teamMatchScore(aId, bId);
+        boardWins += score.a;
+        boardLosses += score.b;
       }
       teamPoints[aId] = total;
-      final b1p = (_boardPlayers[1] ?? []).where((p) => p.teamId == aId).firstOrNull;
-      teamBoard1Pts[aId] = b1p != null ? _totalPoints(1, b1p.player.player_id!) : 0;
-      final b3p = (_boardPlayers[3] ?? []).where((p) => p.teamId == aId).firstOrNull;
-      teamBoard3Pts[aId] = b3p != null ? _totalPoints(3, b3p.player.player_id!) : 0;
+      teamBoardDiff[aId] = boardWins - boardLosses;
+      final lastBoard = widget.config.boardCount;
+      final b3p = (_boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
+      teamBoard3Pts[aId] = b3p != null ? _totalPoints(lastBoard, b3p.player.player_id!) : 0;
     }
 
-    // Sort: points desc, then h2h, board 1, board 3
+    // Sort: points → h2h → board diff between them → board diff in tournament → women's racket
     teamIds.sort((a, b) {
       final pa = teamPoints[a]!;
       final pb = teamPoints[b]!;
       if (pa != pb) return pb.compareTo(pa);
+      // 2. Head-to-head
       final h2h = _teamMatchPoints(a, b);
       if (h2h.a > h2h.b) return -1;
       if (h2h.b > h2h.a) return 1;
-      final b1a = teamBoard1Pts[a]!;
-      final b1b = teamBoard1Pts[b]!;
-      if (b1a != b1b) return b1b.compareTo(b1a);
+      // 3. Board win diff between them (in direct match)
+      final directScore = _teamMatchScore(a, b);
+      final directDiffA = directScore.a - directScore.b;
+      final directDiffB = directScore.b - directScore.a;
+      if (directDiffA != directDiffB) return directDiffB.compareTo(directDiffA);
+      // 4. Board win diff across entire tournament
+      final bdA = teamBoardDiff[a]!;
+      final bdB = teamBoardDiff[b]!;
+      if (bdA != bdB) return bdB.compareTo(bdA);
+      // 5. Women's racket (last board) result
       return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
     });
 
@@ -1247,8 +1260,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
-                _tableCell('${widget.config.boardAbbrev}.1', style: headerStyle),
-                _tableCell('${widget.config.boardAbbrev}.${widget.config.boardCount}', style: headerStyle),
+                _tableCell('Р.Д.', style: headerStyle),
+                _tableCell('Ж.${widget.config.boardAbbrev}.', style: headerStyle),
                 _tableCell('Місце', style: headerStyle),
               ],
             ),
@@ -1267,7 +1280,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                     _formatPoints(teamPoints[teamIds[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  _tableCell(_formatPoints(teamBoard1Pts[teamIds[i]]!), style: cellStyle),
+                  _tableCell(_formatPoints(teamBoardDiff[teamIds[i]]!), style: cellStyle),
                   _tableCell(_formatPoints(teamBoard3Pts[teamIds[i]]!), style: cellStyle),
                   _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
                 ],
@@ -2461,22 +2474,27 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     if (teamMap.isNotEmpty) {
       final teamIds = teamMap.keys.toList();
       final teamPoints = <int, double>{};
-      final teamBoard1Pts = <int, double>{};
+      final teamBoardDiff = <int, double>{};
       final teamBoard3Pts = <int, double>{};
       for (final aId in teamIds) {
         double total = 0;
+        double boardWins = 0;
+        double boardLosses = 0;
         for (final bId in teamIds) {
           if (aId == bId) continue;
           total += _teamMatchPoints(aId, bId).a;
+          final score = _teamMatchScore(aId, bId);
+          boardWins += score.a;
+          boardLosses += score.b;
         }
         teamPoints[aId] = total;
-        final b1p = (_boardPlayers[1] ?? []).where((p) => p.teamId == aId).firstOrNull;
-        teamBoard1Pts[aId] = b1p != null ? _totalPoints(1, b1p.player.player_id!) : 0;
-        final b3p = (_boardPlayers[3] ?? []).where((p) => p.teamId == aId).firstOrNull;
-        teamBoard3Pts[aId] = b3p != null ? _totalPoints(3, b3p.player.player_id!) : 0;
+        teamBoardDiff[aId] = boardWins - boardLosses;
+        final lastBoard = widget.config.boardCount;
+        final b3p = (_boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
+        teamBoard3Pts[aId] = b3p != null ? _totalPoints(lastBoard, b3p.player.player_id!) : 0;
       }
 
-      // Sort: points desc, then h2h, board 1, board 3 (same as UI)
+      // Sort: points → h2h → board diff between them → board diff in tournament → women's racket
       teamIds.sort((a, b) {
         final pa = teamPoints[a]!;
         final pb = teamPoints[b]!;
@@ -2484,9 +2502,13 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         final h2h = _teamMatchPoints(a, b);
         if (h2h.a > h2h.b) return -1;
         if (h2h.b > h2h.a) return 1;
-        final b1a = teamBoard1Pts[a]!;
-        final b1b = teamBoard1Pts[b]!;
-        if (b1a != b1b) return b1b.compareTo(b1a);
+        final directScore = _teamMatchScore(a, b);
+        final directDiffA = directScore.a - directScore.b;
+        final directDiffB = directScore.b - directScore.a;
+        if (directDiffA != directDiffB) return directDiffB.compareTo(directDiffA);
+        final bdA = teamBoardDiff[a]!;
+        final bdB = teamBoardDiff[b]!;
+        if (bdA != bdB) return bdB.compareTo(bdA);
         return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
       });
 
@@ -2495,15 +2517,15 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
       final cellSt = pw.TextStyle(fontSize: 8, font: fontRegular);
       final cellBold = pw.TextStyle(fontSize: 8, font: fontBold, fontWeight: pw.FontWeight.bold);
 
-      // Header: №, Команда, [team1..teamN], Очки, Д.1, Д.3, Місце
+      // Header: №, Команда, [team1..teamN], Очки, Р.Д., Ж.Р., Місце
       final teamHdrCells = <pw.Widget>[
         _pdfCell('№', hdrStyle),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < tn; i++)
           _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
-        _pdfCell('${widget.config.boardAbbrev}.1', hdrStyle),
-        _pdfCell('${widget.config.boardAbbrev}.${widget.config.boardCount}', hdrStyle),
+        _pdfCell('Р.Д.', hdrStyle),
+        _pdfCell('Ж.${widget.config.boardAbbrev}.', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
 
@@ -2527,7 +2549,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
             else
               _pdfTeamResultCell(tid, teamIds[j], cellSt, cellBold),
           _pdfCell(_fmtPts(teamPoints[tid]!), cellBold),
-          _pdfCell(_fmtPts(teamBoard1Pts[tid]!), cellSt),
+          _pdfCell(_fmtPts(teamBoardDiff[tid]!), cellSt),
           _pdfCell(_fmtPts(teamBoard3Pts[tid]!), cellSt),
           _pdfCell('${i + 1}', cellBold),
         ];
@@ -2541,8 +2563,8 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         for (int i = 0; i < tn; i++)
           2 + i: const pw.FixedColumnWidth(44),
         2 + tn: const pw.FixedColumnWidth(36),     // Очки
-        2 + tn + 1: const pw.FixedColumnWidth(32), // Д.1
-        2 + tn + 2: const pw.FixedColumnWidth(32), // Д.3
+        2 + tn + 1: const pw.FixedColumnWidth(32), // Р.Д.
+        2 + tn + 2: const pw.FixedColumnWidth(32), // Ж.Р.
         2 + tn + 3: const pw.FixedColumnWidth(36), // Місце
       };
 

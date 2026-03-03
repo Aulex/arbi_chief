@@ -21,7 +21,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -32,6 +32,25 @@ class DatabaseService {
           // Default existing players/teams to type 1 (Шахи)
           await db.execute('UPDATE CMP_PLAYER SET t_type = 1');
           await db.execute('UPDATE CMP_TEAM SET t_type = 1');
+        }
+        if (oldVersion < 3) {
+          // Add table tennis specific tie-breakers
+          await db.insert('CMP_ATTR_DICT', {
+            'attr_id': '8',
+            'dict_value': 'Різниця партій (між командами)',
+          });
+          await db.insert('CMP_ATTR_DICT', {
+            'attr_id': '8',
+            'dict_value': 'Різниця м\'ячів (між командами)',
+          });
+          await db.insert('CMP_ATTR_DICT', {
+            'attr_id': '8',
+            'dict_value': 'Різниця партій (у турнірі)',
+          });
+          await db.insert('CMP_ATTR_DICT', {
+            'attr_id': '8',
+            'dict_value': 'Результат жіночої ракетки',
+          });
         }
       },
       onCreate: (db, version) async {
@@ -398,6 +417,24 @@ class DatabaseService {
         await db.insert('CMP_ATTR_DICT', {
           'attr_id': '8',
           'dict_value': 'Кількість перемог',
+        });
+
+        // Table tennis specific tie-breakers
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Різниця партій (між командами)',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Різниця м\'ячів (між командами)',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Різниця партій (у турнірі)',
+        });
+        await db.insert('CMP_ATTR_DICT', {
+          'attr_id': '8',
+          'dict_value': 'Результат жіночої ракетки',
         });
       },
     );
