@@ -11,7 +11,7 @@ class TeamView extends ConsumerWidget {
     final teamsAsync = ref.watch(teamProvider);
 
     return Card(
-      margin: const EdgeInsets.all(24),
+      margin: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(

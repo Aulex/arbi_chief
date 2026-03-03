@@ -30,7 +30,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     return DefaultTabController(
       length: 5,
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 24.0),
         child: Column(
           children: [
             // Header with back, tabs, and delete button
