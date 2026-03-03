@@ -7,6 +7,7 @@ import 'team_view.dart';
 import 'tournament_view.dart';
 import 'tournament_add_screen.dart';
 import 'tournament_edit_screen.dart';
+import 'sport_selection_screen.dart';
 
 class MainView extends ConsumerWidget {
   const MainView({super.key});
@@ -39,6 +40,17 @@ class MainView extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Менеджер турнірів'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sports),
+            tooltip: 'Обрати вид спорту',
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const SportSelectionScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: Row(
         children: [
