@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/team_model.dart';
 import '../models/player_model.dart';
+import '../models/sport_type_config.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/player_viewmodel.dart';
 
 class TeamEditScreen extends ConsumerStatefulWidget {
   final Team team;
   final int tId;
-  const TeamEditScreen({super.key, required this.team, required this.tId});
+  final SportTypeConfig config;
+  const TeamEditScreen({super.key, required this.team, required this.tId, required this.config});
 
   @override
   ConsumerState<TeamEditScreen> createState() => _TeamEditScreenState();
@@ -16,7 +18,14 @@ class TeamEditScreen extends ConsumerStatefulWidget {
 
 class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   /// Board assignments: board number → player ID (null = empty board)
-  Map<int, int?> _boards = {1: null, 2: null, 3: null};
+  late Map<int, int?> _boards;
+
+  @override
+  void initState() {
+    super.initState();
+    _boards = {for (int i = 1; i <= widget.config.boardCount; i++) i: null};
+    _loadAssignments();
+  }
 
   /// Bench (reserve) players
   List<int> _reserves = [];
@@ -25,12 +34,6 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   Set<int> _takenByOtherTeams = {};
 
   bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAssignments();
-  }
 
   Future<void> _loadAssignments() async {
     final service = ref.read(teamServiceProvider);
@@ -43,9 +46,8 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     final taken = await service.getPlayersInOtherTeams(widget.team.team_id!, widget.tId);
     setState(() {
       _boards = {
-        1: boardMembers[1],
-        2: boardMembers[2],
-        3: boardMembers[3],
+        for (int i = 1; i <= widget.config.boardCount; i++)
+          i: boardMembers[i],
       };
       _reserves = reserves;
       _takenByOtherTeams = taken;
@@ -125,15 +127,14 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
   }
 
   /// Available players for a given board (excludes taken, used, other teams).
-  /// Board 3 is women-only (player_gender == 1).
+  /// Last board is women-only when config says so.
   List<Player> _availableForBoard(int boardNum, List<Player> allPlayers) {
     final used = _usedIds;
-    // Current player on this board is also "available" (to keep selection)
     final currentId = _boards[boardNum];
+    final isWomenBoard = widget.config.lastBoardWomenOnly && boardNum == widget.config.boardCount;
     final list = allPlayers
         .where((p) {
-          // Board 3: women only
-          if (boardNum == 3 && p.player_gender != 1 && p.player_id != currentId) return false;
+          if (isWomenBoard && p.player_gender != 1 && p.player_id != currentId) return false;
           return p.player_id == currentId ||
               (!used.contains(p.player_id) && !_takenByOtherTeams.contains(p.player_id));
         })
@@ -157,16 +158,16 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Дошки ($assignedCount)',
+              '${widget.config.boardLabel}и ($assignedCount)',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
-              'Оберіть гравця для кожної дошки.',
+              'Оберіть гравця для кожної позиції.',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const Divider(height: 24),
-            for (int boardNum = 1; boardNum <= 3; boardNum++)
+            for (int boardNum = 1; boardNum <= widget.config.boardCount; boardNum++)
               _buildBoardRow(boardNum, allPlayers),
           ],
         ),
@@ -200,7 +201,7 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
                 isDense: true,
                 border: const OutlineInputBorder(),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                labelText: 'Дошка $boardNum',
+                labelText: widget.config.shortTabLabel(boardNum),
               ),
               items: [
                 const DropdownMenuItem<int?>(

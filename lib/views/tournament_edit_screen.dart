@@ -10,6 +10,7 @@ import 'team_edit_screen.dart';
 import '../models/tournament_model.dart';
 import '../models/team_model.dart';
 import '../models/player_model.dart';
+import '../models/sport_type_config.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
@@ -25,6 +26,8 @@ class TournamentEditScreen extends ConsumerStatefulWidget {
 }
 
 class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
+  SportTypeConfig get _sportConfig => getConfigForType(widget.tournament.t_type);
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -127,8 +130,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   children: [
                     _buildTableTab(),
                     _TournamentParticipantsTab(tId: widget.tournament.t_id!),
-                    _TournamentTeamsTab(tournament: widget.tournament),
-                    _ReportsTab(tournament: widget.tournament),
+                    _TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+                    _ReportsTab(tournament: widget.tournament, config: _sportConfig),
                     TournamentAddScreen(
                       tournament: widget.tournament,
                       isEditMode: true,
@@ -209,31 +212,30 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   side: BorderSide(color: Colors.grey.shade300, width: 1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Padding(
-                  padding: EdgeInsets.all(16.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Дошки — Колова система',
-                        style: TextStyle(
+                        '${_sportConfig.boardLabel}и — Колова система',
+                        style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
-                        'Розподіл гравців по дошках з командних складів.',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                        'Розподіл гравців по ${_sportConfig.boardLabelPlural} з командних складів.',
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              // 3 boards in a row
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (int boardNum = 1; boardNum <= 3; boardNum++) ...[
+                  for (int boardNum = 1; boardNum <= _sportConfig.boardCount; boardNum++) ...[
                     if (boardNum > 1) const SizedBox(width: 16),
                     Expanded(
                       child: _buildBoardPairingCard(
@@ -255,7 +257,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     int boardNum,
     List<({int teamId, String teamName, int? teamNumber, Player player})> entries,
   ) {
-    final isWomenBoard = boardNum == 3;
+    final isWomenBoard = _sportConfig.lastBoardWomenOnly && boardNum == _sportConfig.boardCount;
 
     return Card(
       elevation: 0,
@@ -288,9 +290,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  isWomenBoard
-                      ? 'Дошка $boardNum (жіноча)'
-                      : 'Дошка $boardNum',
+                  _sportConfig.tabLabel(boardNum),
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold),
                 ),
@@ -299,7 +299,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
             const Divider(height: 24),
             if (entries.isEmpty)
               Text(
-                'Немає гравців на цій дошці',
+                'Немає гравців на цій позиції',
                 style: TextStyle(color: Colors.grey.shade500),
               )
             else
@@ -316,11 +316,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildGamesTab() {
-    return _GameResultsTab(tId: widget.tournament.t_id!);
+    return _GameResultsTab(tId: widget.tournament.t_id!, config: _sportConfig);
   }
 
   Widget _buildTableTab() {
-    return _CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name);
+    return _CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig);
   }
 
 }
@@ -480,7 +480,8 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
 /// Tab showing game results grouped by board, with inline result editing.
 class _GameResultsTab extends ConsumerStatefulWidget {
   final int tId;
-  const _GameResultsTab({required this.tId});
+  final SportTypeConfig config;
+  const _GameResultsTab({required this.tId, required this.config});
 
   @override
   ConsumerState<_GameResultsTab> createState() => _GameResultsTabState();
@@ -603,10 +604,10 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
 
   Widget _buildBoardCard(int boardNum) {
     final games = _boardGames[boardNum]!;
-    final isWomen = boardNum == 3;
+    final isWomen = widget.config.lastBoardWomenOnly && boardNum == widget.config.boardCount;
     final boardLabel = boardNum == 0
         ? 'Інші ігри'
-        : (isWomen ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum');
+        : widget.config.tabLabel(boardNum);
 
     return Card(
       elevation: 0,
@@ -713,7 +714,8 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
 class _CrossTableTab extends ConsumerStatefulWidget {
   final int tId;
   final String tournamentName;
-  const _CrossTableTab({required this.tId, required this.tournamentName});
+  final SportTypeConfig config;
+  const _CrossTableTab({required this.tId, required this.tournamentName, required this.config});
 
   @override
   ConsumerState<_CrossTableTab> createState() => _CrossTableTabState();
@@ -734,7 +736,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: widget.config.boardCount + 1, vsync: this);
     _loadData();
   }
 
@@ -1007,7 +1009,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               const SizedBox(height: 16),
               Text('Немає даних для таблиці', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
               const SizedBox(height: 8),
-              Text('Додайте учасників та розподіліть їх по дошках.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              Text('Додайте учасників та розподіліть їх по ${widget.config.boardLabelPlural}.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
             ]),
           ),
         ),
@@ -1033,11 +1035,10 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 indicatorColor: Colors.indigo,
                 tabAlignment: TabAlignment.start,
                 labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-                tabs: const [
-                  Tab(text: 'Дошка 1', height: 36),
-                  Tab(text: 'Дошка 2', height: 36),
-                  Tab(text: 'Дошка 3', height: 36),
-                  Tab(text: 'Команди', height: 36),
+                tabs: [
+                  for (int i = 1; i <= widget.config.boardCount; i++)
+                    Tab(text: widget.config.shortTabLabel(i), height: 36),
+                  const Tab(text: 'Команди', height: 36),
                 ],
               ),
             ),
@@ -1048,9 +1049,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildBoardTab(1),
-              _buildBoardTab(2),
-              _buildBoardTab(3),
+              for (int i = 1; i <= widget.config.boardCount; i++)
+                _buildBoardTab(i),
               _buildTeamsTab(),
             ],
           ),
@@ -1085,7 +1085,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final players = _boardPlayers[boardNum] ?? [];
     if (players.isEmpty) {
       return Center(
-        child: Text('Немає гравців на дошці $boardNum', style: TextStyle(color: Colors.grey.shade600)),
+        child: Text('Немає гравців: ${widget.config.shortTabLabel(boardNum)}', style: TextStyle(color: Colors.grey.shade600)),
       );
     }
 
@@ -1111,7 +1111,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                   context: context,
                   builder: (ctx) => AlertDialog(
                     title: const Text('Очистити результати?'),
-                    content: Text('Видалити всі результати ігор на дошці $boardNum?'),
+                    content: Text('Видалити всі результати ігор: ${widget.config.shortTabLabel(boardNum)}?'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
                       ElevatedButton(
@@ -1247,8 +1247,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
-                _tableCell('Д.1', style: headerStyle),
-                _tableCell('Д.3', style: headerStyle),
+                _tableCell('${widget.config.boardAbbrev}.1', style: headerStyle),
+                _tableCell('${widget.config.boardAbbrev}.${widget.config.boardCount}', style: headerStyle),
                 _tableCell('Місце', style: headerStyle),
               ],
             ),
@@ -1344,7 +1344,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               TableRow(
                 decoration: BoxDecoration(color: Colors.grey.shade100),
                 children: [
-                  _tableCell('Дошка', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54)),
+                  _tableCell(widget.config.boardLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54)),
                   _tableCell(teamAName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54), minWidth: 120, leftAlign: true),
                   _tableCell('', style: const TextStyle(fontSize: 12)),
                   _tableCell(teamBName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54), minWidth: 120, leftAlign: true),
@@ -1801,7 +1801,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 /// Teams tab — manage team compositions within this tournament.
 class _TournamentTeamsTab extends ConsumerStatefulWidget {
   final Tournament tournament;
-  const _TournamentTeamsTab({required this.tournament});
+  final SportTypeConfig config;
+  const _TournamentTeamsTab({required this.tournament, required this.config});
 
   @override
   ConsumerState<_TournamentTeamsTab> createState() => _TournamentTeamsTabState();
@@ -1929,6 +1930,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
           builder: (_) => TeamEditScreen(
             team: result.team,
             tId: widget.tournament.t_id!,
+            config: widget.config,
           ),
         ),
       );
@@ -2054,18 +2056,16 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                         columns: const [
                           DataColumn(label: Text('№')),
                           DataColumn(label: Text('Команда')),
-                          DataColumn(label: Text('Дошка 1')),
-                          DataColumn(label: Text('Дошка 2')),
-                          DataColumn(label: Text('Дошка 3')),
+                          for (int i = 1; i <= widget.config.boardCount; i++)
+                            DataColumn(label: Text(widget.config.shortTabLabel(i))),
                           DataColumn(label: Text('Дія')),
                         ],
                     rows: _teamData.map((d) {
                       return DataRow(cells: [
                         DataCell(Text('${d.teamNumber ?? ''}')),
                         DataCell(Text(d.team.team_name)),
-                        DataCell(Text(_playerLabel(d.boards[1]))),
-                        DataCell(Text(_playerLabel(d.boards[2]))),
-                        DataCell(Text(_playerLabel(d.boards[3]))),
+                        for (int i = 1; i <= widget.config.boardCount; i++)
+                          DataCell(Text(_playerLabel(d.boards[i]))),
                         DataCell(Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -2078,6 +2078,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                                     builder: (_) => TeamEditScreen(
                                       team: d.team,
                                       tId: widget.tournament.t_id!,
+                                      config: widget.config,
                                     ),
                                   ),
                                 );
@@ -2108,7 +2109,8 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
 /// Reports tab — generates and exports a PDF with board cross-tables and team ratings.
 class _ReportsTab extends ConsumerStatefulWidget {
   final Tournament tournament;
-  const _ReportsTab({required this.tournament});
+  final SportTypeConfig config;
+  const _ReportsTab({required this.tournament, required this.config});
 
   @override
   ConsumerState<_ReportsTab> createState() => _ReportsTabState();
@@ -2329,8 +2331,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         });
       final n = players.length;
       final sorted = _sortedStandings(boardNum, players);
-      final isWomen = boardNum == 3;
-      final boardLabel = isWomen ? 'Дошка $boardNum (жіноча)' : 'Дошка $boardNum';
+      final boardLabel = widget.config.tabLabel(boardNum);
 
       // Build cross-table + standings as one wide table (identical to UI)
       final hdrStyle = pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold);
@@ -2501,8 +2502,8 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         for (int i = 0; i < tn; i++)
           _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
-        _pdfCell('Д.1', hdrStyle),
-        _pdfCell('Д.3', hdrStyle),
+        _pdfCell('${widget.config.boardAbbrev}.1', hdrStyle),
+        _pdfCell('${widget.config.boardAbbrev}.${widget.config.boardCount}', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
 
@@ -2667,7 +2668,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Додайте учасників та розподіліть їх по дошках.',
+                        'Додайте учасників та розподіліть їх по ${widget.config.boardLabelPlural}.',
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                       ),
                     ],
