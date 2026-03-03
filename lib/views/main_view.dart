@@ -37,13 +37,8 @@ class MainView extends ConsumerWidget {
     ];
 
     return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(28),
-        child: AppBar(
-          title: const Text('Менеджер турнірів', style: TextStyle(fontSize: 14)),
-          toolbarHeight: 28,
-          elevation: 2,
-        ),
+      appBar: AppBar(
+        title: const Text('Менеджер турнірів'),
       ),
       body: Row(
         children: [

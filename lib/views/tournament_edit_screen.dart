@@ -60,11 +60,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                           indicatorColor: Colors.indigo,
                           tabAlignment: TabAlignment.start,
                           tabs: [
-                            Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
-                            Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
-                            Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
-                            Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
-                            Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
+                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Учасники')])),
+                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.summarize_outlined, size: 18), SizedBox(width: 6), Text('Звіти')])),
+                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
                           ],
                         ),
                       ),
@@ -728,6 +728,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   Set<int> _absentPlayerIds = {};
   int? _hoveredRow;
   int? _hoveredCol;
+  int? _hoveredTeamRow;
+  int? _hoveredTeamCol;
 
   @override
   void initState() {
@@ -1241,7 +1243,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                   _verticalHeaderCell(
                     number: teamMap[teamIds[i]]!.teamNumber ?? (i + 1),
                     surname: teamMap[teamIds[i]]!.teamName,
-                    isHighlighted: false,
+                    isHighlighted: _hoveredTeamCol == i,
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
@@ -1255,12 +1257,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
                 children: [
                   _tableCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
-                  _tableCell(teamMap[teamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                  _highlightableNameCell(teamMap[teamIds[i]]!.teamName, isHighlighted: _hoveredTeamRow == i, style: cellStyle, minWidth: 140),
                   for (int j = 0; j < n; j++)
                     if (i == j)
                       _diagonalCell()
                     else
-                      _teamResultCell(teamIds[i], teamIds[j], teamMap),
+                      _teamResultCell(teamIds[i], teamIds[j], teamMap, rowIdx: i, colIdx: j),
                   _tableCell(
                     _formatPoints(teamPoints[teamIds[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -1278,21 +1280,25 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     );
   }
 
-  Widget _teamResultCell(int teamAId, int teamBId, Map<int, ({String teamName, int? teamNumber})> teamMap) {
+  Widget _teamResultCell(int teamAId, int teamBId, Map<int, ({String teamName, int? teamNumber})> teamMap, {required int rowIdx, required int colIdx}) {
     final matchPts = _teamMatchPoints(teamAId, teamBId);
     final boardScore = _teamMatchScore(teamAId, teamBId);
     final pts = matchPts.a;
     final label = '${pts.toInt()}';
 
+    final isHighlighted = _hoveredTeamRow == rowIdx || _hoveredTeamCol == colIdx;
     Color? bgColor;
     if (pts == 2.0) bgColor = Colors.green.shade50;
     else if (pts == 0.0 && (boardScore.a > 0 || boardScore.b > 0)) bgColor = Colors.red.shade50;
     else if (pts == 1.0) bgColor = Colors.amber.shade50;
+    else if (isHighlighted) bgColor = Colors.indigo.shade50;
 
-    return GestureDetector(
-      onTap: () => _showTeamMatchDetails(context, teamAId, teamBId, teamMap),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() { _hoveredTeamRow = rowIdx; _hoveredTeamCol = colIdx; }),
+      onExit: (_) => setState(() { _hoveredTeamRow = null; _hoveredTeamCol = null; }),
+      child: GestureDetector(
+        onTap: () => _showTeamMatchDetails(context, teamAId, teamBId, teamMap),
         child: Container(
           constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
           color: bgColor ?? Colors.transparent,
