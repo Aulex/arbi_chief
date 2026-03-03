@@ -2066,12 +2066,12 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                           color: Colors.black54,
                         ),
                         columnSpacing: 24,
-                        columns: const [
-                          DataColumn(label: Text('№')),
-                          DataColumn(label: Text('Команда')),
+                        columns: [
+                          const DataColumn(label: Text('№')),
+                          const DataColumn(label: Text('Команда')),
                           for (int i = 1; i <= widget.config.boardCount; i++)
                             DataColumn(label: Text(widget.config.shortTabLabel(i))),
-                          DataColumn(label: Text('Дія')),
+                          const DataColumn(label: Text('Дія')),
                         ],
                     rows: _teamData.map((d) {
                       return DataRow(cells: [
