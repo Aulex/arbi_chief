@@ -27,7 +27,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"arbi_chief", origin, size)) {
+  if (!window.Create(L"\u041c\u0435\u043d\u0435\u0434\u0436\u0435\u0440 \u0442\u0443\u0440\u043d\u0456\u0440\u0456\u0432", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

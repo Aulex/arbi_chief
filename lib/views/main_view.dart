@@ -37,7 +37,6 @@ class MainView extends ConsumerWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Менеджер турнірів'), elevation: 2),
       body: Row(
         children: [
           NavigationRail(

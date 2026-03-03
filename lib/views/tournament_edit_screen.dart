@@ -33,7 +33,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            // Header with back, title, tabs, and delete button
+            // Header with title + tabs on the left, delete button on the right
             Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -64,22 +64,19 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                                   ?.copyWith(fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Flexible(
-                        child: TabBar(
-                          isScrollable: true,
-                          labelColor: Colors.indigo,
-                          indicatorColor: Colors.indigo,
-                          tabAlignment: TabAlignment.start,
-                          tabs: [
-                            Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
-                            Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
-                            Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
-                            Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
-                            Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
+                            const TabBar(
+                              isScrollable: true,
+                              labelColor: Colors.indigo,
+                              indicatorColor: Colors.indigo,
+                              tabAlignment: TabAlignment.start,
+                              tabs: [
+                                Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
+                                Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
+                                Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
+                                Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
+                                Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
+                              ],
+                            ),
                           ],
                         ),
                       ),
