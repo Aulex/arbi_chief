@@ -33,7 +33,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            // Header
+            // Header with back, title, tabs, and delete button
             Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -41,37 +41,49 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back, size: 20),
-                            onPressed: () {
-                              ref
-                                  .read(tournamentNavProvider.notifier)
-                                  .showList();
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Керування турніром: ${widget.tournament.t_name}',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                              SelectableText(
-                                'ID: ${widget.tournament.t_id}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ],
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, size: 20),
+                        onPressed: () {
+                          ref
+                              .read(tournamentNavProvider.notifier)
+                              .showList();
+                        },
                       ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.tournament.t_name,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Flexible(
+                        child: TabBar(
+                          isScrollable: true,
+                          labelColor: Colors.indigo,
+                          indicatorColor: Colors.indigo,
+                          tabAlignment: TabAlignment.start,
+                          tabs: [
+                            Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
+                            Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
+                            Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
+                            Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
+                            Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       ElevatedButton.icon(
                         onPressed: () {
                           showDialog(
@@ -122,20 +134,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              // Tab Bar
-              const TabBar(
-                isScrollable: true,
-                labelColor: Colors.indigo,
-                indicatorColor: Colors.indigo,
-                tabs: [
-                  Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
-                  Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
-                  Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
-                  Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
-                  Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
-                ],
               ),
               const SizedBox(height: 12),
               // Tab Bar View
@@ -1284,7 +1282,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final matchPts = _teamMatchPoints(teamAId, teamBId);
     final boardScore = _teamMatchScore(teamAId, teamBId);
     final pts = matchPts.a;
-    final label = '${_formatPoints(boardScore.a)}\n(${pts.toInt()})';
+    final label = '${pts.toInt()}';
 
     Color? bgColor;
     if (pts == 2.0) bgColor = Colors.green.shade50;
@@ -2589,7 +2587,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     final matchPts = _teamMatchPoints(teamAId, teamBId);
     final boardScore = _teamMatchScore(teamAId, teamBId);
     final pts = matchPts.a;
-    final label = '${_fmtPts(boardScore.a)} (${pts.toInt()})';
+    final label = '${pts.toInt()}';
 
     PdfColor? bgColor;
     if (pts == 2.0) bgColor = PdfColors.green50;
