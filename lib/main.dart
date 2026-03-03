@@ -4,7 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'views/main_view.dart';
+import 'views/sport_selection_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +33,7 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const MainView(),
+      home: const SportSelectionScreen(),
     );
   }
 }

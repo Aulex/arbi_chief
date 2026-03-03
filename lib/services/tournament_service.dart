@@ -7,6 +7,16 @@ class TournamentService {
   final DatabaseService _dbService;
   TournamentService(this._dbService);
 
+  /// Get all tournament types from CMP_TOURNAMENT_TYPE.
+  Future<List<({int typeId, String typeName})>> getTournamentTypes() async {
+    final db = await _dbService.database;
+    final rows = await db.query('CMP_TOURNAMENT_TYPE', orderBy: 'type_id');
+    return rows.map((r) => (
+      typeId: r['type_id'] as int,
+      typeName: r['type_name'] as String,
+    )).toList();
+  }
+
   Future<List<Tournament>> getAllTournaments() async {
     final db = await _dbService.database;
     final List<Map<String, dynamic>> maps = await db.query(
