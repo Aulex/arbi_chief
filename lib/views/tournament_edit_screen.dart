@@ -33,7 +33,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            // Header with title + tabs on the left, delete button on the right
+            // Header with back, tabs, and delete button
             Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -53,30 +53,18 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              widget.tournament.t_name,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const TabBar(
-                              isScrollable: true,
-                              labelColor: Colors.indigo,
-                              indicatorColor: Colors.indigo,
-                              tabAlignment: TabAlignment.start,
-                              tabs: [
-                                Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
-                                Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
-                                Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
-                                Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
-                                Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
-                              ],
-                            ),
+                      const Expanded(
+                        child: TabBar(
+                          isScrollable: true,
+                          labelColor: Colors.indigo,
+                          indicatorColor: Colors.indigo,
+                          tabAlignment: TabAlignment.start,
+                          tabs: [
+                            Tab(icon: Icon(Icons.leaderboard_outlined, size: 18), text: 'Таблиця'),
+                            Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Учасники'),
+                            Tab(icon: Icon(Icons.groups_outlined, size: 18), text: 'Команди'),
+                            Tab(icon: Icon(Icons.summarize_outlined, size: 18), text: 'Звіти'),
+                            Tab(icon: Icon(Icons.settings_outlined, size: 18), text: 'Налаштування'),
                           ],
                         ),
                       ),
@@ -332,7 +320,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildTableTab() {
-    return _CrossTableTab(tId: widget.tournament.t_id!);
+    return _CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name);
   }
 
 }
@@ -724,7 +712,8 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
 /// Cross-tables are interactive — tap cells to enter results.
 class _CrossTableTab extends ConsumerStatefulWidget {
   final int tId;
-  const _CrossTableTab({required this.tId});
+  final String tournamentName;
+  const _CrossTableTab({required this.tId, required this.tournamentName});
 
   @override
   ConsumerState<_CrossTableTab> createState() => _CrossTableTabState();
@@ -1025,17 +1014,31 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
 
     return Column(
       children: [
-        TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          labelColor: Colors.indigo,
-          indicatorColor: Colors.indigo,
-          labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-          tabs: const [
-            Tab(text: 'Дошка 1', height: 36),
-            Tab(text: 'Дошка 2', height: 36),
-            Tab(text: 'Дошка 3', height: 36),
-            Tab(text: 'Команди', height: 36),
+        Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                widget.tournamentName,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Expanded(
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                labelColor: Colors.indigo,
+                indicatorColor: Colors.indigo,
+                tabAlignment: TabAlignment.start,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+                tabs: const [
+                  Tab(text: 'Дошка 1', height: 36),
+                  Tab(text: 'Дошка 2', height: 36),
+                  Tab(text: 'Дошка 3', height: 36),
+                  Tab(text: 'Команди', height: 36),
+                ],
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
