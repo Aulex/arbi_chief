@@ -5,6 +5,7 @@ class Player {
   final String player_lastname;
   final int player_gender;
   final String player_date_birth; // Stored as yyyy-mm-dd in SQLite
+  final int? t_type;
 
   const Player({
     this.player_id,
@@ -13,6 +14,7 @@ class Player {
     required this.player_lastname,
     required this.player_gender,
     required this.player_date_birth,
+    this.t_type,
   });
 
   // --- Date Helpers ---
@@ -46,6 +48,7 @@ class Player {
     String? player_lastname,
     int? player_gender,
     String? player_date_birth,
+    int? t_type,
   }) {
     return Player(
       player_id: player_id ?? this.player_id,
@@ -54,6 +57,7 @@ class Player {
       player_lastname: player_lastname ?? this.player_lastname,
       player_gender: player_gender ?? this.player_gender,
       player_date_birth: player_date_birth ?? this.player_date_birth,
+      t_type: t_type ?? this.t_type,
     );
   }
 
@@ -65,6 +69,7 @@ class Player {
       player_lastname: json['player_lastname'] as String? ?? '',
       player_gender: json['player_gender'] as int? ?? 0,
       player_date_birth: json['player_date_birth'] as String? ?? '',
+      t_type: json['t_type'] as int?,
     );
   }
 
@@ -76,6 +81,7 @@ class Player {
       'player_lastname': player_lastname,
       'player_gender': player_gender,
       'player_date_birth': player_date_birth,
+      't_type': t_type,
     };
   }
 }

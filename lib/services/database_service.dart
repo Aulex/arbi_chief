@@ -21,9 +21,18 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE CMP_PLAYER ADD COLUMN t_type INTEGER REFERENCES CMP_TOURNAMENT_TYPE(type_id)');
+          await db.execute('ALTER TABLE CMP_TEAM ADD COLUMN t_type INTEGER REFERENCES CMP_TOURNAMENT_TYPE(type_id)');
+          // Default existing players/teams to type 1 (Шахи)
+          await db.execute('UPDATE CMP_PLAYER SET t_type = 1');
+          await db.execute('UPDATE CMP_TEAM SET t_type = 1');
+        }
       },
       onCreate: (db, version) async {
         // 1. CMP_TOURNAMENT_TYPE
@@ -149,7 +158,9 @@ class DatabaseService {
             player_name TEXT,
             player_lastname TEXT,
             player_gender INTEGER,
-            player_date_birth TEXT
+            player_date_birth TEXT,
+            t_type INTEGER,
+            FOREIGN KEY (t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
 
@@ -171,7 +182,9 @@ class DatabaseService {
         await db.execute('''
           CREATE TABLE CMP_TEAM (
             team_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_name TEXT
+            team_name TEXT,
+            t_type INTEGER,
+            FOREIGN KEY (t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
 

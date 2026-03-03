@@ -7,12 +7,15 @@ class PlayerService {
 
   PlayerService(this._dbService);
 
-  // Fetch all players from the CMP_PLAYER table 📋
-  Future<List<Player>> getAllPlayers() async {
+  // Fetch players filtered by sport type
+  Future<List<Player>> getAllPlayers({int? tType}) async {
     final db = await _dbService.database;
-    final List<Map<String, dynamic>> maps = await db.query('CMP_PLAYER');
-
-    // Using fromJson to map database rows to Player objects
+    final List<Map<String, dynamic>> maps;
+    if (tType != null) {
+      maps = await db.query('CMP_PLAYER', where: 't_type = ?', whereArgs: [tType]);
+    } else {
+      maps = await db.query('CMP_PLAYER');
+    }
     return List.generate(maps.length, (i) => Player.fromJson(maps[i]));
   }
 

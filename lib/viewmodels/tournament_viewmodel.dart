@@ -3,6 +3,7 @@ import '../models/tournament_model.dart';
 import '../models/player_model.dart';
 import '../services/tournament_service.dart';
 import 'shared_providers.dart';
+import 'sport_type_provider.dart';
 
 // --- Service Provider ---
 final tournamentServiceProvider = Provider(
@@ -13,8 +14,8 @@ final tournamentServiceProvider = Provider(
 class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
   @override
   Future<List<Tournament>> build() async {
-    // Watching the service ensures we refresh if the database connection changes
-    return ref.watch(tournamentServiceProvider).getAllTournaments();
+    final tType = ref.watch(selectedSportTypeProvider);
+    return ref.watch(tournamentServiceProvider).getAllTournaments(tType: tType);
   }
 
   Future<void> addTournament({
@@ -35,13 +36,14 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     List<String>? selectedTieBreakers,
   }) async {
     final svc = ref.read(tournamentServiceProvider);
+    final effectiveTypeId = typeId ?? ref.read(selectedSportTypeProvider);
 
     final t = Tournament(
       t_id: existingId,
       t_name: name,
       t_date_begin: Tournament.formatForDB(dateBegin),
       t_date_end: Tournament.formatForDB(dateEnd),
-      t_type: typeId,
+      t_type: effectiveTypeId,
       t_location: locationId,
       t_org: organizerId,
     );

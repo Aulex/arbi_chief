@@ -30,9 +30,14 @@ class TeamService {
 
   TeamService(this._dbService);
 
-  Future<List<Team>> getAllTeams() async {
+  Future<List<Team>> getAllTeams({int? tType}) async {
     final db = await _dbService.database;
-    final List<Map<String, dynamic>> maps = await db.query('CMP_TEAM');
+    final List<Map<String, dynamic>> maps;
+    if (tType != null) {
+      maps = await db.query('CMP_TEAM', where: 't_type = ?', whereArgs: [tType]);
+    } else {
+      maps = await db.query('CMP_TEAM');
+    }
     return List.generate(maps.length, (i) => Team.fromJson(maps[i]));
   }
 
