@@ -1,5 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Holds the selected sport type (CMP_TOURNAMENT_TYPE.type_id).
-/// Null means no sport has been selected yet.
-final selectedSportTypeProvider = StateProvider<int?>((ref) => null);
+class SelectedSportTypeNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void select(int typeId) => state = typeId;
+}
+
+final selectedSportTypeProvider =
+    NotifierProvider<SelectedSportTypeNotifier, int?>(
+  () => SelectedSportTypeNotifier(),
+);

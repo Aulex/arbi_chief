@@ -39,7 +39,7 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
   }
 
   void _selectType(int typeId) {
-    ref.read(selectedSportTypeProvider.notifier).state = typeId;
+    ref.read(selectedSportTypeProvider.notifier).select(typeId);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const MainView()),
     );
