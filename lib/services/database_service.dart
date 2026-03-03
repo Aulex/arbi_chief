@@ -221,6 +221,20 @@ class DatabaseService {
 
         // Tournament types
         await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Шахи'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Футзал'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Волейбол'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Баскетбол'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Стрітбол'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Плавання'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Шашки'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Пауерліфтинг'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Армрестлінг'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Легка атлетика'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Настільний теніс'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Велоспорт'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Гирьовий спорт'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Перетягування канату'});
+        await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Спортивне орієнтування'});
         await db.insert('CMP_ENTITY', {
           'ent_t_type': '1',
           'ent_name': 'Tournament',
