@@ -51,6 +51,8 @@ class DatabaseService {
             'attr_id': '8',
             'dict_value': 'Результат жіночої ракетки',
           });
+          // Store detailed set scores for table tennis (e.g. "11:7 11:4 8:11")
+          await db.execute('ALTER TABLE CMP_PLAYER_EVENT ADD COLUMN event_result_detail TEXT');
         }
       },
       onCreate: (db, version) async {
@@ -192,6 +194,7 @@ class DatabaseService {
             asgn_date TEXT,
             event_result REAL,
             event_result_valid INTEGER,
+            event_result_detail TEXT,
             FOREIGN KEY (event_id) REFERENCES CMP_EVENT (event_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
           )

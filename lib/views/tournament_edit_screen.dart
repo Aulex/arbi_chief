@@ -320,7 +320,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   }
 
   Widget _buildTableTab() {
-    return _CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig);
+    return _CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig, tType: widget.tournament.t_type);
   }
 
 }
@@ -715,7 +715,8 @@ class _CrossTableTab extends ConsumerStatefulWidget {
   final int tId;
   final String tournamentName;
   final SportTypeConfig config;
-  const _CrossTableTab({required this.tId, required this.tournamentName, required this.config});
+  final int? tType;
+  const _CrossTableTab({required this.tId, required this.tournamentName, required this.config, this.tType});
 
   @override
   ConsumerState<_CrossTableTab> createState() => _CrossTableTabState();
@@ -727,11 +728,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   bool _loading = true;
   Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>> _boardPlayers = {};
   Map<int, Map<int, Map<int, double>>> _boardResults = {};
+  /// Stores set score detail strings: boardNum → playerId → opponentId → detail (e.g. "11:7 11:4")
+  Map<int, Map<int, Map<int, String>>> _boardResultDetails = {};
   Set<int> _absentPlayerIds = {};
   int? _hoveredRow;
   int? _hoveredCol;
   int? _hoveredTeamRow;
   int? _hoveredTeamCol;
+
+  bool get _isTableTennis => widget.tType == 11;
 
   @override
   void initState() {
@@ -755,9 +760,11 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     final allTeams = await teamSvc.getTeamListForTournament(widget.tId);
 
     final results = <int, Map<int, Map<int, double>>>{};
+    final details = <int, Map<int, Map<int, String>>>{};
     for (final entry in games.entries) {
       final boardNum = entry.key;
       results.putIfAbsent(boardNum, () => {});
+      details.putIfAbsent(boardNum, () => {});
       for (final game in entry.value) {
         final wId = game.white.player_id!;
         final bId = game.black.player_id!;
@@ -766,6 +773,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         }
         if (game.blackResult != null) {
           results[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackResult!;
+        }
+        if (game.whiteDetail != null && game.whiteDetail!.isNotEmpty) {
+          details[boardNum]!.putIfAbsent(wId, () => {})[bId] = game.whiteDetail!;
+        }
+        if (game.blackDetail != null && game.blackDetail!.isNotEmpty) {
+          details[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackDetail!;
         }
       }
     }
@@ -825,6 +838,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       setState(() {
         _boardPlayers = boards;
         _boardResults = results;
+        _boardResultDetails = details;
         _absentPlayerIds = absentIds;
         _loading = false;
       });
@@ -862,7 +876,20 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     required String rowPlayerName,
     required String colPlayerName,
     required double? currentResult,
+    int? boardNum,
   }) {
+    if (_isTableTennis) {
+      _showTableTennisResultPicker(
+        context,
+        rowPlayerId: rowPlayerId,
+        colPlayerId: colPlayerId,
+        rowPlayerName: rowPlayerName,
+        colPlayerName: colPlayerName,
+        currentResult: currentResult,
+        boardNum: boardNum,
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -893,6 +920,174 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       if (value == null) return;
       _onResultSelected(rowPlayerId, colPlayerId, value == -1.0 ? null : value);
     });
+  }
+
+  void _showTableTennisResultPicker(
+    BuildContext context, {
+    required int rowPlayerId,
+    required int colPlayerId,
+    required String rowPlayerName,
+    required String colPlayerName,
+    required double? currentResult,
+    int? boardNum,
+  }) {
+    // Pre-fill controllers from existing detail
+    final existingDetail = boardNum != null
+        ? _boardResultDetails[boardNum]?[rowPlayerId]?[colPlayerId]
+        : null;
+    final existingSets = existingDetail?.split(' ') ?? [];
+
+    // Up to 5 sets (best of 5 in table tennis)
+    final controllers = List.generate(5, (i) {
+      final parts = i < existingSets.length ? existingSets[i].split(':') : [];
+      return (
+        row: TextEditingController(text: parts.length == 2 ? parts[0] : ''),
+        col: TextEditingController(text: parts.length == 2 ? parts[1] : ''),
+      );
+    });
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('$rowPlayerName  vs  $colPlayerName', style: const TextStyle(fontSize: 15)),
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header row
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 40),
+                      Expanded(child: Text(rowPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                      const SizedBox(width: 16),
+                      Expanded(child: Text(colPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    ],
+                  ),
+                ),
+                // Set rows
+                for (int i = 0; i < 5; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 40, child: Text('Сет ${i + 1}', style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                        Expanded(
+                          child: TextField(
+                            controller: controllers[i].row,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: controllers[i].col,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            if (currentResult != null)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _onResultSelected(rowPlayerId, colPlayerId, null);
+                },
+                child: Text('Очистити', style: TextStyle(color: Colors.grey.shade700)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Скасувати'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
+              },
+              child: const Text('Зберегти'),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      for (final c in controllers) {
+        c.row.dispose();
+        c.col.dispose();
+      }
+    });
+  }
+
+  Future<void> _onTableTennisResultSaved(
+    int rowPlayerId,
+    int colPlayerId,
+    List<({TextEditingController row, TextEditingController col})> controllers,
+  ) async {
+    // Parse set scores
+    final rowSets = <String>[];
+    final colSets = <String>[];
+    int rowWins = 0;
+    int colWins = 0;
+
+    for (final c in controllers) {
+      final rowScore = int.tryParse(c.row.text);
+      final colScore = int.tryParse(c.col.text);
+      if (rowScore == null || colScore == null) continue;
+      if (rowScore == 0 && colScore == 0) continue;
+      rowSets.add('$rowScore:$colScore');
+      colSets.add('$colScore:$rowScore');
+      if (rowScore > colScore) {
+        rowWins++;
+      } else if (colScore > rowScore) {
+        colWins++;
+      }
+    }
+
+    if (rowSets.isEmpty) return;
+
+    final rowResult = rowWins > colWins ? 1.0 : (rowWins < colWins ? 0.0 : 0.5);
+    final rowDetail = rowSets.join(' ');
+    final colDetail = colSets.join(' ');
+
+    final svc = ref.read(tournamentServiceProvider);
+    final tsId = await svc.getOrCreateDefaultStage(widget.tId);
+    var eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
+    eventId ??= await svc.createGame(
+      tsId: tsId,
+      whitePlayerId: rowPlayerId,
+      blackPlayerId: colPlayerId,
+    );
+    await svc.saveTableTennisResult(eventId, rowPlayerId,
+      rowResult: rowResult,
+      rowDetail: rowDetail,
+      colDetail: colDetail,
+    );
+
+    await _loadData();
   }
 
   Widget _resultOption(BuildContext ctx, {
@@ -1719,34 +1914,40 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     required int rowIdx,
     required int colIdx,
   }) {
-    final result = _boardResults[boardNum]?[rowPlayer.player.player_id!]?[colPlayer.player.player_id!];
-    final text = _formatResult(result);
+    final rowId = rowPlayer.player.player_id!;
+    final colId = colPlayer.player.player_id!;
+    final result = _boardResults[boardNum]?[rowId]?[colId];
+    final detail = _boardResultDetails[boardNum]?[rowId]?[colId];
+    final text = _isTableTennis && detail != null && detail.isNotEmpty
+        ? _formatTableTennisCell(detail, result)
+        : _formatResult(result);
 
     Color? bgColor;
-    if (text == '1') {
+    if (result == 1.0) {
       bgColor = Colors.green.shade50;
-    } else if (text == '0') {
+    } else if (result == 0.0 && result != null) {
       bgColor = Colors.red.shade50;
-    } else if (text == '½') {
+    } else if (result == 0.5) {
       bgColor = Colors.amber.shade50;
     }
 
     return Container(
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      constraints: BoxConstraints(minWidth: _isTableTennis ? 72 : 36, minHeight: 32),
       color: bgColor ?? Colors.transparent,
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
       child: text.isEmpty
           ? const SizedBox.shrink()
           : Text(
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: _isTableTennis ? 10 : 12,
                 fontWeight: FontWeight.bold,
-                color: text == '1' ? Colors.green.shade700
-                    : text == '0' ? Colors.red.shade700
-                    : Colors.amber.shade800,
+                color: result == 1.0 ? Colors.green.shade700
+                    : result == 0.0 && result != null ? Colors.red.shade700
+                    : result == 0.5 ? Colors.amber.shade800
+                    : Colors.black87,
               ),
             ),
     );
@@ -1759,16 +1960,21 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     required int rowIdx,
     required int colIdx,
   }) {
-    final result = _boardResults[boardNum]?[rowPlayer.player.player_id!]?[colPlayer.player.player_id!];
-    final text = _formatResult(result);
+    final rowId = rowPlayer.player.player_id!;
+    final colId = colPlayer.player.player_id!;
+    final result = _boardResults[boardNum]?[rowId]?[colId];
+    final detail = _boardResultDetails[boardNum]?[rowId]?[colId];
+    final text = _isTableTennis && detail != null && detail.isNotEmpty
+        ? _formatTableTennisCell(detail, result)
+        : _formatResult(result);
 
     final isHighlighted = _hoveredRow == rowIdx || _hoveredCol == colIdx;
     Color? bgColor;
-    if (text == '1') {
+    if (result == 1.0) {
       bgColor = Colors.green.shade50;
-    } else if (text == '0') {
+    } else if (result == 0.0 && result != null) {
       bgColor = Colors.red.shade50;
-    } else if (text == '½') {
+    } else if (result == 0.5) {
       bgColor = Colors.amber.shade50;
     } else if (isHighlighted) {
       bgColor = Colors.indigo.shade50;
@@ -1781,33 +1987,52 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       child: GestureDetector(
         onTap: () => _showResultPicker(
           context,
-          rowPlayerId: rowPlayer.player.player_id!,
-          colPlayerId: colPlayer.player.player_id!,
+          rowPlayerId: rowId,
+          colPlayerId: colId,
           rowPlayerName: '${rowPlayer.player.player_surname} ${rowPlayer.player.player_name}',
           colPlayerName: '${colPlayer.player.player_surname} ${colPlayer.player.player_name}',
           currentResult: result,
+          boardNum: boardNum,
         ),
         child: Container(
-          constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+          constraints: BoxConstraints(minWidth: _isTableTennis ? 72 : 36, minHeight: 32),
           color: bgColor ?? Colors.transparent,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
           child: text.isEmpty
               ? Icon(Icons.edit_outlined, size: 12, color: Colors.grey.shade400)
               : Text(
                   text,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: _isTableTennis ? 10 : 12,
                     fontWeight: FontWeight.bold,
-                    color: text == '1' ? Colors.green.shade700
-                        : text == '0' ? Colors.red.shade700
-                        : Colors.amber.shade800,
+                    color: result == 1.0 ? Colors.green.shade700
+                        : result == 0.0 && result != null ? Colors.red.shade700
+                        : result == 0.5 ? Colors.amber.shade800
+                        : Colors.black87,
                   ),
                 ),
         ),
       ),
     );
+  }
+
+  /// Format table tennis cell display: "3:1" set score + ball details on second line
+  String _formatTableTennisCell(String detail, double? result) {
+    final sets = detail.split(' ');
+    int rowWins = 0;
+    int colWins = 0;
+    for (final s in sets) {
+      final parts = s.split(':');
+      if (parts.length != 2) continue;
+      final a = int.tryParse(parts[0]) ?? 0;
+      final b = int.tryParse(parts[1]) ?? 0;
+      if (a > b) rowWins++;
+      else if (b > a) colWins++;
+    }
+    // Show set score + individual game scores
+    return '$rowWins:$colWins\n(${sets.join(', ')})';
   }
 }
 
@@ -2133,6 +2358,9 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
   bool _loading = true;
   Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>> _boardPlayers = {};
   Map<int, Map<int, Map<int, double>>> _boardResults = {};
+  Map<int, Map<int, Map<int, String>>> _boardResultDetails = {};
+
+  bool get _isTableTennis => widget.tournament.t_type == 11;
 
   @override
   void initState() {
@@ -2150,9 +2378,11 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     final allTeams = await teamSvc.getTeamListForTournament(tId);
 
     final results = <int, Map<int, Map<int, double>>>{};
+    final details = <int, Map<int, Map<int, String>>>{};
     for (final entry in games.entries) {
       final boardNum = entry.key;
       results.putIfAbsent(boardNum, () => {});
+      details.putIfAbsent(boardNum, () => {});
       for (final game in entry.value) {
         final wId = game.white.player_id!;
         final bId = game.black.player_id!;
@@ -2161,6 +2391,12 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         }
         if (game.blackResult != null) {
           results[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackResult!;
+        }
+        if (game.whiteDetail != null && game.whiteDetail!.isNotEmpty) {
+          details[boardNum]!.putIfAbsent(wId, () => {})[bId] = game.whiteDetail!;
+        }
+        if (game.blackDetail != null && game.blackDetail!.isNotEmpty) {
+          details[boardNum]!.putIfAbsent(bId, () => {})[wId] = game.blackDetail!;
         }
       }
     }
@@ -2217,6 +2453,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
       setState(() {
         _boardPlayers = boards;
         _boardResults = results;
+        _boardResultDetails = details;
         _loading = false;
       });
     }
@@ -2306,6 +2543,25 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
     if (result == 0.0) return '0';
     if (result == 0.5) return '1/2';
     return result.toString();
+  }
+
+  /// Format table tennis result for PDF: "3:1 (11:7, 11:4, ...)"
+  String _fmtResultTT(int boardNum, int rowId, int colId) {
+    final detail = _boardResultDetails[boardNum]?[rowId]?[colId];
+    final result = _boardResults[boardNum]?[rowId]?[colId];
+    if (result == null) return '';
+    if (detail == null || detail.isEmpty) return _fmtResult(result);
+    final sets = detail.split(' ');
+    int rowWins = 0, colWins = 0;
+    for (final s in sets) {
+      final parts = s.split(':');
+      if (parts.length != 2) continue;
+      final a = int.tryParse(parts[0]) ?? 0;
+      final b = int.tryParse(parts[1]) ?? 0;
+      if (a > b) rowWins++;
+      else if (b > a) colWins++;
+    }
+    return '$rowWins:$colWins\n(${sets.join(', ')})';
   }
 
   Future<pw.Document> _buildPdf() async {
@@ -2402,7 +2658,9 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
               _pdfDiagonalCell()
             else
               _pdfCell(
-                _fmtResult(_boardResults[boardNum]?[pId]?[players[j].player.player_id!]),
+                _isTableTennis
+                    ? _fmtResultTT(boardNum, pId, players[j].player.player_id!)
+                    : _fmtResult(_boardResults[boardNum]?[pId]?[players[j].player.player_id!]),
                 cellSt,
               ),
           _pdfCell(_fmtPts(_totalPoints(boardNum, pId)), cellBold),
@@ -2426,7 +2684,7 @@ class _ReportsTabState extends ConsumerState<_ReportsTab> {
         1: const pw.FlexColumnWidth(2),    // Команда
         2: const pw.FlexColumnWidth(3),    // ПІБ
         for (int i = 0; i < n; i++)
-          3 + i: const pw.FixedColumnWidth(20),
+          3 + i: pw.FixedColumnWidth(_isTableTennis ? 52 : 20),
         3 + n: const pw.FixedColumnWidth(28),     // Бали
         3 + n + 1: const pw.FixedColumnWidth(24), // Ігор
         3 + n + 2: const pw.FixedColumnWidth(28), // К.Б.

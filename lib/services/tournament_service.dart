@@ -342,7 +342,7 @@ class TournamentService {
   }
 
   /// Get all games for a tournament grouped by board number, including results.
-  Future<Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult})>>>
+  Future<Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult, String? whiteDetail, String? blackDetail})>>>
       getGamesGroupedByBoard(int tId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
@@ -351,10 +351,12 @@ class TournamentService {
              p1.player_name AS w_name, p1.player_lastname AS w_lastname,
              p1.player_gender AS w_gender, p1.player_date_birth AS w_dob,
              pe1.event_result AS w_result,
+             pe1.event_result_detail AS w_detail,
              p2.player_id AS b_id, p2.player_surname AS b_surname,
              p2.player_name AS b_name, p2.player_lastname AS b_lastname,
              p2.player_gender AS b_gender, p2.player_date_birth AS b_dob,
              pe2.event_result AS b_result,
+             pe2.event_result_detail AS b_detail,
              COALESCE(CAST(v1.attr_value AS INTEGER), 0) AS board_number
       FROM CMP_EVENT e
       JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
@@ -367,7 +369,7 @@ class TournamentService {
       WHERE ts.t_id = ?
       ORDER BY board_number, e.event_id
     ''', [tId]);
-    final result = <int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult})>>{};
+    final result = <int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult, String? whiteDetail, String? blackDetail})>>{};
     for (final r in rows) {
       final boardNum = r['board_number'] as int? ?? 0;
       final white = Player(
@@ -393,6 +395,8 @@ class TournamentService {
         dateBegin: r['event_date_begin'] as String?,
         whiteResult: r['w_result'] as double?,
         blackResult: r['b_result'] as double?,
+        whiteDetail: r['w_detail'] as String?,
+        blackDetail: r['b_detail'] as String?,
       ));
     }
     return result;
@@ -484,6 +488,7 @@ class TournamentService {
   }
 
   /// Save result for a specific player in a game; sets complement for opponent.
+  /// When playerResult is null, also clears event_result_detail.
   Future<void> saveResultForPlayer(int eventId, int playerId, double? playerResult) async {
     final db = await _dbService.database;
     final rows = await db.query(
@@ -499,14 +504,73 @@ class TournamentService {
     final player1Id = rows[0]['player_id'] as int;
 
     final complement = playerResult != null ? 1.0 - playerResult : null;
+    final clearDetail = playerResult == null;
 
     if (player1Id == playerId) {
-      await db.update('CMP_PLAYER_EVENT', {'event_result': playerResult}, where: 'pe_id = ?', whereArgs: [pe1Id]);
-      await db.update('CMP_PLAYER_EVENT', {'event_result': complement}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+      await db.update('CMP_PLAYER_EVENT', {
+        'event_result': playerResult,
+        if (clearDetail) 'event_result_detail': null,
+      }, where: 'pe_id = ?', whereArgs: [pe1Id]);
+      await db.update('CMP_PLAYER_EVENT', {
+        'event_result': complement,
+        if (clearDetail) 'event_result_detail': null,
+      }, where: 'pe_id = ?', whereArgs: [pe2Id]);
     } else {
-      await db.update('CMP_PLAYER_EVENT', {'event_result': playerResult}, where: 'pe_id = ?', whereArgs: [pe2Id]);
-      await db.update('CMP_PLAYER_EVENT', {'event_result': complement}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+      await db.update('CMP_PLAYER_EVENT', {
+        'event_result': playerResult,
+        if (clearDetail) 'event_result_detail': null,
+      }, where: 'pe_id = ?', whereArgs: [pe2Id]);
+      await db.update('CMP_PLAYER_EVENT', {
+        'event_result': complement,
+        if (clearDetail) 'event_result_detail': null,
+      }, where: 'pe_id = ?', whereArgs: [pe1Id]);
     }
+  }
+
+  /// Save table tennis match result with set-by-set scores.
+  /// [rowPlayerSets] is the detail string for the row player (e.g. "11:7 11:4 8:11").
+  /// [colPlayerSets] is the mirror detail for the opponent (e.g. "7:11 4:11 11:8").
+  /// Win/loss (1.0/0.0) is derived from who won more sets.
+  Future<void> saveTableTennisResult(int eventId, int rowPlayerId, {
+    required double rowResult,
+    required String rowDetail,
+    required String colDetail,
+  }) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_EVENT',
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+      orderBy: 'pe_id',
+    );
+    if (rows.length < 2) return;
+
+    final pe1Id = rows[0]['pe_id'];
+    final pe2Id = rows[1]['pe_id'];
+    final player1Id = rows[0]['player_id'] as int;
+    final colResult = 1.0 - rowResult;
+
+    if (player1Id == rowPlayerId) {
+      await db.update('CMP_PLAYER_EVENT', {'event_result': rowResult, 'event_result_detail': rowDetail}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+      await db.update('CMP_PLAYER_EVENT', {'event_result': colResult, 'event_result_detail': colDetail}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+    } else {
+      await db.update('CMP_PLAYER_EVENT', {'event_result': rowResult, 'event_result_detail': rowDetail}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+      await db.update('CMP_PLAYER_EVENT', {'event_result': colResult, 'event_result_detail': colDetail}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+    }
+  }
+
+  /// Get set score details for a specific player in a game.
+  Future<String?> getResultDetail(int eventId, int playerId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_EVENT',
+      columns: ['event_result_detail'],
+      where: 'event_id = ? AND player_id = ?',
+      whereArgs: [eventId, playerId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['event_result_detail'] as String?;
   }
 
   /// Save result for both players in a game.
