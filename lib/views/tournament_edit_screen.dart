@@ -939,8 +939,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         : null;
     final existingSets = existingDetail?.split(' ') ?? [];
 
-    // Up to 5 sets (best of 5 in table tennis)
-    final controllers = List.generate(5, (i) {
+    // Up to 3 sets (best of 3 in table tennis)
+    final controllers = List.generate(3, (i) {
       final parts = i < existingSets.length ? existingSets[i].split(':') : [];
       return (
         row: TextEditingController(text: parts.length == 2 ? parts[0] : ''),
@@ -971,7 +971,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                   ),
                 ),
                 // Set rows
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 3; i++)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     child: Row(
