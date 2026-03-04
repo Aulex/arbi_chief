@@ -539,6 +539,8 @@ class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
         dateBegin: old.dateBegin,
         whiteResult: w,
         blackResult: b,
+        whiteDetail: old.whiteDetail,
+        blackDetail: old.blackDetail,
       );
     });
     final svc = ref.read(tournamentServiceProvider);
