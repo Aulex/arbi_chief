@@ -21,7 +21,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -53,6 +53,14 @@ class DatabaseService {
           });
           // Store detailed set scores for table tennis (e.g. "11:7 11:4 8:11")
           await db.execute('ALTER TABLE CMP_PLAYER_EVENT ADD COLUMN event_result_detail TEXT');
+        }
+        if (oldVersion < 4) {
+          // Ensure event_result_detail column exists (may have been missed if DB was already at v3)
+          final cols = await db.rawQuery('PRAGMA table_info(CMP_PLAYER_EVENT)');
+          final hasDetail = cols.any((c) => c['name'] == 'event_result_detail');
+          if (!hasDetail) {
+            await db.execute('ALTER TABLE CMP_PLAYER_EVENT ADD COLUMN event_result_detail TEXT');
+          }
         }
       },
       onCreate: (db, version) async {
