@@ -488,7 +488,7 @@ class _GameResultsTab extends ConsumerStatefulWidget {
 }
 
 class _GameResultsTabState extends ConsumerState<_GameResultsTab> {
-  Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult})>> _boardGames = {};
+  Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult, String? whiteDetail, String? blackDetail})>> _boardGames = {};
   bool _loading = true;
 
   @override
@@ -933,7 +933,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   }) {
     // Pre-fill controllers from existing detail
     final existingDetail = boardNum != null
-        ? _boardResultDetails[boardNum]?[rowPlayerId]?[colPlayerId]
+        ? (_boardResultDetails[boardNum]?[rowPlayerId]?[colPlayerId])
         : null;
     final existingSets = existingDetail?.split(' ') ?? [];
 
