@@ -85,6 +85,11 @@ class TournamentView extends ConsumerWidget {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: ListTile(
+                                    onTap: () {
+                                      ref
+                                          .read(tournamentNavProvider.notifier)
+                                          .showEdit(t);
+                                    },
                                     leading: const Icon(
                                       Icons.emoji_events_outlined,
                                       color: Colors.indigo,
@@ -95,75 +100,54 @@ class TournamentView extends ConsumerWidget {
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        OutlinedButton(
-                                          onPressed: () {
-                                            ref
-                                                .read(tournamentNavProvider
-                                                    .notifier)
-                                                .showEdit(t);
-                                          },
-                                          child: const Text('Керувати'),
-                                          style: OutlinedButton.styleFrom(
-                                            side: BorderSide(
-                                              color: Colors.grey.shade300,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                          ),
+                                    trailing: TextButton.icon(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                        size: 20,
+                                      ),
+                                      label: const Text(
+                                        'Видалити',
+                                        style: TextStyle(color: Colors.red),
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        backgroundColor: Colors.red.withOpacity(0.1),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(8),
                                         ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                            color: Colors.red,
-                                          ),
-                                          onPressed: () {
-                                            showDialog(
-                                              context: context,
-                                              builder: (ctx) => AlertDialog(
-                                                title: const Text('Видалити турнір?'),
-                                                content: Text(
-                                                  'Ви впевнені, що хочете видалити турнір "${t.t_name}"?',
-                                                ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () => Navigator.pop(ctx),
-                                                    child: const Text('Скасувати'),
-                                                  ),
-                                                  ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: Colors.red,
-                                                    ),
-                                                    onPressed: () {
-                                                      ref
-                                                          .read(tournamentProvider.notifier)
-                                                          .removeTournament(t.t_id!);
-                                                      Navigator.pop(ctx);
-                                                    },
-                                                    child: const Text(
-                                                      'Видалити',
-                                                      style: TextStyle(color: Colors.white),
-                                                    ),
-                                                  ),
-                                                ],
+                                      ),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: const Text('Видалити турнір?'),
+                                            content: Text(
+                                              'Ви впевнені, що хочете видалити турнір "${t.t_name}"?',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(ctx),
+                                                child: const Text('Скасувати'),
                                               ),
-                                            );
-                                          },
-                                          style: IconButton.styleFrom(
-                                            backgroundColor: Colors.red
-                                                .withOpacity(0.1),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                                onPressed: () {
+                                                  ref
+                                                      .read(tournamentProvider.notifier)
+                                                      .removeTournament(t.t_id!);
+                                                  Navigator.pop(ctx);
+                                                },
+                                                child: const Text(
+                                                  'Видалити',
+                                                  style: TextStyle(color: Colors.white),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                      ],
+                                        );
+                                      },
                                     ),
                                   ),
                                 );
