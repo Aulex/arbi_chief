@@ -36,9 +36,13 @@ class MainView extends ConsumerWidget {
       const SettingsView(),
     ];
 
+    final appBarTitle = tournamentNav.view == 'edit' && tournamentNav.tournament != null
+        ? 'Менеджер турнірів: ${tournamentNav.tournament!.t_name}'
+        : 'Менеджер турнірів';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Менеджер турнірів'),
+        title: Text(appBarTitle),
       ),
       body: Row(
         children: [

@@ -36,7 +36,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 24.0),
         child: Column(
           children: [
-            // Header with back, tabs, and delete button
+            // Header with back arrow | tabs
             Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -44,7 +44,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
                   child: Row(
                     children: [
                       IconButton(
@@ -55,67 +55,27 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                               .showList();
                         },
                       ),
-                      const SizedBox(width: 8),
-                      const Expanded(
+                      SizedBox(
+                        height: 32,
+                        child: VerticalDivider(
+                          thickness: 1,
+                          width: 24,
+                          color: Colors.grey.shade300,
+                        ),
+                      ),
+                      Expanded(
                         child: TabBar(
                           isScrollable: true,
                           labelColor: Colors.indigo,
                           indicatorColor: Colors.indigo,
+                          indicatorWeight: 2,
                           tabAlignment: TabAlignment.start,
-                          tabs: [
+                          tabs: const [
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
                           ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Видалити турнір?'),
-                              content: Text(
-                                'Ви впевнені, що хочете видалити турнір "${widget.tournament.t_name}"?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Скасувати'),
-                                ),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                  ),
-                                  onPressed: () {
-                                    ref
-                                        .read(tournamentProvider.notifier)
-                                        .removeTournament(widget.tournament.t_id!);
-                                    Navigator.pop(ctx);
-                                    ref
-                                        .read(tournamentNavProvider.notifier)
-                                        .showList();
-                                  },
-                                  child: const Text(
-                                    'Видалити',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Видалити'),
-                        style: ElevatedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.red,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                       ),
                     ],
@@ -323,7 +283,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
 
 }
 
-/// Players tab — manage players connected to this tournament, with inline creation.
+/// Players tab — single list of tournament players with search, add, and create new.
 class _TournamentPlayersTab extends ConsumerStatefulWidget {
   final int tId;
   final int? tType;
@@ -337,6 +297,7 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
   List<Player> _participants = [];
   List<Player> _available = [];
   bool _loading = true;
+  String _search = '';
 
   @override
   void initState() {
@@ -356,7 +317,8 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
 
     if (mounted) {
       setState(() {
-        _participants = participants;
+        _participants = participants
+          ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
         _available = available;
         _loading = false;
       });
@@ -373,14 +335,104 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
     ref.read(tournamentServiceProvider).removeParticipant(widget.tId, player.player_id!);
   }
 
-  void _addPlayer(Player player) {
-    setState(() {
-      _available.removeWhere((p) => p.player_id == player.player_id);
-      _participants
-        ..add(player)
-        ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
-    });
-    ref.read(tournamentServiceProvider).addParticipant(widget.tId, player.player_id!);
+  void _showAddPlayerDialog() {
+    String dialogSearch = '';
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          final filtered = _available.where((p) {
+            if (dialogSearch.isEmpty) return true;
+            return p.fullName.toLowerCase().contains(dialogSearch.toLowerCase());
+          }).toList();
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.person_add, color: Colors.indigo),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text('Додати гравця', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            _showCreatePlayerDialog();
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Створити нового'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Пошук гравця...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onChanged: (v) => setST(() => dialogSearch = v),
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('Немає доступних гравців'))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final player = filtered[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(player.fullName),
+                                  subtitle: player.birthDateForUI.isNotEmpty
+                                      ? Text(player.birthDateForUI, style: const TextStyle(fontSize: 12))
+                                      : null,
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+                                    onPressed: () {
+                                      setState(() {
+                                        _available.removeWhere((p) => p.player_id == player.player_id);
+                                        _participants
+                                          ..add(player)
+                                          ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+                                      });
+                                      ref.read(tournamentServiceProvider).addParticipant(widget.tId, player.player_id!);
+                                      setST(() {}); // refresh dialog list
+                                    },
+                                  ),
+                                  contentPadding: EdgeInsets.zero,
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Закрити'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _showCreatePlayerDialog() {
@@ -425,7 +477,7 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
                         Icon(Icons.person_add_alt_1, color: Colors.indigo),
                         SizedBox(width: 12),
                         Text(
-                          'Додати нового гравця',
+                          'Створити нового гравця',
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -529,7 +581,6 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
                               dob: dobC.text.trim(),
                             );
                             if (dialogContext.mounted) Navigator.pop(dialogContext);
-                            // Reload data to pick up new player
                             _loadData();
                           },
                           child: const Text('Створити'),
@@ -550,47 +601,10 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _buildPlayerListCard(
-            title: 'Гравці турніру (${_participants.length})',
-            subtitle: 'Гравці, додані до цього турніру.',
-            players: _participants,
-            emptyText: 'Немає гравців',
-            actionIcon: Icons.remove_circle_outline,
-            actionColor: Colors.redAccent,
-            onAction: _removePlayer,
-          ),
-        ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: _buildPlayerListCard(
-            title: 'Доступні гравці (${_available.length})',
-            subtitle: 'Додайте гравців до турніру або створіть нових.',
-            players: _available,
-            emptyText: 'Немає доступних гравців',
-            actionIcon: Icons.add_circle_outline,
-            actionColor: Colors.green,
-            onAction: _addPlayer,
-            showCreateButton: true,
-          ),
-        ),
-      ],
-    );
-  }
+    final filtered = _search.isEmpty
+        ? _participants
+        : _participants.where((p) => p.fullName.toLowerCase().contains(_search.toLowerCase())).toList();
 
-  Widget _buildPlayerListCard({
-    required String title,
-    required String subtitle,
-    required List<Player> players,
-    required String emptyText,
-    required IconData actionIcon,
-    required Color actionColor,
-    required void Function(Player) onAction,
-    bool showCreateButton = false,
-  }) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -609,48 +623,59 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title,
+                        'Гравці турніру (${_participants.length})',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      const Text(
+                        'Гравці, додані до цього турніру.',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
                     ],
                   ),
                 ),
-                if (showCreateButton)
-                  ElevatedButton.icon(
-                    onPressed: _showCreatePlayerDialog,
-                    icon: const Icon(Icons.person_add_alt_1, size: 18),
-                    label: const Text('Новий гравець'),
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.indigo,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
+                ElevatedButton.icon(
+                  onPressed: _showAddPlayerDialog,
+                  icon: const Icon(Icons.person_add_alt_1, size: 18),
+                  label: const Text('Додати гравця'),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.indigo,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
+                ),
               ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Пошук...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onChanged: (v) => setState(() => _search = v),
             ),
             const Divider(height: 24),
             Expanded(
-              child: players.isEmpty
-                  ? Center(child: Text(emptyText))
+              child: filtered.isEmpty
+                  ? const Center(child: Text('Немає гравців'))
                   : ListView.separated(
-                      itemCount: players.length,
+                      itemCount: filtered.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final player = players[index];
+                        final player = filtered[index];
                         return ListTile(
                           title: Text(player.fullName),
                           subtitle: player.birthDateForUI.isNotEmpty
                               ? Text(player.birthDateForUI)
                               : null,
                           trailing: IconButton(
-                            icon: Icon(actionIcon, color: actionColor),
-                            onPressed: () => onAction(player),
+                            icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+                            tooltip: 'Видалити з турніру',
+                            onPressed: () => _removePlayer(player),
                           ),
                           contentPadding: EdgeInsets.zero,
                         );
@@ -2225,7 +2250,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
   }
 }
 
-/// Teams tab — manage team compositions within this tournament.
+/// Teams tab — two panels: team list (left) and player-to-team assignment (right).
 class _TournamentTeamsTab extends ConsumerStatefulWidget {
   final Tournament tournament;
   final SportTypeConfig config;
@@ -2239,6 +2264,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
   bool _loading = true;
   List<({Team team, int? teamNumber, Map<int, int> boards})> _teamData = [];
   Map<int, Player> _playerMap = {};
+  int? _selectedTeamId;
 
   @override
   void initState() {
@@ -2262,6 +2288,10 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
         _teamData = data;
         _playerMap = pMap;
         _loading = false;
+        // Keep selection if still valid
+        if (_selectedTeamId != null && !data.any((d) => d.team.team_id == _selectedTeamId)) {
+          _selectedTeamId = null;
+        }
       });
     }
   }
@@ -2274,104 +2304,71 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
     return '${p.player_surname}$initName';
   }
 
-  Future<void> _addTeamToTournament() async {
-    final allTeams = await ref.read(teamProvider.future);
-    final existingIds = _teamData.map((d) => d.team.team_id).toSet();
-    final available = allTeams.where((t) => !existingIds.contains(t.team_id)).toList();
-
-    if (available.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Всі команди вже додані до турніру.')),
-        );
-      }
-      return;
-    }
-
-    if (!mounted) return;
-
-    // Show dialog to select team and set number
-    Team? selectedTeam;
-    final numberC = TextEditingController(
-      text: '${_teamData.length + 1}',
-    );
-
-    final result = await showDialog<({Team team, int number})>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) => AlertDialog(
-            title: const Text('Додати команду до турніру'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<Team>(
-                  value: selectedTeam,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Команда',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  items: available.map((t) => DropdownMenuItem(
-                    value: t,
-                    child: Text(t.team_name),
-                  )).toList(),
-                  onChanged: (val) => setDialogState(() => selectedTeam = val),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: numberC,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Номер команди',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Скасувати'),
-              ),
-              ElevatedButton(
-                onPressed: selectedTeam == null ? null : () {
-                  final num = int.tryParse(numberC.text.trim()) ?? (_teamData.length + 1);
-                  Navigator.pop(ctx, (team: selectedTeam!, number: num));
-                },
-                child: const Text('Далі'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (result != null && mounted) {
-      final service = ref.read(teamServiceProvider);
-      // Navigate to board edit first so rows get created
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TeamEditScreen(
-            team: result.team,
-            tId: widget.tournament.t_id!,
-            config: widget.config,
-          ),
-        ),
-      );
-      // Now set team_number on the newly created rows
-      await service.setTeamNumber(
-        result.team.team_id!, widget.tournament.t_id!, result.number,
-      );
-      _reloadData();
-    }
-  }
-
   void _reloadData() {
     setState(() => _loading = true);
     _loadData();
+  }
+
+  void _showAddTeamDialog() {
+    final nameC = TextEditingController();
+    final numberC = TextEditingController(text: '${_teamData.length + 1}');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Додати команду'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameC,
+              decoration: const InputDecoration(
+                labelText: 'Назва команди',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: numberC,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Номер команди',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Скасувати'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameC.text.trim();
+              if (name.isEmpty) return;
+              final num = int.tryParse(numberC.text.trim()) ?? (_teamData.length + 1);
+              // Create team and add to tournament
+              await ref.read(teamProvider.notifier).addTeam(name: name);
+              // Get newly created team
+              final allTeams = await ref.read(teamProvider.future);
+              final newTeam = allTeams.where((t) => t.team_name == name).lastOrNull;
+              if (newTeam != null) {
+                final service = ref.read(teamServiceProvider);
+                // Create empty board assignments to register team in tournament
+                await service.saveAssignments(newTeam.team_id!, widget.tournament.t_id!, {}, []);
+                await service.setTeamNumber(newTeam.team_id!, widget.tournament.t_id!, num);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+              _reloadData();
+            },
+            child: const Text('Зберегти'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _removeTeamFromTournament(Team team) async {
@@ -2393,6 +2390,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
     if (confirmed == true) {
       final service = ref.read(teamServiceProvider);
       await service.saveAssignments(team.team_id!, widget.tournament.t_id!, {}, []);
+      if (_selectedTeamId == team.team_id) _selectedTeamId = null;
       _reloadData();
     }
   }
@@ -2401,109 +2399,172 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Команди турніру',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Склад команд у цьому турнірі.',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  onPressed: _addTeamToTournament,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Додати команду'),
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.indigo,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                ),
-              ],
+    final selectedData = _selectedTeamId != null
+        ? _teamData.where((d) => d.team.team_id == _selectedTeamId).firstOrNull
+        : null;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Left panel: team list
+        Expanded(
+          flex: 2,
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: Colors.grey.shade300, width: 1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            if (_teamData.isEmpty)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Icon(Icons.groups_outlined, size: 48, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Команд у турнірі поки немає',
-                        style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Команди',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Список команд турніру.',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Натисніть "Додати команду", щоб налаштувати склад.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                      ElevatedButton.icon(
+                        onPressed: _showAddTeamDialog,
+                        icon: const Icon(Icons.add_circle_outline, size: 18),
+                        label: const Text('Додати'),
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.indigo,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
                       ),
                     ],
                   ),
-                ),
-              )
-            else
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) => SingleChildScrollView(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                      child: DataTable(
-                        headingTextStyle: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black54,
-                        ),
-                        columnSpacing: 24,
-                        columns: [
-                          const DataColumn(label: Text('№')),
-                          const DataColumn(label: Text('Команда')),
-                          for (int i = 1; i <= widget.config.boardCount; i++)
-                            DataColumn(label: Text(widget.config.shortTabLabel(i))),
-                          const DataColumn(label: Text('Дія')),
-                        ],
-                    rows: _teamData.map((d) {
-                      return DataRow(cells: [
-                        DataCell(Text('${d.teamNumber ?? ''}')),
-                        DataCell(Text(d.team.team_name)),
-                        for (int i = 1; i <= widget.config.boardCount; i++)
-                          DataCell(Text(_playerLabel(d.boards[i]))),
-                        DataCell(Row(
+                  const Divider(height: 24),
+                  if (_teamData.isEmpty)
+                    Expanded(
+                      child: Center(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              tooltip: 'Редагувати склад',
+                            Icon(Icons.groups_outlined, size: 48, color: Colors.grey.shade400),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Команд поки немає',
+                              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _teamData.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final d = _teamData[index];
+                          final isSelected = d.team.team_id == _selectedTeamId;
+                          return ListTile(
+                            selected: isSelected,
+                            selectedTileColor: Colors.indigo.shade50,
+                            leading: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: isSelected ? Colors.indigo : Colors.grey.shade300,
+                              child: Text(
+                                '${d.teamNumber ?? ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isSelected ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                            ),
+                            title: Text(d.team.team_name),
+                            trailing: IconButton(
+                              icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade300, size: 20),
+                              tooltip: 'Видалити з турніру',
+                              onPressed: () => _removeTeamFromTournament(d.team),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                            onTap: () => setState(() => _selectedTeamId = d.team.team_id),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Right panel: player assignment for selected team
+        Expanded(
+          flex: 3,
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: Colors.grey.shade300, width: 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: selectedData == null
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.touch_app_outlined, size: 48, color: Colors.grey.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Оберіть команду зліва',
+                            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'для призначення гравців на позиції.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Склад: ${selectedData.team.team_name}',
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Призначте гравців на позиції.',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            OutlinedButton.icon(
                               onPressed: () async {
                                 await Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) => TeamEditScreen(
-                                      team: d.team,
+                                      team: selectedData.team,
                                       tId: widget.tournament.t_id!,
                                       config: widget.config,
                                     ),
@@ -2511,24 +2572,49 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                                 );
                                 _reloadData();
                               },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                              tooltip: 'Видалити з турніру',
-                              onPressed: () => _removeTeamFromTournament(d.team),
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('Редагувати'),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
                             ),
                           ],
-                        )),
-                      ]);
-                    }).toList(),
-                      ),
+                        ),
+                        const Divider(height: 24),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: widget.config.boardCount,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final boardNum = index + 1;
+                              final playerId = selectedData.boards[boardNum];
+                              final label = _playerLabel(playerId);
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: playerId != null ? Colors.green.shade100 : Colors.grey.shade200,
+                                  child: Text(
+                                    '$boardNum',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: playerId != null ? Colors.green.shade800 : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(widget.config.shortTabLabel(boardNum)),
+                                subtitle: Text(label, style: const TextStyle(fontSize: 13)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-              ),
-          ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
