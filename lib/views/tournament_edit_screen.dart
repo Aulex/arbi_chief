@@ -1429,13 +1429,6 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       children: [
         Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                widget.tournamentName,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-            ),
             Expanded(
               child: TabBar(
                 controller: _tabController,
