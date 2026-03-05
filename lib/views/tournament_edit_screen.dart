@@ -326,7 +326,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
 /// Players tab — manage players connected to this tournament, with inline creation.
 class _TournamentPlayersTab extends ConsumerStatefulWidget {
   final int tId;
-  final int tType;
+  final int? tType;
   const _TournamentPlayersTab({required this.tId, required this.tType});
 
   @override
