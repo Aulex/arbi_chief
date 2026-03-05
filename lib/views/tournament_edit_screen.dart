@@ -31,7 +31,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 4,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 24.0),
         child: Column(
@@ -64,9 +64,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                           tabAlignment: TabAlignment.start,
                           tabs: [
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
-                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Учасники')])),
+                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
-                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.summarize_outlined, size: 18), SizedBox(width: 6), Text('Звіти')])),
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
                           ],
                         ),
@@ -129,9 +128,8 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                 child: TabBarView(
                   children: [
                     _buildTableTab(),
-                    _TournamentParticipantsTab(tId: widget.tournament.t_id!),
+                    _TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
                     _TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
-                    _ReportsTab(tournament: widget.tournament, config: _sportConfig),
                     TournamentAddScreen(
                       tournament: widget.tournament,
                       isEditMode: true,
@@ -325,16 +323,17 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
 
 }
 
-/// Participants tab with optimistic local state for instant add/remove.
-class _TournamentParticipantsTab extends ConsumerStatefulWidget {
+/// Players tab — manage players connected to this tournament, with inline creation.
+class _TournamentPlayersTab extends ConsumerStatefulWidget {
   final int tId;
-  const _TournamentParticipantsTab({required this.tId});
+  final int tType;
+  const _TournamentPlayersTab({required this.tId, required this.tType});
 
   @override
-  ConsumerState<_TournamentParticipantsTab> createState() => _TournamentParticipantsTabState();
+  ConsumerState<_TournamentPlayersTab> createState() => _TournamentPlayersTabState();
 }
 
-class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipantsTab> {
+class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
   List<Player> _participants = [];
   List<Player> _available = [];
   bool _loading = true;
@@ -364,7 +363,7 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
     }
   }
 
-  void _removeParticipant(Player player) {
+  void _removePlayer(Player player) {
     setState(() {
       _participants.removeWhere((p) => p.player_id == player.player_id);
       _available
@@ -374,7 +373,7 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
     ref.read(tournamentServiceProvider).removeParticipant(widget.tId, player.player_id!);
   }
 
-  void _addParticipant(Player player) {
+  void _addPlayer(Player player) {
     setState(() {
       _available.removeWhere((p) => p.player_id == player.player_id);
       _participants
@@ -382,6 +381,169 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
         ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
     });
     ref.read(tournamentServiceProvider).addParticipant(widget.tId, player.player_id!);
+  }
+
+  void _showCreatePlayerDialog() {
+    final nameC = TextEditingController();
+    final surnameC = TextEditingController();
+    final lastnameC = TextEditingController();
+    final dobC = TextEditingController();
+    int gender = 0;
+
+    Future<void> pickDate(BuildContext dialogContext, StateSetter setST) async {
+      final picked = await showDatePicker(
+        context: dialogContext,
+        initialDate: DateTime(2000),
+        firstDate: DateTime(1920),
+        lastDate: DateTime.now(),
+        locale: const Locale('uk'),
+      );
+      if (picked != null) {
+        final day = picked.day.toString().padLeft(2, '0');
+        final month = picked.month.toString().padLeft(2, '0');
+        final year = picked.year.toString();
+        dobC.text = '$day.$month.$year';
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.person_add_alt_1, color: Colors.indigo),
+                        SizedBox(width: 12),
+                        Text(
+                          'Додати нового гравця',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: surnameC,
+                            decoration: InputDecoration(
+                              labelText: 'Прізвище',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: nameC,
+                            decoration: InputDecoration(
+                              labelText: "Ім'я",
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: lastnameC,
+                      decoration: InputDecoration(
+                        labelText: 'По батькові',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: dobC,
+                            readOnly: true,
+                            decoration: InputDecoration(
+                              labelText: 'Дата народження',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.calendar_today, size: 20),
+                                onPressed: () => pickDate(dialogContext, setST),
+                              ),
+                            ),
+                            onTap: () => pickDate(dialogContext, setST),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            value: gender,
+                            decoration: InputDecoration(
+                              labelText: 'Стать',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 0, child: Text('Чоловіча')),
+                              DropdownMenuItem(value: 1, child: Text('Жіноча')),
+                            ],
+                            onChanged: (v) => setST(() => gender = v!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Скасувати'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () async {
+                            if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
+                            await ref.read(playerProvider.notifier).addPlayer(
+                              name: nameC.text.trim(),
+                              surname: surnameC.text.trim(),
+                              lastname: lastnameC.text.trim(),
+                              gender: gender,
+                              dob: dobC.text.trim(),
+                            );
+                            if (dialogContext.mounted) Navigator.pop(dialogContext);
+                            // Reload data to pick up new player
+                            _loadData();
+                          },
+                          child: const Text('Створити'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -393,25 +555,26 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
       children: [
         Expanded(
           child: _buildPlayerListCard(
-            title: 'Учасники (${_participants.length})',
-            subtitle: 'Гравці, зареєстровані в цьому турнірі.',
+            title: 'Гравці турніру (${_participants.length})',
+            subtitle: 'Гравці, додані до цього турніру.',
             players: _participants,
-            emptyText: 'Немає учасників',
+            emptyText: 'Немає гравців',
             actionIcon: Icons.remove_circle_outline,
             actionColor: Colors.redAccent,
-            onAction: _removeParticipant,
+            onAction: _removePlayer,
           ),
         ),
         const SizedBox(width: 20),
         Expanded(
           child: _buildPlayerListCard(
             title: 'Доступні гравці (${_available.length})',
-            subtitle: 'Додайте гравців із загального списку.',
+            subtitle: 'Додайте гравців до турніру або створіть нових.',
             players: _available,
             emptyText: 'Немає доступних гравців',
             actionIcon: Icons.add_circle_outline,
             actionColor: Colors.green,
-            onAction: _addParticipant,
+            onAction: _addPlayer,
+            showCreateButton: true,
           ),
         ),
       ],
@@ -426,6 +589,7 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
     required IconData actionIcon,
     required Color actionColor,
     required void Function(Player) onAction,
+    bool showCreateButton = false,
   }) {
     return Card(
       elevation: 0,
@@ -438,14 +602,37 @@ class _TournamentParticipantsTabState extends ConsumerState<_TournamentParticipa
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ),
+                if (showCreateButton)
+                  ElevatedButton.icon(
+                    onPressed: _showCreatePlayerDialog,
+                    icon: const Icon(Icons.person_add_alt_1, size: 18),
+                    label: const Text('Новий гравець'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.indigo,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+              ],
             ),
             const Divider(height: 24),
             Expanded(

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/navigation_viewmodel.dart';
-import '../viewmodels/nav_provider.dart'; // Import the new one
-import 'player_view.dart';
-import 'team_view.dart';
+import '../viewmodels/nav_provider.dart';
 import 'tournament_view.dart';
 import 'tournament_add_screen.dart';
 import 'tournament_edit_screen.dart';
-import 'sport_selection_screen.dart';
+import 'reports_list_view.dart';
+import 'settings_view.dart';
 
 class MainView extends ConsumerWidget {
   const MainView({super.key});
@@ -33,31 +32,19 @@ class MainView extends ConsumerWidget {
 
     final List<Widget> screens = [
       tournamentScreen,
-      const PlayerView(),
-      const TeamView(),
+      const ReportsListView(),
+      const SettingsView(),
     ];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Менеджер турнірів'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sports),
-            tooltip: 'Обрати вид спорту',
-            onPressed: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const SportSelectionScreen()),
-              );
-            },
-          ),
-        ],
       ),
       body: Row(
         children: [
           NavigationRail(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) {
-              // Using your Notifier method
               ref.read(navigationProvider.notifier).setTab(index);
 
               // Reset tournament view to list if user switches away and back
@@ -72,12 +59,12 @@ class MainView extends ConsumerWidget {
                 label: Text('Турніри'),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.people),
-                label: Text('Гравці'),
+                icon: Icon(Icons.summarize),
+                label: Text('Звіти'),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.groups),
-                label: Text('Команди'),
+                icon: Icon(Icons.settings),
+                label: Text('Налаштування'),
               ),
             ],
           ),
@@ -85,7 +72,6 @@ class MainView extends ConsumerWidget {
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
-              // Key needs to change when either the main tab or the sub-view changes
               child: Container(
                 key: ValueKey<String>('$selectedIndex-${tournamentNav.view}-${tournamentNav.tournament?.t_id}'),
                 child: screens[selectedIndex],
