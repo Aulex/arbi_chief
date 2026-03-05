@@ -1,15 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/sport_type_config.dart';
+import '../models/tournament_model.dart';
 import '../viewmodels/tournament_viewmodel.dart';
-import '../viewmodels/navigation_viewmodel.dart';
-import '../viewmodels/nav_provider.dart';
+import 'tournament_edit_screen.dart';
 
-class ReportsListView extends ConsumerWidget {
+class ReportsListView extends ConsumerStatefulWidget {
   const ReportsListView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReportsListView> createState() => _ReportsListViewState();
+}
+
+class _ReportsListViewState extends ConsumerState<ReportsListView> {
+  Tournament? _selected;
+
+  @override
+  Widget build(BuildContext context) {
     final tournamentsAsync = ref.watch(tournamentProvider);
+
+    if (_selected != null) {
+      final config = getConfigForType(_selected!.t_type);
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, size: 20),
+                  onPressed: () => setState(() => _selected = null),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Звіти: ${_selected!.t_name}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ReportsTab(
+                tournament: _selected!,
+                config: config,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Card(
       margin: const EdgeInsets.fromLTRB(24, 8, 24, 24),
@@ -53,14 +96,7 @@ class ReportsListView extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: ListTile(
-                              onTap: () {
-                                ref
-                                    .read(tournamentNavProvider.notifier)
-                                    .showEdit(t);
-                                ref
-                                    .read(navigationProvider.notifier)
-                                    .setTab(0);
-                              },
+                              onTap: () => setState(() => _selected = t),
                               leading: const Icon(
                                 Icons.summarize_outlined,
                                 color: Colors.indigo,

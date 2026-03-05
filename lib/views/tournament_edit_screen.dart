@@ -2613,16 +2613,17 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
 }
 
 /// Reports tab — generates and exports a PDF with board cross-tables and team ratings.
-class _ReportsTab extends ConsumerStatefulWidget {
+class ReportsTab extends ConsumerStatefulWidget {
   final Tournament tournament;
   final SportTypeConfig config;
-  const _ReportsTab({required this.tournament, required this.config});
+  const ReportsTab({super.key, required this.tournament, required this.config});
 
   @override
-  ConsumerState<_ReportsTab> createState() => _ReportsTabState();
+  @override
+  ConsumerState<ReportsTab> createState() => _ReportsTabState();
 }
 
-class _ReportsTabState extends ConsumerState<_ReportsTab> {
+class _ReportsTabState extends ConsumerState<ReportsTab> {
   bool _loading = true;
   Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>> _boardPlayers = {};
   Map<int, Map<int, Map<int, double>>> _boardResults = {};
