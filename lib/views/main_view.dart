@@ -5,8 +5,6 @@ import '../viewmodels/nav_provider.dart';
 import 'tournament_view.dart';
 import 'tournament_add_screen.dart';
 import 'tournament_edit_screen.dart';
-import 'player_view.dart';
-import 'team_view.dart';
 import 'reports_list_view.dart';
 import 'settings_view.dart';
 
@@ -34,8 +32,6 @@ class MainView extends ConsumerWidget {
 
     final List<Widget> screens = [
       tournamentScreen,
-      const PlayerView(),
-      const TeamView(),
       const ReportsListView(),
       const SettingsView(),
     ];
@@ -65,14 +61,6 @@ class MainView extends ConsumerWidget {
               NavigationRailDestination(
                 icon: Icon(Icons.emoji_events),
                 label: Text('Турніри'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.people),
-                label: Text('Гравці'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.groups),
-                label: Text('Команди'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.summarize),

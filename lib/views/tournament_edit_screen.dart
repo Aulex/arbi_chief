@@ -325,6 +325,164 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
     }
   }
 
+  void _showEditPlayerDialog(Player player) {
+    final nameC = TextEditingController(text: player.player_name);
+    final surnameC = TextEditingController(text: player.player_surname);
+    final lastnameC = TextEditingController(text: player.player_lastname);
+    final dobC = TextEditingController(text: player.birthDateForUI);
+    int gender = player.player_gender;
+
+    Future<void> pickDate(BuildContext dialogContext, StateSetter setST) async {
+      final picked = await showDatePicker(
+        context: dialogContext,
+        initialDate: DateTime(2000),
+        firstDate: DateTime(1920),
+        lastDate: DateTime.now(),
+        locale: const Locale('uk'),
+      );
+      if (picked != null) {
+        final day = picked.day.toString().padLeft(2, '0');
+        final month = picked.month.toString().padLeft(2, '0');
+        final year = picked.year.toString();
+        dobC.text = '$day.$month.$year';
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.edit, color: Colors.indigo),
+                        SizedBox(width: 12),
+                        Text(
+                          'Редагувати гравця',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: surnameC,
+                            decoration: InputDecoration(
+                              labelText: 'Прізвище',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: nameC,
+                            decoration: InputDecoration(
+                              labelText: "Ім'я",
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: lastnameC,
+                      decoration: InputDecoration(
+                        labelText: 'По батькові',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: dobC,
+                            readOnly: true,
+                            decoration: InputDecoration(
+                              labelText: 'Дата народження',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.calendar_today, size: 20),
+                                onPressed: () => pickDate(dialogContext, setST),
+                              ),
+                            ),
+                            onTap: () => pickDate(dialogContext, setST),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            value: gender,
+                            decoration: InputDecoration(
+                              labelText: 'Стать',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 0, child: Text('Чоловіча')),
+                              DropdownMenuItem(value: 1, child: Text('Жіноча')),
+                            ],
+                            onChanged: (v) => setST(() => gender = v!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Скасувати'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () async {
+                            if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
+                            await ref.read(playerProvider.notifier).updatePlayer(
+                              player.copyWith(
+                                player_name: nameC.text.trim(),
+                                player_surname: surnameC.text.trim(),
+                                player_lastname: lastnameC.text.trim(),
+                                player_gender: gender,
+                                player_date_birth: Player.formatForDB(dobC.text.trim()),
+                              ),
+                            );
+                            if (dialogContext.mounted) Navigator.pop(dialogContext);
+                            _loadData();
+                          },
+                          child: const Text('Зберегти'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _removePlayer(Player player) {
     setState(() {
       _participants.removeWhere((p) => p.player_id == player.player_id);
@@ -684,10 +842,20 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
                           subtitle: player.birthDateForUI.isNotEmpty
                               ? Text(player.birthDateForUI)
                               : null,
-                          trailing: IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
-                            tooltip: 'Видалити з турніру',
-                            onPressed: () => _removePlayer(player),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(Icons.edit, color: Colors.grey.shade600, size: 18),
+                                tooltip: 'Редагувати гравця',
+                                onPressed: () => _showEditPlayerDialog(player),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent),
+                                tooltip: 'Видалити з турніру',
+                                onPressed: () => _removePlayer(player),
+                              ),
+                            ],
                           ),
                           contentPadding: EdgeInsets.zero,
                         );
@@ -2336,6 +2504,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
   List<({Team team, int? teamNumber, Map<int, int> boards})> _teamData = [];
   Map<int, Player> _playerMap = {};
   int? _selectedTeamId;
+  String _teamSearch = '';
 
   @override
   void initState() {
@@ -2378,6 +2547,191 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
   void _reloadData() {
     setState(() => _loading = true);
     _loadData();
+  }
+
+  Future<void> _showBoardPlayerPicker(int boardNum, ({Team team, int? teamNumber, Map<int, int> boards}) teamData) async {
+    String search = '';
+    // Get all players, excluding those already assigned to boards in this team (except current board)
+    final assignedPlayerIds = <int>{};
+    for (final entry in teamData.boards.entries) {
+      if (entry.key != boardNum && entry.value != 0) {
+        assignedPlayerIds.add(entry.value);
+      }
+    }
+    // Also exclude players assigned to other teams
+    final allTeamPlayerIds = <int>{};
+    for (final td in _teamData) {
+      if (td.team.team_id == teamData.team.team_id) continue;
+      allTeamPlayerIds.addAll(td.boards.values);
+    }
+
+    // Load existing reserves to preserve them
+    final service = ref.read(teamServiceProvider);
+    final assignments = await service.getTeamAssignments(teamData.team.team_id!, widget.tournament.t_id!);
+    final existingReserves = assignments
+        .where((a) => a.player_state == 1 && a.player_id != null)
+        .map((a) => a.player_id!)
+        .toList();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          final allPlayers = _playerMap.values.toList()
+            ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+          final available = allPlayers.where((p) {
+            if (assignedPlayerIds.contains(p.player_id)) return false;
+            if (allTeamPlayerIds.contains(p.player_id)) return false;
+            if (search.isNotEmpty && !p.fullName.toLowerCase().contains(search.toLowerCase())) return false;
+            return true;
+          }).toList();
+
+          final currentPlayerId = teamData.boards[boardNum];
+          final currentPlayer = currentPlayerId != null ? _playerMap[currentPlayerId] : null;
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.indigo,
+                          child: Text('$boardNum', style: const TextStyle(color: Colors.white, fontSize: 14)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '${widget.config.shortTabLabel(boardNum)} — ${teamData.team.team_name}',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (currentPlayer != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text('Поточний: ${currentPlayer.fullName}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final svc = ref.read(teamServiceProvider);
+                              // Remove current player from this board
+                              final newBoards = Map<int, int>.from(teamData.boards)..remove(boardNum);
+                              await svc.saveAssignments(teamData.team.team_id!, widget.tournament.t_id!, newBoards, existingReserves);
+                              if (dialogContext.mounted) Navigator.pop(dialogContext);
+                              _reloadData();
+                            },
+                            icon: const Icon(Icons.clear, size: 16, color: Colors.red),
+                            label: const Text('Зняти', style: TextStyle(color: Colors.red, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    // Load reserves to preserve them
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Пошук гравця...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onChanged: (v) => setST(() => search = v),
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: available.isEmpty
+                          ? const Center(child: Text('Немає доступних гравців'))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: available.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final player = available[index];
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(player.fullName),
+                                  subtitle: player.birthDateForUI.isNotEmpty
+                                      ? Text(player.birthDateForUI, style: const TextStyle(fontSize: 12))
+                                      : null,
+                                  trailing: const Icon(Icons.add_circle_outline, color: Colors.green),
+                                  contentPadding: EdgeInsets.zero,
+                                  onTap: () async {
+                                    final svc = ref.read(teamServiceProvider);
+                                    final newBoards = Map<int, int>.from(teamData.boards);
+                                    newBoards[boardNum] = player.player_id!;
+                                    await svc.saveAssignments(teamData.team.team_id!, widget.tournament.t_id!, newBoards, existingReserves);
+                                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                    _reloadData();
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Закрити'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditTeamDialog(Team team) {
+    final nameC = TextEditingController(text: team.team_name);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Редагувати команду'),
+        content: TextField(
+          controller: nameC,
+          decoration: const InputDecoration(
+            labelText: 'Назва команди',
+            isDense: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Скасувати'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameC.text.trim();
+              if (name.isEmpty || name == team.team_name) {
+                Navigator.pop(ctx);
+                return;
+              }
+              await ref.read(teamProvider.notifier).updateTeam(team.copyWith(team_name: name));
+              if (ctx.mounted) Navigator.pop(ctx);
+              _reloadData();
+            },
+            child: const Text('Зберегти'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddTeamDialog() {
@@ -2515,6 +2869,17 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Пошук...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onChanged: (v) => setState(() => _teamSearch = v),
+                  ),
                   const Divider(height: 24),
                   if (_teamData.isEmpty)
                     Expanded(
@@ -2534,34 +2899,56 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                     )
                   else
                     Expanded(
-                      child: ListView.separated(
-                        itemCount: _teamData.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final d = _teamData[index];
-                          final isSelected = d.team.team_id == _selectedTeamId;
-                          return ListTile(
-                            selected: isSelected,
-                            selectedTileColor: Colors.indigo.shade50,
-                            leading: CircleAvatar(
-                              radius: 16,
-                              backgroundColor: isSelected ? Colors.indigo : Colors.grey.shade300,
-                              child: Text(
-                                '${d.teamNumber ?? ''}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isSelected ? Colors.white : Colors.black87,
+                      child: Builder(
+                        builder: (context) {
+                          final filtered = _teamSearch.isEmpty
+                              ? _teamData
+                              : _teamData.where((d) => d.team.team_name.toLowerCase().contains(_teamSearch.toLowerCase())).toList();
+                          if (filtered.isEmpty) {
+                            return Center(
+                              child: Text('Нічого не знайдено', style: TextStyle(color: Colors.grey.shade600)),
+                            );
+                          }
+                          return ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final d = filtered[index];
+                              final isSelected = d.team.team_id == _selectedTeamId;
+                              return ListTile(
+                                selected: isSelected,
+                                selectedTileColor: Colors.indigo.shade50,
+                                leading: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: isSelected ? Colors.indigo : Colors.grey.shade300,
+                                  child: Text(
+                                    '${d.teamNumber ?? ''}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isSelected ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            title: Text(d.team.team_name),
-                            trailing: IconButton(
-                              icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade300, size: 20),
-                              tooltip: 'Видалити з турніру',
-                              onPressed: () => _removeTeamFromTournament(d.team),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                            onTap: () => setState(() => _selectedTeamId = d.team.team_id),
+                                title: Text(d.team.team_name),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.edit, color: Colors.grey.shade600, size: 18),
+                                      tooltip: 'Редагувати назву',
+                                      onPressed: () => _showEditTeamDialog(d.team),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade300, size: 20),
+                                      tooltip: 'Видалити з турніру',
+                                      onPressed: () => _removeTeamFromTournament(d.team),
+                                    ),
+                                  ],
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                onTap: () => setState(() => _selectedTeamId = d.team.team_id),
+                              );
+                            },
                           );
                         },
                       ),
@@ -2669,6 +3056,8 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
                                 title: Text(widget.config.shortTabLabel(boardNum)),
                                 subtitle: Text(label, style: const TextStyle(fontSize: 13)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                trailing: Icon(Icons.person_search, size: 20, color: Colors.grey.shade500),
+                                onTap: () => _showBoardPlayerPicker(boardNum, selectedData),
                               );
                             },
                           ),
