@@ -259,7 +259,7 @@ class TeamService {
     final rows = await db.query(
       'CMP_PLAYER_TEAM',
       columns: ['player_id'],
-      where: 'team_id != ? AND t_id = ?',
+      where: 'team_id != ? AND t_id = ? AND player_id IS NOT NULL',
       whereArgs: [excludeTeamId, tId],
     );
     return rows.map((r) => r['player_id'] as int).toSet();
@@ -471,7 +471,7 @@ class TeamService {
       SELECT pt.player_id
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
-      WHERE pt.t_id = ? AND v.attr_id = 10 AND v.attr_value = '1'
+      WHERE pt.t_id = ? AND v.attr_id = 10 AND v.attr_value = '1' AND pt.player_id IS NOT NULL
     ''', [tId]);
     return rows.map((r) => r['player_id'] as int).toSet();
   }
