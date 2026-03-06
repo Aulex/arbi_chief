@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/sport_type_provider.dart';
+import '../viewmodels/navigation_viewmodel.dart';
+import '../viewmodels/nav_provider.dart';
 import 'main_view.dart';
 
 class SportSelectionScreen extends ConsumerStatefulWidget {
@@ -51,6 +53,8 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
 
   void _selectType(int typeId) {
     ref.read(selectedSportTypeProvider.notifier).select(typeId);
+    ref.read(navigationProvider.notifier).setTab(0);
+    ref.read(tournamentNavProvider.notifier).showList();
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const MainView()),
     );

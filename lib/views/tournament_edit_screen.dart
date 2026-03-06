@@ -580,6 +580,18 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
                               gender: gender,
                               dob: dobC.text.trim(),
                             );
+                            // Auto-add newly created player to the tournament
+                            final allPlayers = await ref.read(playerProvider.future);
+                            final newPlayer = allPlayers
+                                .where((p) =>
+                                    p.player_surname == surnameC.text.trim() &&
+                                    p.player_name == nameC.text.trim())
+                                .lastOrNull;
+                            if (newPlayer != null && newPlayer.player_id != null) {
+                              await ref
+                                  .read(tournamentServiceProvider)
+                                  .addParticipant(widget.tId, newPlayer.player_id!);
+                            }
                             if (dialogContext.mounted) Navigator.pop(dialogContext);
                             _loadData();
                           },
@@ -1163,89 +1175,118 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: Text('$rowPlayerName  vs  $colPlayerName', style: const TextStyle(fontSize: 15)),
-          content: SizedBox(
-            width: 320,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header row
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 40),
-                      Expanded(child: Text(rowPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                      const SizedBox(width: 16),
-                      Expanded(child: Text(colPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    ],
-                  ),
-                ),
-                // Set rows
-                for (int i = 0; i < 3; i++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      children: [
-                        SizedBox(width: 40, child: Text('Сет ${i + 1}', style: const TextStyle(fontSize: 12, color: Colors.black54))),
-                        Expanded(
-                          child: TextField(
-                            controller: controllers[i].row,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                            ),
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: controllers[i].col,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                            ),
-                          ),
-                        ),
-                      ],
+        return StatefulBuilder(
+          builder: (ctx, setST) {
+            // Count set wins to determine if 3rd set should be disabled
+            int rowWins = 0;
+            int colWins = 0;
+            for (int s = 0; s < 2; s++) {
+              final r = int.tryParse(controllers[s].row.text) ?? 0;
+              final c = int.tryParse(controllers[s].col.text) ?? 0;
+              if (r > 0 || c > 0) {
+                if (r > c) rowWins++;
+                else if (c > r) colWins++;
+              }
+            }
+            final thirdSetDisabled = rowWins >= 2 || colWins >= 2;
+            if (thirdSetDisabled) {
+              controllers[2].row.text = '';
+              controllers[2].col.text = '';
+            }
+
+            return AlertDialog(
+              title: Text('$rowPlayerName  vs  $colPlayerName', style: const TextStyle(fontSize: 15)),
+              content: SizedBox(
+                width: 320,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header row
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 40),
+                          Expanded(child: Text(rowPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          const SizedBox(width: 16),
+                          Expanded(child: Text(colPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        ],
+                      ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            if (currentResult != null)
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _onResultSelected(rowPlayerId, colPlayerId, null);
-                },
-                child: Text('Очистити', style: TextStyle(color: Colors.grey.shade700)),
+                    // Set rows
+                    for (int i = 0; i < 3; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            SizedBox(width: 40, child: Text('Сет ${i + 1}', style: TextStyle(fontSize: 12, color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade300 : Colors.black54))),
+                            Expanded(
+                              child: TextField(
+                                controller: controllers[i].row,
+                                enabled: !(i == 2 && thirdSetDisabled),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                  filled: (i == 2 && thirdSetDisabled),
+                                  fillColor: Colors.grey.shade100,
+                                ),
+                                onChanged: (_) => setST(() {}),
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: controllers[i].col,
+                                enabled: !(i == 2 && thirdSetDisabled),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                  filled: (i == 2 && thirdSetDisabled),
+                                  fillColor: Colors.grey.shade100,
+                                ),
+                                onChanged: (_) => setST(() {}),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Скасувати'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
-              },
-              child: const Text('Зберегти'),
-            ),
-          ],
+              actions: [
+                if (currentResult != null)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _onResultSelected(rowPlayerId, colPlayerId, null);
+                    },
+                    child: Text('Очистити', style: TextStyle(color: Colors.grey.shade700)),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Скасувати'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
+                  },
+                  child: const Text('Зберегти'),
+              ),
+            ],
+          );
+          },
         );
       },
     ).then((_) {
@@ -1355,6 +1396,22 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     return sb;
   }
 
+  /// Total balls scored and conceded for table tennis.
+  ({int scored, int conceded}) _totalBalls(int boardNum, int playerId) {
+    int scored = 0;
+    int conceded = 0;
+    final details = _boardResultDetails[boardNum]?[playerId] ?? {};
+    for (final detail in details.values) {
+      for (final s in detail.split(' ')) {
+        final parts = s.split(':');
+        if (parts.length != 2) continue;
+        scored += int.tryParse(parts[0]) ?? 0;
+        conceded += int.tryParse(parts[1]) ?? 0;
+      }
+    }
+    return (scored: scored, conceded: conceded);
+  }
+
   List<({int teamId, String teamName, int? teamNumber, Player player})> _sortedStandings(
     int boardNum,
     List<({int teamId, String teamName, int? teamNumber, Player player})> players,
@@ -1374,7 +1431,14 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
         if (aVsB > bVsA) return -1; // a won head-to-head → a ranks higher
         if (aVsB < bVsA) return 1;
       }
-      // 3. Berger coefficient
+      // 3. Berger coefficient (skip for table tennis, use balls diff)
+      if (_isTableTennis) {
+        final aBalls = _totalBalls(boardNum, aId);
+        final bBalls = _totalBalls(boardNum, bId);
+        final aDiff = aBalls.scored - aBalls.conceded;
+        final bDiff = bBalls.scored - bBalls.conceded;
+        return bDiff.compareTo(aDiff);
+      }
       final ba = _bergerCoefficient(boardNum, aId);
       final bb = _bergerCoefficient(boardNum, bId);
       return bb.compareTo(ba);
@@ -1818,7 +1882,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
     return TableRow(
       children: [
-        _tableCell('$boardNum', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
+        _tableCell('${widget.config.boardAbbrev}$boardNum', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
         _tableCell(aName, style: cellStyle, minWidth: 120, leftAlign: true),
         _tableCell(scoreText, style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: scoreColor)),
         _tableCell(bName, style: cellStyle, minWidth: 120, leftAlign: true),
@@ -1844,6 +1908,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
+    final isTT = _isTableTennis;
+
     return Table(
       border: TableBorder.all(color: Colors.grey.shade300, width: 1),
       defaultColumnWidth: const IntrinsicColumnWidth(),
@@ -1866,13 +1932,17 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               ),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
-            _tableCell('К.Б.', style: headerStyle),
+            if (!isTT) _tableCell('К.Б.', style: headerStyle),
+            if (isTT) _tableCell('М.З.', style: headerStyle),
+            if (isTT) _tableCell('М.П.', style: headerStyle),
             // Standings headers
             _tableCell('№к', style: headerStyle),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             _tableCell('Команда', style: headerStyle, minWidth: 90),
             _tableCell('Бали', style: headerStyle),
-            _tableCell('К.Б.', style: headerStyle),
+            if (!isTT) _tableCell('К.Б.', style: headerStyle),
+            if (isTT) _tableCell('М.З.', style: headerStyle),
+            if (isTT) _tableCell('М.П.', style: headerStyle),
             _tableCell('Місце', style: headerStyle),
           ],
         ),
@@ -1888,14 +1958,12 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               ),
               _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               if (_absentPlayerIds.contains(players[i].player.player_id) && players[i].player.player_id! < 0)
-                // Phantom absent (team missing from board) — not tappable
                 _tableCell(
                   '${players[i].player.player_surname} ${players[i].player.player_name}',
                   style: cellStyle.copyWith(color: Colors.red.shade400, fontStyle: FontStyle.italic),
                   minWidth: 130, leftAlign: true,
                 )
               else if (_absentPlayerIds.contains(players[i].player.player_id))
-                // Real no-show player — tappable to clear
                 _tappableNameCell(
                   '${players[i].player.player_surname} ${players[i].player.player_name}',
                   isHighlighted: _hoveredRow == i,
@@ -1923,10 +1991,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
               _tableCell('${_gamesPlayed(boardNum, players[i].player.player_id!)}', style: cellStyle),
-              _tableCell(
-                _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
-                style: cellStyle,
-              ),
+              if (!isTT)
+                _tableCell(
+                  _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
+                  style: cellStyle,
+                ),
+              if (isTT)
+                _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).scored}', style: cellStyle),
+              if (isTT)
+                _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).conceded}', style: cellStyle),
               // Standings cells (sorted order)
               _tableCell(
                 '${sorted[i].teamNumber ?? ''}',
@@ -1941,10 +2014,15 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 _formatPoints(_totalPoints(boardNum, sorted[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
-              _tableCell(
-                _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
-                style: cellStyle,
-              ),
+              if (!isTT)
+                _tableCell(
+                  _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
+                  style: cellStyle,
+                ),
+              if (isTT)
+                _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).scored}', style: cellStyle),
+              if (isTT)
+                _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).conceded}', style: cellStyle),
               _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
             ],
           ),
@@ -2343,17 +2421,10 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
               final name = nameC.text.trim();
               if (name.isEmpty) return;
               final num = int.tryParse(numberC.text.trim()) ?? (_teamData.length + 1);
-              // Create team and add to tournament
-              await ref.read(teamProvider.notifier).addTeam(name: name);
-              // Get newly created team
-              final allTeams = await ref.read(teamProvider.future);
-              final newTeam = allTeams.where((t) => t.team_name == name).lastOrNull;
-              if (newTeam != null) {
-                final service = ref.read(teamServiceProvider);
-                // Create empty board assignments to register team in tournament
-                await service.saveAssignments(newTeam.team_id!, widget.tournament.t_id!, {}, []);
-                await service.setTeamNumber(newTeam.team_id!, widget.tournament.t_id!, num);
-              }
+              // Create team and register it in the tournament
+              final newTeam = await ref.read(teamProvider.notifier).addTeam(name: name);
+              final service = ref.read(teamServiceProvider);
+              await service.registerTeamInTournament(newTeam.team_id!, widget.tournament.t_id!, num);
               if (ctx.mounted) Navigator.pop(ctx);
               _reloadData();
             },
@@ -2382,7 +2453,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
     );
     if (confirmed == true) {
       final service = ref.read(teamServiceProvider);
-      await service.saveAssignments(team.team_id!, widget.tournament.t_id!, {}, []);
+      await service.removeTeamFromTournament(team.team_id!, widget.tournament.t_id!);
       if (_selectedTeamId == team.team_id) _selectedTeamId = null;
       _reloadData();
     }
@@ -2616,7 +2687,8 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
 class ReportsTab extends ConsumerStatefulWidget {
   final Tournament tournament;
   final SportTypeConfig config;
-  const ReportsTab({super.key, required this.tournament, required this.config});
+  final bool autoExport;
+  const ReportsTab({super.key, required this.tournament, required this.config, this.autoExport = false});
 
   @override
   @override
@@ -2725,6 +2797,12 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         _boardResultDetails = details;
         _loading = false;
       });
+      // Auto-export PDF if requested
+      if (widget.autoExport && boards.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _exportPdf();
+        });
+      }
     }
   }
 
@@ -2747,6 +2825,22 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     return sb;
   }
 
+  /// Total balls scored and conceded for table tennis.
+  ({int scored, int conceded}) _totalBalls(int boardNum, int playerId) {
+    int scored = 0;
+    int conceded = 0;
+    final details = _boardResultDetails[boardNum]?[playerId] ?? {};
+    for (final detail in details.values) {
+      for (final s in detail.split(' ')) {
+        final parts = s.split(':');
+        if (parts.length != 2) continue;
+        scored += int.tryParse(parts[0]) ?? 0;
+        conceded += int.tryParse(parts[1]) ?? 0;
+      }
+    }
+    return (scored: scored, conceded: conceded);
+  }
+
   List<({int teamId, String teamName, int? teamNumber, Player player})> _sortedStandings(
     int boardNum,
     List<({int teamId, String teamName, int? teamNumber, Player player})> players,
@@ -2763,6 +2857,13 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       if (aVsB != null && bVsA != null) {
         if (aVsB > bVsA) return -1;
         if (aVsB < bVsA) return 1;
+      }
+      if (_isTableTennis) {
+        final aBalls = _totalBalls(boardNum, aId);
+        final bBalls = _totalBalls(boardNum, bId);
+        final aDiff = aBalls.scored - aBalls.conceded;
+        final bDiff = bBalls.scored - bBalls.conceded;
+        return bDiff.compareTo(aDiff);
       }
       final ba = _bergerCoefficient(boardNum, aId);
       final bb = _bergerCoefficient(boardNum, bId);
@@ -2876,9 +2977,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       final cellSt = pw.TextStyle(fontSize: 7, font: fontRegular);
       final cellBold = pw.TextStyle(fontSize: 7, font: fontBold, fontWeight: pw.FontWeight.bold);
 
-      // Cross-table columns: №к, Команда, ПІБ, [1..n], Бали, Ігор, К.Б.
-      // Standings columns: №к, ПІБ, Команда, Бали, К.Б., Місце
-      final totalCols = 3 + n + 3 + 6; // cross(3+n+3) + standings(6)
+      final isTT = _isTableTennis;
 
       final headerCells = <pw.Widget>[
         _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
@@ -2888,13 +2987,17 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           _pdfCell('${i + 1}', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Ігор', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
+        if (!isTT) _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
+        if (isTT) _pdfCell('М.З.', hdrStyle, align: pw.Alignment.center),
+        if (isTT) _pdfCell('М.П.', hdrStyle, align: pw.Alignment.center),
         // Standings
         _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
         _pdfCell('ПІБ', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
+        if (!isTT) _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
+        if (isTT) _pdfCell('М.З.', hdrStyle, align: pw.Alignment.center),
+        if (isTT) _pdfCell('М.П.', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Місце', hdrStyle, align: pw.Alignment.center),
       ];
 
@@ -2934,37 +3037,56 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               ),
           _pdfCell(_fmtPts(_totalPoints(boardNum, pId)), cellBold),
           _pdfCell('${_gamesPlayed(boardNum, pId)}', cellSt),
-          _pdfCell(_fmtPts(_bergerCoefficient(boardNum, pId)), cellSt),
+          if (!isTT) _pdfCell(_fmtPts(_bergerCoefficient(boardNum, pId)), cellSt),
+          if (isTT) _pdfCell('${_totalBalls(boardNum, pId).scored}', cellSt),
+          if (isTT) _pdfCell('${_totalBalls(boardNum, pId).conceded}', cellSt),
           // Standings part
           _pdfCell('${s.teamNumber ?? ''}', cellSt),
           _pdfCell('${s.player.player_surname} ${s.player.player_name}'.trim(), cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(_fmtPts(_totalPoints(boardNum, sId)), cellBold),
-          _pdfCell(_fmtPts(_bergerCoefficient(boardNum, sId)), cellSt),
+          if (!isTT) _pdfCell(_fmtPts(_bergerCoefficient(boardNum, sId)), cellSt),
+          if (isTT) _pdfCell('${_totalBalls(boardNum, sId).scored}', cellSt),
+          if (isTT) _pdfCell('${_totalBalls(boardNum, sId).conceded}', cellSt),
           _pdfCell('${i + 1}', cellBold),
         ];
 
         dataTableRows.add(pw.TableRow(decoration: rowBg, children: cells));
       }
 
-      // Column widths
+      // Column widths — for table tennis we have +1 extra column (М.З. + М.П. instead of К.Б.)
+      final crossSummaryCols = isTT ? 4 : 3; // Бали, Ігор, [К.Б. OR М.З.+М.П.]
+      final standingsSummaryCols = isTT ? 5 : 4; // №к, ПІБ, Команда, Бали, [К.Б. OR М.З.+М.П.], Місце → +1 for TT
       final colWidths = <int, pw.TableColumnWidth>{
         0: const pw.FixedColumnWidth(22),  // №к
         1: const pw.FlexColumnWidth(2),    // Команда
         2: const pw.FlexColumnWidth(3),    // ПІБ
         for (int i = 0; i < n; i++)
-          3 + i: pw.FixedColumnWidth(_isTableTennis ? 52 : 20),
+          3 + i: pw.FixedColumnWidth(isTT ? 52 : 20),
         3 + n: const pw.FixedColumnWidth(28),     // Бали
         3 + n + 1: const pw.FixedColumnWidth(24), // Ігор
-        3 + n + 2: const pw.FixedColumnWidth(28), // К.Б.
-        // Standings
-        3 + n + 3: const pw.FixedColumnWidth(22),  // №к
-        3 + n + 4: const pw.FlexColumnWidth(3),    // ПІБ
-        3 + n + 5: const pw.FlexColumnWidth(2),    // Команда
-        3 + n + 6: const pw.FixedColumnWidth(28),  // Бали
-        3 + n + 7: const pw.FixedColumnWidth(28),  // К.Б.
-        3 + n + 8: const pw.FixedColumnWidth(30),  // Місце
       };
+      if (!isTT) {
+        colWidths[3 + n + 2] = const pw.FixedColumnWidth(28); // К.Б.
+        // Standings
+        colWidths[3 + n + 3] = const pw.FixedColumnWidth(22);  // №к
+        colWidths[3 + n + 4] = const pw.FlexColumnWidth(3);    // ПІБ
+        colWidths[3 + n + 5] = const pw.FlexColumnWidth(2);    // Команда
+        colWidths[3 + n + 6] = const pw.FixedColumnWidth(28);  // Бали
+        colWidths[3 + n + 7] = const pw.FixedColumnWidth(28);  // К.Б.
+        colWidths[3 + n + 8] = const pw.FixedColumnWidth(30);  // Місце
+      } else {
+        colWidths[3 + n + 2] = const pw.FixedColumnWidth(28); // М.З.
+        colWidths[3 + n + 3] = const pw.FixedColumnWidth(28); // М.П.
+        // Standings
+        colWidths[3 + n + 4] = const pw.FixedColumnWidth(22);  // №к
+        colWidths[3 + n + 5] = const pw.FlexColumnWidth(3);    // ПІБ
+        colWidths[3 + n + 6] = const pw.FlexColumnWidth(2);    // Команда
+        colWidths[3 + n + 7] = const pw.FixedColumnWidth(28);  // Бали
+        colWidths[3 + n + 8] = const pw.FixedColumnWidth(28);  // М.З.
+        colWidths[3 + n + 9] = const pw.FixedColumnWidth(28);  // М.П.
+        colWidths[3 + n + 10] = const pw.FixedColumnWidth(30); // Місце
+      }
 
       pdf.addPage(
         pw.Page(

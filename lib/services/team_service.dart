@@ -156,6 +156,18 @@ class TeamService {
         'asgn_date': today,
       });
     }
+
+    // Keep a placeholder row so the team stays visible in the tournament
+    if (boardMembers.isEmpty && reserves.isEmpty) {
+      await db.insert('CMP_PLAYER_TEAM', {
+        'team_id': teamId,
+        'player_id': 0,
+        't_id': tId,
+        'team_number': teamNumber,
+        'player_state': 2,
+        'asgn_date': today,
+      });
+    }
   }
 
   /// Get team number for a team in a tournament.
@@ -170,6 +182,52 @@ class TeamService {
     );
     if (rows.isEmpty) return null;
     return rows.first['team_number'] as int?;
+  }
+
+  /// Register a team in a tournament (creates a placeholder row so the team is visible).
+  Future<void> registerTeamInTournament(int teamId, int tId, int teamNumber) async {
+    final db = await _dbService.database;
+    final today = DateTime.now().toIso8601String().split('T').first;
+    // Check if team already has entries
+    final existing = await db.query(
+      'CMP_PLAYER_TEAM',
+      where: 'team_id = ? AND t_id = ?',
+      whereArgs: [teamId, tId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await setTeamNumber(teamId, tId, teamNumber);
+      return;
+    }
+    // Insert a placeholder row to register the team
+    await db.insert('CMP_PLAYER_TEAM', {
+      'team_id': teamId,
+      'player_id': 0,
+      't_id': tId,
+      'team_number': teamNumber,
+      'player_state': 2,
+      'asgn_date': today,
+    });
+  }
+
+  /// Remove a team from a tournament (deletes all assignment rows).
+  Future<void> removeTeamFromTournament(int teamId, int tId) async {
+    final db = await _dbService.database;
+    // Clean up attr values
+    final assignments = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['pte_id'],
+      where: 'team_id = ? AND t_id = ?',
+      whereArgs: [teamId, tId],
+    );
+    for (final a in assignments) {
+      await db.delete(
+        'CMP_PLAYER_TEAM_ATTR_VALUE',
+        where: 'pte_id = ?',
+        whereArgs: [a['pte_id']],
+      );
+    }
+    await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ? AND t_id = ?', whereArgs: [teamId, tId]);
   }
 
   /// Set team number for a team in a tournament.

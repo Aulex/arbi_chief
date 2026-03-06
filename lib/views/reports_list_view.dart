@@ -44,14 +44,6 @@ class ReportsListView extends ConsumerWidget {
               description: 'Крос-таблиці всіх дошок та командний залік.',
               requiresTournament: true,
             ),
-            // Future non-tournament reports can be added here:
-            // _ReportTypeCard(
-            //   icon: Icons.people,
-            //   iconColor: Colors.blue,
-            //   title: 'Список гравців',
-            //   description: 'Загальний список всіх гравців у системі.',
-            //   requiresTournament: false,
-            // ),
           ],
         ),
       ),
@@ -135,72 +127,75 @@ class _ReportTypeCard extends ConsumerWidget {
           return;
         }
 
+        Tournament? selectedTournament = tournaments.first;
+
         showDialog(
           context: context,
           builder: (ctx) {
-            return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            return StatefulBuilder(
+              builder: (ctx, setST) {
+                return AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(icon, color: iconColor, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Оберіть турнір:',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                      ),
-                      const SizedBox(height: 12),
-                      Flexible(
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: tournaments.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            final t = tournaments[index];
-                            return Card(
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                side: BorderSide(color: Colors.grey.shade300, width: 1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: ListTile(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                leading: const Icon(Icons.emoji_events, color: Colors.indigo),
-                                title: Text(t.t_name, style: const TextStyle(fontWeight: FontWeight.w500)),
-                                onTap: () {
-                                  Navigator.pop(ctx);
-                                  _generateReport(context, ref, t);
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Скасувати'),
-                        ),
+                      Icon(icon, color: iconColor, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                ),
-              ),
+                  content: SizedBox(
+                    width: 400,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Оберіть турнір:',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<Tournament>(
+                          value: selectedTournament,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                          items: tournaments.map((t) => DropdownMenuItem<Tournament>(
+                            value: t,
+                            child: Text(t.t_name, overflow: TextOverflow.ellipsis),
+                          )).toList(),
+                          onChanged: (v) {
+                            setST(() => selectedTournament = v);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Скасувати'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: selectedTournament == null
+                          ? null
+                          : () {
+                              Navigator.pop(ctx);
+                              _generateReport(context, ref, selectedTournament!);
+                            },
+                      child: const Text('OK'),
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
@@ -216,7 +211,6 @@ class _ReportTypeCard extends ConsumerWidget {
 
   void _generateReport(BuildContext context, WidgetRef ref, Tournament tournament) {
     final config = getConfigForType(tournament.t_type);
-    // Show a temporary full-screen overlay with ReportsTab which will trigger PDF export
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
@@ -228,6 +222,7 @@ class _ReportTypeCard extends ConsumerWidget {
             child: ReportsTab(
               tournament: tournament,
               config: config,
+              autoExport: true,
             ),
           ),
         ),
