@@ -3,11 +3,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../models/team_model.dart';
 
-class TeamView extends ConsumerWidget {
+class TeamView extends ConsumerStatefulWidget {
   const TeamView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TeamView> createState() => _TeamViewState();
+}
+
+class _TeamViewState extends ConsumerState<TeamView> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final teamsAsync = ref.watch(teamProvider);
 
     return Card(
@@ -58,13 +72,42 @@ class TeamView extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Пошук команди...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
+            ),
+            const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 16),
             Expanded(
               child: teamsAsync.when(
                 data: (teams) {
-                  if (teams.isEmpty) {
-                    return const Center(child: Text("Команд не знайдено."));
+                  final filtered = _searchQuery.isEmpty
+                      ? teams
+                      : teams.where((t) => t.team_name.toLowerCase().contains(_searchQuery)).toList();
+                  if (filtered.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _searchQuery.isEmpty ? "Команд не знайдено." : "Нічого не знайдено за запитом '$_searchQuery'.",
+                      ),
+                    );
                   }
 
                   return LayoutBuilder(
@@ -82,7 +125,7 @@ class TeamView extends ConsumerWidget {
                               DataColumn(label: Text('Назва команди')),
                               DataColumn(label: Text('Дія')),
                             ],
-                            rows: teams.map((t) {
+                            rows: filtered.map((t) {
                               return DataRow(
                                 cells: [
                                   DataCell(Text(t.team_name)),
@@ -91,14 +134,16 @@ class TeamView extends ConsumerWidget {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.edit,
-                                              color: Colors.blue),
+                                          icon: const Icon(Icons.edit_outlined,
+                                              color: Colors.indigo),
+                                          tooltip: 'Редагувати',
                                           onPressed: () =>
                                               _showRenameDialog(context, ref, t),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.delete,
-                                              color: Colors.red),
+                                          icon: const Icon(Icons.delete_outline,
+                                              color: Colors.redAccent),
+                                          tooltip: 'Видалити',
                                           onPressed: () =>
                                               _confirmDelete(context, ref, t),
                                         ),

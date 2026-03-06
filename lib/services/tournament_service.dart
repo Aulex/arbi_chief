@@ -333,7 +333,7 @@ class TournamentService {
       for (final eventId in eventIds) {
         await txn.update(
           'CMP_PLAYER_EVENT',
-          {'event_result': null},
+          {'event_result': null, 'event_result_detail': null},
           where: 'event_id = ?',
           whereArgs: [eventId],
         );
