@@ -40,8 +40,8 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
     final boardMembers = await service.getBoardMembers(widget.team.team_id!, widget.tId);
     final assignments = await service.getTeamAssignments(widget.team.team_id!, widget.tId);
     final reserves = assignments
-        .where((a) => a.player_state == 1)
-        .map((a) => a.player_id)
+        .where((a) => a.player_state == 1 && a.player_id != null)
+        .map((a) => a.player_id!)
         .toList();
     final taken = await service.getPlayersInOtherTeams(widget.team.team_id!, widget.tId);
     setState(() {

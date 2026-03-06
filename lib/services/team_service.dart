@@ -5,13 +5,13 @@ import 'database_service.dart';
 class PlayerTeamAssignment {
   final int? pte_id;
   final int team_id;
-  final int player_id;
-  final int player_state; // 0 = active member, 1 = reserve
+  final int? player_id;
+  final int player_state; // 0 = active member, 1 = reserve, 2 = placeholder
 
   const PlayerTeamAssignment({
     this.pte_id,
     required this.team_id,
-    required this.player_id,
+    this.player_id,
     required this.player_state,
   });
 
@@ -19,7 +19,7 @@ class PlayerTeamAssignment {
     return PlayerTeamAssignment(
       pte_id: json['pte_id'] as int?,
       team_id: json['team_id'] as int,
-      player_id: json['player_id'] as int,
+      player_id: json['player_id'] as int?,
       player_state: json['player_state'] as int? ?? 0,
     );
   }
@@ -161,7 +161,7 @@ class TeamService {
     if (boardMembers.isEmpty && reserves.isEmpty) {
       await db.insert('CMP_PLAYER_TEAM', {
         'team_id': teamId,
-        'player_id': 0,
+        'player_id': null,
         't_id': tId,
         'team_number': teamNumber,
         'player_state': 2,
@@ -202,7 +202,7 @@ class TeamService {
     // Insert a placeholder row to register the team
     await db.insert('CMP_PLAYER_TEAM', {
       'team_id': teamId,
-      'player_id': 0,
+      'player_id': null,
       't_id': tId,
       'team_number': teamNumber,
       'player_state': 2,
