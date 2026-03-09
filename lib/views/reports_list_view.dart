@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/sport_type_config.dart';
 import '../models/tournament_model.dart';
 import '../viewmodels/tournament_viewmodel.dart';
-import 'tournament_edit_screen.dart';
+import 'report_view.dart';
 
 class ReportsListView extends ConsumerWidget {
   const ReportsListView({super.key});
@@ -219,7 +219,7 @@ class _ReportTypeCard extends ConsumerWidget {
           ),
           body: Padding(
             padding: const EdgeInsets.all(24),
-            child: ReportsTab(
+            child: ReportView(
               tournament: tournament,
               config: config,
               autoExport: true,
