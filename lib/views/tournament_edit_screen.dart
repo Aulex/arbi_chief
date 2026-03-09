@@ -298,11 +298,18 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
   List<Player> _available = [];
   bool _loading = true;
   String _search = '';
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -348,11 +355,38 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
       }
     }
 
+    Future<void> saveEdit(BuildContext dialogContext) async {
+      if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
+      await ref.read(playerProvider.notifier).updatePlayer(
+        player.copyWith(
+          player_name: nameC.text.trim(),
+          player_surname: surnameC.text.trim(),
+          player_lastname: lastnameC.text.trim(),
+          player_gender: gender,
+          player_date_birth: Player.formatForDB(dobC.text.trim()),
+        ),
+      );
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      _loadData();
+    }
+
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
-          return Dialog(
+          return Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.enter &&
+                  (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                   HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
+                saveEdit(dialogContext);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
@@ -455,27 +489,15 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
                             backgroundColor: Colors.indigo,
                             foregroundColor: Colors.white,
                           ),
-                          onPressed: () async {
-                            if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
-                            await ref.read(playerProvider.notifier).updatePlayer(
-                              player.copyWith(
-                                player_name: nameC.text.trim(),
-                                player_surname: surnameC.text.trim(),
-                                player_lastname: lastnameC.text.trim(),
-                                player_gender: gender,
-                                player_date_birth: Player.formatForDB(dobC.text.trim()),
-                              ),
-                            );
-                            if (dialogContext.mounted) Navigator.pop(dialogContext);
-                            _loadData();
-                          },
-                          child: const Text('Зберегти'),
+                          onPressed: () => saveEdit(dialogContext),
+                          child: const Text('Зберегти (Ctrl+Enter)'),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
+            ),
             ),
           );
         },
@@ -494,111 +516,19 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
   }
 
   void _showAddPlayerDialog() {
-    String dialogSearch = '';
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setST) {
-          final filtered = _available.where((p) {
-            if (dialogSearch.isEmpty) return true;
-            return p.fullName.toLowerCase().contains(dialogSearch.toLowerCase());
-          }).toList();
-
-          return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.person_add, color: Colors.indigo),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text('Додати гравця', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        ),
-                        TextButton.icon(
-                          onPressed: () {
-                            Navigator.pop(dialogContext);
-                            _showCreatePlayerDialog();
-                          },
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Створити нового'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Пошук гравця...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        isDense: true,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onChanged: (v) => setST(() => dialogSearch = v),
-                    ),
-                    const SizedBox(height: 12),
-                    Flexible(
-                      child: filtered.isEmpty
-                          ? const Center(child: Text('Немає доступних гравців'))
-                          : ListView.separated(
-                              shrinkWrap: true,
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final player = filtered[index];
-                                return ListTile(
-                                  dense: true,
-                                  title: Text(player.fullName),
-                                  subtitle: player.birthDateForUI.isNotEmpty
-                                      ? Text(player.birthDateForUI, style: const TextStyle(fontSize: 12))
-                                      : null,
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.add_circle_outline, color: Colors.green),
-                                    onPressed: () {
-                                      setState(() {
-                                        _available.removeWhere((p) => p.player_id == player.player_id);
-                                        _participants
-                                          ..add(player)
-                                          ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
-                                      });
-                                      ref.read(tournamentServiceProvider).addParticipant(widget.tId, player.player_id!);
-                                      setST(() {}); // refresh dialog list
-                                    },
-                                  ),
-                                  contentPadding: EdgeInsets.zero,
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text('Закрити'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showCreatePlayerDialog() {
     final nameC = TextEditingController();
     final surnameC = TextEditingController();
     final lastnameC = TextEditingController();
     final dobC = TextEditingController();
     int gender = 0;
+    String searchQuery = '';
+    Player? selectedExisting;
+    List<Player> allPlayers = [];
+
+    // Load all players for search
+    ref.read(playerProvider.future).then((players) {
+      allPlayers = players;
+    });
 
     Future<void> pickDate(BuildContext dialogContext, StateSetter setST) async {
       final picked = await showDatePicker(
@@ -616,148 +546,239 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
       }
     }
 
+    Future<void> savePlayer(BuildContext dialogContext) async {
+      if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
+
+      if (selectedExisting != null) {
+        // Update existing player data and add to tournament
+        await ref.read(playerProvider.notifier).updatePlayer(
+          selectedExisting!.copyWith(
+            player_name: nameC.text.trim(),
+            player_surname: surnameC.text.trim(),
+            player_lastname: lastnameC.text.trim(),
+            player_gender: gender,
+            player_date_birth: Player.formatForDB(dobC.text.trim()),
+          ),
+        );
+        await ref.read(tournamentServiceProvider).addParticipant(widget.tId, selectedExisting!.player_id!);
+      } else {
+        // Create new player
+        await ref.read(playerProvider.notifier).addPlayer(
+          name: nameC.text.trim(),
+          surname: surnameC.text.trim(),
+          lastname: lastnameC.text.trim(),
+          gender: gender,
+          dob: dobC.text.trim(),
+        );
+        // Auto-add newly created player to the tournament
+        final updatedPlayers = await ref.read(playerProvider.future);
+        final newPlayer = updatedPlayers
+            .where((p) =>
+                p.player_surname == surnameC.text.trim() &&
+                p.player_name == nameC.text.trim())
+            .lastOrNull;
+        if (newPlayer != null && newPlayer.player_id != null) {
+          await ref.read(tournamentServiceProvider).addParticipant(widget.tId, newPlayer.player_id!);
+        }
+      }
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      _loadData();
+    }
+
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
-          return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 500),
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.person_add_alt_1, color: Colors.indigo),
-                        SizedBox(width: 12),
-                        Text(
-                          'Створити нового гравця',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: surnameC,
-                            decoration: InputDecoration(
-                              labelText: 'Прізвище',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          final participantIds = _participants.map((p) => p.player_id).toSet();
+          final searchResults = searchQuery.length >= 2
+              ? allPlayers.where((p) {
+                  if (participantIds.contains(p.player_id)) return false;
+                  return p.fullName.toLowerCase().contains(searchQuery.toLowerCase());
+                }).take(8).toList()
+              : <Player>[];
+
+          return Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.enter &&
+                  (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                   HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
+                savePlayer(dialogContext);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 550),
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_add_alt_1, color: Colors.indigo),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Додати гравця',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextField(
-                            controller: nameC,
-                            decoration: InputDecoration(
-                              labelText: "Ім'я",
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          if (selectedExisting != null)
+                            Chip(
+                              label: Text(selectedExisting!.fullName, style: const TextStyle(fontSize: 12)),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setST(() {
+                                  selectedExisting = null;
+                                  nameC.clear();
+                                  surnameC.clear();
+                                  lastnameC.clear();
+                                  dobC.clear();
+                                  gender = 0;
+                                });
+                              },
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: lastnameC,
-                      decoration: InputDecoration(
-                        labelText: 'По батькові',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: dobC,
-                            readOnly: true,
+                      const SizedBox(height: 8),
+                      // Search bar for existing players
+                      Autocomplete<Player>(
+                        optionsBuilder: (textEditingValue) {
+                          if (textEditingValue.text.length < 2) return const Iterable<Player>.empty();
+                          return allPlayers.where((p) {
+                            if (participantIds.contains(p.player_id)) return false;
+                            return p.fullName.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                          }).take(8);
+                        },
+                        displayStringForOption: (player) => player.fullName,
+                        fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: textController,
+                            focusNode: focusNode,
                             decoration: InputDecoration(
-                              labelText: 'Дата народження',
+                              hintText: 'Пошук з бази гравців...',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              isDense: true,
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.calendar_today, size: 20),
-                                onPressed: () => pickDate(dialogContext, setST),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                            onChanged: (v) => setST(() => searchQuery = v),
+                          );
+                        },
+                        onSelected: (player) {
+                          setST(() {
+                            selectedExisting = player;
+                            surnameC.text = player.player_surname;
+                            nameC.text = player.player_name;
+                            lastnameC.text = player.player_lastname;
+                            dobC.text = player.birthDateForUI;
+                            gender = player.player_gender;
+                            searchQuery = '';
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: surnameC,
+                              decoration: InputDecoration(
+                                labelText: 'Прізвище',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                             ),
-                            onTap: () => pickDate(dialogContext, setST),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: DropdownButtonFormField<int>(
-                            value: gender,
-                            decoration: InputDecoration(
-                              labelText: 'Стать',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextField(
+                              controller: nameC,
+                              decoration: InputDecoration(
+                                labelText: "Ім'я",
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
                             ),
-                            items: const [
-                              DropdownMenuItem(value: 0, child: Text('Чоловіча')),
-                              DropdownMenuItem(value: 1, child: Text('Жіноча')),
-                            ],
-                            onChanged: (v) => setST(() => gender = v!),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: lastnameC,
+                        decoration: InputDecoration(
+                          labelText: 'По батькові',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: dobC,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'Дата народження',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.calendar_today, size: 20),
+                                  onPressed: () => pickDate(dialogContext, setST),
+                                ),
+                              ),
+                              onTap: () => pickDate(dialogContext, setST),
+                            ),
                           ),
-                          onPressed: () => Navigator.pop(dialogContext),
-                          child: const Text('Скасувати'),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: gender,
+                              decoration: InputDecoration(
+                                labelText: 'Стать',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 0, child: Text('Чоловіча')),
+                                DropdownMenuItem(value: 1, child: Text('Жіноча')),
+                              ],
+                              onChanged: (v) => setST(() => gender = v!),
+                            ),
                           ),
-                          onPressed: () async {
-                            if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
-                            await ref.read(playerProvider.notifier).addPlayer(
-                              name: nameC.text.trim(),
-                              surname: surnameC.text.trim(),
-                              lastname: lastnameC.text.trim(),
-                              gender: gender,
-                              dob: dobC.text.trim(),
-                            );
-                            // Auto-add newly created player to the tournament
-                            final allPlayers = await ref.read(playerProvider.future);
-                            final newPlayer = allPlayers
-                                .where((p) =>
-                                    p.player_surname == surnameC.text.trim() &&
-                                    p.player_name == nameC.text.trim())
-                                .lastOrNull;
-                            if (newPlayer != null && newPlayer.player_id != null) {
-                              await ref
-                                  .read(tournamentServiceProvider)
-                                  .addParticipant(widget.tId, newPlayer.player_id!);
-                            }
-                            if (dialogContext.mounted) Navigator.pop(dialogContext);
-                            _loadData();
-                          },
-                          child: const Text('Створити'),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Скасувати'),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () => savePlayer(dialogContext),
+                            child: Text(selectedExisting != null ? 'Додати (Ctrl+Enter)' : 'Створити (Ctrl+Enter)'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -775,7 +796,20 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
         ? _participants
         : _participants.where((p) => p.fullName.toLowerCase().contains(_search.toLowerCase())).toList();
 
-    return Card(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.insert ||
+              event.logicalKey == LogicalKeyboardKey.numpadAdd) {
+            _showAddPlayerDialog();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: Colors.grey.shade300, width: 1),
@@ -864,6 +898,7 @@ class _TournamentPlayersTabState extends ConsumerState<_TournamentPlayersTab> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -2552,6 +2587,13 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
   Map<int, Player> _playerMap = {};
   int? _selectedTeamId;
   String _teamSearch = '';
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -2746,37 +2788,53 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
 
   void _showEditTeamDialog(Team team) {
     final nameC = TextEditingController(text: team.team_name);
+
+    Future<void> saveEdit(BuildContext ctx) async {
+      final name = nameC.text.trim();
+      if (name.isEmpty || name == team.team_name) {
+        Navigator.pop(ctx);
+        return;
+      }
+      await ref.read(teamProvider.notifier).updateTeam(team.copyWith(team_name: name));
+      if (ctx.mounted) Navigator.pop(ctx);
+      _reloadData();
+    }
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Редагувати команду'),
-        content: TextField(
-          controller: nameC,
-          decoration: const InputDecoration(
-            labelText: 'Назва команди',
-            isDense: true,
-            border: OutlineInputBorder(),
+      builder: (ctx) => Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter &&
+              (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+               HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
+            saveEdit(ctx);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: AlertDialog(
+          title: const Text('Редагувати команду'),
+          content: TextField(
+            controller: nameC,
+            decoration: const InputDecoration(
+              labelText: 'Назва команди',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Скасувати'),
+            ),
+            ElevatedButton(
+              onPressed: () => saveEdit(ctx),
+              child: const Text('Зберегти (Ctrl+Enter)'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Скасувати'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameC.text.trim();
-              if (name.isEmpty || name == team.team_name) {
-                Navigator.pop(ctx);
-                return;
-              }
-              await ref.read(teamProvider.notifier).updateTeam(team.copyWith(team_name: name));
-              if (ctx.mounted) Navigator.pop(ctx);
-              _reloadData();
-            },
-            child: const Text('Зберегти'),
-          ),
-        ],
       ),
     );
   }
@@ -2784,54 +2842,162 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
   void _showAddTeamDialog() {
     final nameC = TextEditingController();
     final numberC = TextEditingController(text: '${_teamData.length + 1}');
+    Team? selectedExisting;
+    List<Team> allTeams = [];
+
+    // Load all teams for search
+    ref.read(teamProvider.future).then((teams) {
+      allTeams = teams;
+    });
+
+    Future<void> saveTeam(BuildContext ctx) async {
+      final name = nameC.text.trim();
+      if (name.isEmpty) return;
+      final num = int.tryParse(numberC.text.trim()) ?? (_teamData.length + 1);
+
+      if (selectedExisting != null) {
+        // Register existing team in tournament
+        final service = ref.read(teamServiceProvider);
+        await service.registerTeamInTournament(selectedExisting!.team_id!, widget.tournament.t_id!, num);
+      } else {
+        // Create new team and register
+        final newTeam = await ref.read(teamProvider.notifier).addTeam(name: name);
+        final service = ref.read(teamServiceProvider);
+        await service.registerTeamInTournament(newTeam.team_id!, widget.tournament.t_id!, num);
+      }
+      if (ctx.mounted) Navigator.pop(ctx);
+      _reloadData();
+    }
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Додати команду'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameC,
-              decoration: const InputDecoration(
-                labelText: 'Назва команди',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: numberC,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Номер команди',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Скасувати'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameC.text.trim();
-              if (name.isEmpty) return;
-              final num = int.tryParse(numberC.text.trim()) ?? (_teamData.length + 1);
-              // Create team and register it in the tournament
-              final newTeam = await ref.read(teamProvider.notifier).addTeam(name: name);
-              final service = ref.read(teamServiceProvider);
-              await service.registerTeamInTournament(newTeam.team_id!, widget.tournament.t_id!, num);
-              if (ctx.mounted) Navigator.pop(ctx);
-              _reloadData();
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setST) {
+          final registeredTeamIds = _teamData.map((d) => d.team.team_id).toSet();
+
+          return Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.enter &&
+                  (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                   HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
+                saveTeam(ctx);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
             },
-            child: const Text('Зберегти'),
-          ),
-        ],
+            child: Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.groups_outlined, color: Colors.indigo),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Додати команду',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          if (selectedExisting != null)
+                            Chip(
+                              label: Text(selectedExisting!.team_name, style: const TextStyle(fontSize: 12)),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setST(() {
+                                  selectedExisting = null;
+                                  nameC.clear();
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Search bar for existing teams
+                      Autocomplete<Team>(
+                        optionsBuilder: (textEditingValue) {
+                          if (textEditingValue.text.length < 2) return const Iterable<Team>.empty();
+                          return allTeams.where((t) {
+                            if (registeredTeamIds.contains(t.team_id)) return false;
+                            return t.team_name.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                          }).take(8);
+                        },
+                        displayStringForOption: (team) => team.team_name,
+                        fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: textController,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              hintText: 'Пошук з бази команд...',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              isDense: true,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          );
+                        },
+                        onSelected: (team) {
+                          setST(() {
+                            selectedExisting = team;
+                            nameC.text = team.team_name;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: nameC,
+                        decoration: InputDecoration(
+                          labelText: 'Назва команди',
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: numberC,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Номер команди',
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Скасувати'),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => saveTeam(ctx),
+                            child: Text(selectedExisting != null ? 'Додати (Ctrl+Enter)' : 'Створити (Ctrl+Enter)'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -2868,7 +3034,20 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
         ? _teamData.where((d) => d.team.team_id == _selectedTeamId).firstOrNull
         : null;
 
-    return Row(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.insert ||
+              event.logicalKey == LogicalKeyboardKey.numpadAdd) {
+            _showAddTeamDialog();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Left panel: team list
@@ -3115,6 +3294,7 @@ class _TournamentTeamsTabState extends ConsumerState<_TournamentTeamsTab> {
           ),
         ),
       ],
+    ),
     );
   }
 }
