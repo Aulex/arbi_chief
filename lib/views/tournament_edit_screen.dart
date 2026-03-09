@@ -1894,8 +1894,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
-                _tableCell('Р${widget.config.boardAbbrev}', style: headerStyle),
-                _tableCell('Ж${widget.config.boardAbbrev}', style: headerStyle),
+                _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
+                _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
                 _tableCell('Місце', style: headerStyle),
               ],
             ),
@@ -3555,15 +3555,15 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       final cellSt = pw.TextStyle(fontSize: 8, font: fontRegular);
       final cellBold = pw.TextStyle(fontSize: 8, font: fontBold, fontWeight: pw.FontWeight.bold);
 
-      // Header: №, Команда, [team1..teamN], Очки, Р.Д., Ж.Р., Місце
+      // Header: №, Команда, [team1..teamN], Очки, Д1/Р1, Д3/Р3, Місце
       final teamHdrCells = <pw.Widget>[
         _pdfCell('№', hdrStyle),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < tn; i++)
           _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
-        _pdfCell('Р${widget.config.boardAbbrev}', hdrStyle),
-        _pdfCell('Ж${widget.config.boardAbbrev}', hdrStyle),
+        _pdfCell('${widget.config.boardAbbrev}1', hdrStyle),
+        _pdfCell('${widget.config.boardAbbrev}${widget.config.boardCount}', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
 
