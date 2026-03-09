@@ -1998,7 +1998,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                 ],
               ),
               for (final boardNum in boardNums)
-                _buildBoardMatchRow(boardNum, teamAId, teamBId),
+                _buildBoardMatchRow(boardNum, teamAId, teamBId, dialogContext: ctx, teamMap: teamMap),
               // Total row
               TableRow(
                 decoration: BoxDecoration(color: Colors.grey.shade100),
@@ -2022,7 +2022,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     );
   }
 
-  TableRow _buildBoardMatchRow(int boardNum, int teamAId, int teamBId) {
+  TableRow _buildBoardMatchRow(int boardNum, int teamAId, int teamBId, {BuildContext? dialogContext, Map<int, ({String teamName, int? teamNumber})>? teamMap}) {
     final playersOnBoard = _boardPlayers[boardNum] ?? [];
     final playerA = playersOnBoard.where((p) => p.teamId == teamAId).firstOrNull;
     final playerB = playersOnBoard.where((p) => p.teamId == teamBId).firstOrNull;
@@ -2047,12 +2047,59 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       }
     }
 
+    final canEdit = playerA != null && playerB != null && dialogContext != null && teamMap != null;
+
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+
+    Widget scoreCell;
+    if (canEdit) {
+      final displayText = scoreText.isEmpty ? '—' : scoreText;
+      final displayColor = scoreText.isEmpty ? Colors.grey.shade400 : scoreColor;
+      scoreCell = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () {
+            final rowId = playerA.player.player_id!;
+            final colId = playerB.player.player_id!;
+            final currentResult = _boardResults[boardNum]?[rowId]?[colId];
+            // Close the team details dialog first
+            Navigator.pop(dialogContext);
+            // Show result picker
+            _showResultPicker(
+              context,
+              rowPlayerId: rowId,
+              colPlayerId: colId,
+              rowPlayerName: aName,
+              colPlayerName: bName,
+              currentResult: currentResult,
+              boardNum: boardNum,
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            alignment: Alignment.center,
+            color: Colors.transparent,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(displayText, textAlign: TextAlign.center, style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: displayColor)),
+                const SizedBox(width: 4),
+                Icon(Icons.edit_outlined, size: 12, color: Colors.grey.shade400),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      scoreCell = _tableCell(scoreText, style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: scoreColor));
+    }
+
     return TableRow(
       children: [
         _tableCell('${widget.config.boardAbbrev}$boardNum', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
         _tableCell(aName, style: cellStyle, minWidth: 120, leftAlign: true),
-        _tableCell(scoreText, style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: scoreColor)),
+        scoreCell,
         _tableCell(bName, style: cellStyle, minWidth: 120, leftAlign: true),
       ],
     );
@@ -2385,7 +2432,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
     }
 
     return Container(
-      constraints: BoxConstraints(minWidth: _isTableTennis ? 72 : 36, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
       color: bgColor ?? Colors.transparent,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
@@ -2395,7 +2442,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
               text,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: _isTableTennis ? 10 : 12,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: result == 1.0 ? Colors.green.shade700
                     : result == 0.0 && result != null ? Colors.red.shade700
@@ -2448,7 +2495,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
           boardNum: boardNum,
         ),
         child: Container(
-          constraints: BoxConstraints(minWidth: _isTableTennis ? 72 : 36, minHeight: 32),
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           color: bgColor ?? Colors.transparent,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
@@ -2458,7 +2505,7 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                   text,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: _isTableTennis ? 10 : 12,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: result == 1.0 ? Colors.green.shade700
                         : result == 0.0 && result != null ? Colors.red.shade700
@@ -2484,8 +2531,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
       if (a > b) rowWins++;
       else if (b > a) colWins++;
     }
-    // Show set score + individual game scores
-    return '$rowWins:$colWins\n(${sets.join(', ')})';
+    // Show only game result (e.g. 2-0, 2-1)
+    return '$rowWins:$colWins';
   }
 }
 
