@@ -1894,8 +1894,8 @@ class _CrossTableTabState extends ConsumerState<_CrossTableTab>
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
-                _tableCell('Р.Д.', style: headerStyle),
-                _tableCell('Ж.${widget.config.boardAbbrev}.', style: headerStyle),
+                _tableCell('Р${widget.config.boardAbbrev}', style: headerStyle),
+                _tableCell('Ж${widget.config.boardAbbrev}', style: headerStyle),
                 _tableCell('Місце', style: headerStyle),
               ],
             ),
@@ -3562,8 +3562,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         for (int i = 0; i < tn; i++)
           _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
-        _pdfCell('Р.Д.', hdrStyle),
-        _pdfCell('Ж.${widget.config.boardAbbrev}.', hdrStyle),
+        _pdfCell('Р${widget.config.boardAbbrev}', hdrStyle),
+        _pdfCell('Ж${widget.config.boardAbbrev}', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
 
