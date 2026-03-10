@@ -1067,14 +1067,19 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         title: Container(
           decoration: BoxDecoration(
-            color: Colors.indigo.shade50,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            gradient: LinearGradient(
+              colors: [Colors.indigo.shade400, Colors.indigo.shade600],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           child: Column(
             children: [
               Row(
@@ -1083,54 +1088,65 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     child: Text(
                       teamAName,
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6, offset: const Offset(0, 2)),
+                      ],
                     ),
                     child: Text(
                       '${_formatPoints(totalScore.a)} : ${_formatPoints(totalScore.b)}',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: totalColor),
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: totalColor),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       teamBName,
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Очки: ${matchPts.a.toInt()} : ${matchPts.b.toInt()}',
-                style: TextStyle(fontSize: 12, color: Colors.indigo.shade400),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Очки: ${matchPts.a.toInt()} : ${matchPts.b.toInt()}',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
               ),
             ],
           ),
         ),
         content: SizedBox(
-          width: 440,
+          width: 460,
           child: Table(
             border: TableBorder(
               horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-              bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-              top: BorderSide(color: Colors.grey.shade300, width: 1),
             ),
             defaultColumnWidth: const IntrinsicColumnWidth(),
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
               TableRow(
-                decoration: BoxDecoration(color: Colors.grey.shade50),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                ),
                 children: [
-                  _tableCell(widget.config.boardLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey.shade600)),
+                  _tableCell(widget.config.boardLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo.shade400)),
                   _tableCell(teamAName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo.shade700), minWidth: 120, leftAlign: true),
-                  _tableCell('Рахунок', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey.shade600)),
+                  _tableCell('Рахунок', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.indigo.shade400)),
                   _tableCell(teamBName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo.shade700), minWidth: 120, leftAlign: true),
                 ],
               ),
@@ -1139,9 +1155,12 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             ],
           ),
         ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрити')),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Закрити'),
+          ),
         ],
       ),
     );
@@ -1152,6 +1171,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final playerA = playersOnBoard.where((p) => p.teamId == teamAId).firstOrNull;
     final playerB = playersOnBoard.where((p) => p.teamId == teamBId).firstOrNull;
 
+    final aIsPhantom = playerA != null && _absentPlayerIds.contains(playerA.player.player_id);
+    final bIsPhantom = playerB != null && _absentPlayerIds.contains(playerB.player.player_id);
+    final hasPhantom = aIsPhantom || bIsPhantom;
+
     final aName = playerA != null
         ? '${playerA.player.player_surname} ${playerA.player.player_name}'
         : '—';
@@ -1161,7 +1184,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     String scoreText = '';
     Color scoreColor = Colors.black87;
-    if (playerA != null && playerB != null) {
+    if (hasPhantom && playerA != null && playerB != null) {
+      // Phantom player game: always show 0 : 0
+      scoreText = '0 : 0';
+      scoreColor = Colors.grey.shade500;
+    } else if (playerA != null && playerB != null) {
       final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
       final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
       if (aResult != null && bResult != null) {
@@ -1172,9 +1199,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       }
     }
 
-    final canEdit = playerA != null && playerB != null && dialogContext != null && teamMap != null;
+    // Don't allow editing phantom player games
+    final canEdit = playerA != null && playerB != null && !hasPhantom && dialogContext != null && teamMap != null;
 
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    final phantomStyle = TextStyle(fontSize: 12, color: Colors.grey.shade500, fontStyle: FontStyle.italic);
 
     Widget scoreCell;
     if (canEdit) {
@@ -1223,9 +1252,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     return TableRow(
       children: [
         _tableCell('${widget.config.boardAbbrev}$boardNum', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
-        _tableCell(aName, style: cellStyle, minWidth: 120, leftAlign: true),
+        _tableCell(aName, style: aIsPhantom ? phantomStyle : cellStyle, minWidth: 120, leftAlign: true),
         scoreCell,
-        _tableCell(bName, style: cellStyle, minWidth: 120, leftAlign: true),
+        _tableCell(bName, style: bIsPhantom ? phantomStyle : cellStyle, minWidth: 120, leftAlign: true),
       ],
     );
   }
