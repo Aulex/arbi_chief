@@ -474,28 +474,32 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               ),
               actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               actions: [
-                if (currentResult != null)
-                  TextButton.icon(
-                    icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _onResultSelected(rowPlayerId, colPlayerId, null);
-                    },
-                    label: Text('Очистити', style: TextStyle(color: Colors.red.shade400)),
-                  ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Скасувати'),
-                ),
-                const SizedBox(width: 4),
-                FilledButton.icon(
-                  icon: const Icon(Icons.check, size: 18),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
-                  },
-                  label: const Text('Зберегти'),
+                Row(
+                  children: [
+                    if (currentResult != null)
+                      TextButton.icon(
+                        icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _onResultSelected(rowPlayerId, colPlayerId, null);
+                        },
+                        label: Text('Очистити', style: TextStyle(color: Colors.red.shade400)),
+                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Скасувати'),
+                    ),
+                    const SizedBox(width: 4),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
+                      },
+                      label: const Text('Зберегти'),
+                    ),
+                  ],
                 ),
               ],
             );
