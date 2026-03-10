@@ -218,6 +218,92 @@ class ReportService {
     return (a: 0.0, b: 0.0);
   }
 
+  ({int won, int lost}) _countSetsFromDetail(String detail) {
+    int won = 0;
+    int lost = 0;
+    for (final s in detail.split(' ')) {
+      final parts = s.split(':');
+      if (parts.length != 2) continue;
+      final a = int.tryParse(parts[0]);
+      final b = int.tryParse(parts[1]);
+      if (a == null || b == null) continue;
+      if (a > b) won++;
+      else if (b > a) lost++;
+    }
+    return (won: won, lost: lost);
+  }
+
+  ({int scored, int conceded}) _countBallsFromDetail(String detail) {
+    int scored = 0;
+    int conceded = 0;
+    for (final s in detail.split(' ')) {
+      final parts = s.split(':');
+      if (parts.length != 2) continue;
+      scored += int.tryParse(parts[0]) ?? 0;
+      conceded += int.tryParse(parts[1]) ?? 0;
+    }
+    return (scored: scored, conceded: conceded);
+  }
+
+  int teamDirectSetDiff(ReportData data, int teamAId, int teamBId) {
+    int setsWon = 0;
+    int setsLost = 0;
+    for (final boardEntry in data.boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
+      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
+      if (playerA == null || playerB == null) continue;
+      final aId = playerA.player.player_id!;
+      final bId = playerB.player.player_id!;
+      if (aId < 0 || bId < 0) continue;
+      final detail = data.boardResultDetails[boardNum]?[aId]?[bId];
+      if (detail == null || detail.isEmpty) continue;
+      final sets = _countSetsFromDetail(detail);
+      setsWon += sets.won;
+      setsLost += sets.lost;
+    }
+    return setsWon - setsLost;
+  }
+
+  int teamDirectBallDiff(ReportData data, int teamAId, int teamBId) {
+    int scored = 0;
+    int conceded = 0;
+    for (final boardEntry in data.boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
+      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
+      if (playerA == null || playerB == null) continue;
+      final aId = playerA.player.player_id!;
+      final bId = playerB.player.player_id!;
+      if (aId < 0 || bId < 0) continue;
+      final detail = data.boardResultDetails[boardNum]?[aId]?[bId];
+      if (detail == null || detail.isEmpty) continue;
+      final balls = _countBallsFromDetail(detail);
+      scored += balls.scored;
+      conceded += balls.conceded;
+    }
+    return scored - conceded;
+  }
+
+  int teamTotalSetDiff(ReportData data, int teamId) {
+    int setsWon = 0;
+    int setsLost = 0;
+    for (final boardEntry in data.boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final player = boardEntry.value.where((p) => p.teamId == teamId).firstOrNull;
+      if (player == null) continue;
+      final pId = player.player.player_id!;
+      if (pId < 0) continue;
+      final details = data.boardResultDetails[boardNum]?[pId] ?? {};
+      for (final detail in details.values) {
+        final sets = _countSetsFromDetail(detail);
+        setsWon += sets.won;
+        setsLost += sets.lost;
+      }
+    }
+    return setsWon - setsLost;
+  }
+
   // ---------------------------------------------------------------------------
   // Formatting helpers
   // ---------------------------------------------------------------------------
@@ -435,24 +521,22 @@ class ReportService {
     if (teamMap.isNotEmpty) {
       final teamIds = teamMap.keys.toList();
       final teamPoints = <int, double>{};
-      final teamBoardDiff = <int, double>{};
       final teamBoard3Pts = <int, double>{};
       for (final aId in teamIds) {
         double total = 0;
-        double boardWins = 0;
-        double boardLosses = 0;
         for (final bId in teamIds) {
           if (aId == bId) continue;
           total += teamMatchPoints(data, aId, bId).a;
-          final score = teamMatchScore(data, aId, bId);
-          boardWins += score.a;
-          boardLosses += score.b;
         }
         teamPoints[aId] = total;
-        teamBoardDiff[aId] = boardWins - boardLosses;
         final lastBoard = config.boardCount;
         final b3p = (data.boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
         teamBoard3Pts[aId] = b3p != null ? totalPoints(data, lastBoard, b3p.player.player_id!) : 0;
+      }
+
+      final teamTotalSetDiffMap = <int, int>{};
+      for (final id in teamIds) {
+        teamTotalSetDiffMap[id] = teamTotalSetDiff(data, id);
       }
 
       teamIds.sort((a, b) {
@@ -462,13 +546,15 @@ class ReportService {
         final h2h = teamMatchPoints(data, a, b);
         if (h2h.a > h2h.b) return -1;
         if (h2h.b > h2h.a) return 1;
-        final directScore = teamMatchScore(data, a, b);
-        final directDiffA = directScore.a - directScore.b;
-        final directDiffB = directScore.b - directScore.a;
-        if (directDiffA != directDiffB) return directDiffB.compareTo(directDiffA);
-        final bdA = teamBoardDiff[a]!;
-        final bdB = teamBoardDiff[b]!;
-        if (bdA != bdB) return bdB.compareTo(bdA);
+        final setDiffA = teamDirectSetDiff(data, a, b);
+        final setDiffB = teamDirectSetDiff(data, b, a);
+        if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+        final ballDiffA = teamDirectBallDiff(data, a, b);
+        final ballDiffB = teamDirectBallDiff(data, b, a);
+        if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+        final tsdA = teamTotalSetDiffMap[a]!;
+        final tsdB = teamTotalSetDiffMap[b]!;
+        if (tsdA != tsdB) return tsdB.compareTo(tsdA);
         return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
       });
 
@@ -483,7 +569,7 @@ class ReportService {
         for (int i = 0; i < tn; i++)
           _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
-        _pdfCell('${config.boardAbbrev}1', hdrStyle),
+        _pdfCell('Сети', hdrStyle),
         _pdfCell('${config.boardAbbrev}${config.boardCount}', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
@@ -508,7 +594,7 @@ class ReportService {
             else
               _pdfTeamResultCell(data, tid, teamIds[j], cellSt, cellBold),
           _pdfCell(fmtPts(teamPoints[tid]!), cellBold),
-          _pdfCell(fmtPts(teamBoardDiff[tid]!), cellSt),
+          _pdfCell('${teamTotalSetDiffMap[tid]! >= 0 ? '+' : ''}${teamTotalSetDiffMap[tid]!}', cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
           _pdfCell('${i + 1}', cellBold),
         ];
