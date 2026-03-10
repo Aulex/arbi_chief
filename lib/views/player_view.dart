@@ -241,7 +241,7 @@ class PlayerView extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildField(surnameC, 'Прізвище'),
+                          child: _buildField(surnameC, 'Прізвище', autofocus: !isEdit),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -357,9 +357,10 @@ class PlayerView extends ConsumerWidget {
     );
   }
 
-  Widget _buildField(TextEditingController c, String label) {
+  Widget _buildField(TextEditingController c, String label, {bool autofocus = false}) {
     return TextField(
       controller: c,
+      autofocus: autofocus,
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),

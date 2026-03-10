@@ -1617,43 +1617,91 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final isNoShow = _absentPlayerIds.contains(player.player.player_id);
     showDialog(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(name, style: const TextStyle(fontSize: 16)),
-        children: [
-          if (!isNoShow)
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _markPlayerNoShow(boardNum, player, allPlayers);
-              },
-              child: Row(children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.person_off, size: 18, color: Colors.red.shade800),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(Icons.person, color: Colors.indigo.shade700, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  name,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
                 ),
-                const SizedBox(width: 12),
-                const Text('Неявка'),
-              ]),
-            ),
-          if (isNoShow)
-            SimpleDialogOption(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _clearPlayerNoShow(player);
-              },
-              child: Row(children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(6)),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.person_add, size: 18, color: Colors.blue.shade800),
+              ),
+              Text(
+                player.teamName,
+                style: TextStyle(fontSize: 12, color: Colors.indigo.shade400),
+              ),
+            ],
+          ),
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isNoShow)
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _markPlayerNoShow(boardNum, player, allPlayers);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
+                      alignment: Alignment.center,
+                      child: Icon(Icons.person_off, size: 18, color: Colors.red.shade800),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Неявка'),
+                  ]),
                 ),
-                const SizedBox(width: 12),
-                const Text('Очистити'),
-              ]),
-            ),
+              ),
+            if (isNoShow)
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _clearPlayerNoShow(player);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(6)),
+                      alignment: Alignment.center,
+                      child: Icon(Icons.person_add, size: 18, color: Colors.blue.shade800),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Очистити'),
+                  ]),
+                ),
+              ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрити')),
         ],
       ),
     );

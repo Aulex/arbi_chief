@@ -8,6 +8,7 @@ import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
+import '../viewmodels/tournament_viewmodel.dart';
 
 /// Teams tab — two panels: team list (left) and player-to-team assignment (right).
 class TournamentTeamsTab extends ConsumerStatefulWidget {
@@ -44,9 +45,10 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
     final tId = widget.tournament.t_id!;
     final data = await teamSvc.getTeamsForTournament(tId);
 
-    final players = await ref.read(playerProvider.future);
+    final tournamentSvc = ref.read(tournamentServiceProvider);
+    final participants = await tournamentSvc.getParticipants(tId);
     final pMap = <int, Player>{
-      for (final p in players)
+      for (final p in participants)
         if (p.player_id != null) p.player_id!: p
     };
 

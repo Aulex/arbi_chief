@@ -413,6 +413,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           Expanded(
                             child: TextField(
                               controller: surnameC,
+                              autofocus: true,
                               decoration: InputDecoration(
                                 labelText: 'Прізвище',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
