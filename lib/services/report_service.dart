@@ -122,6 +122,11 @@ class ReportService {
     return (data.boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
   }
 
+  /// Display points: for table tennis, a win gives 2 pts (multiplied).
+  double displayPoints(ReportData data, int boardNum, int playerId, bool isTableTennis) {
+    return totalPoints(data, boardNum, playerId) * (isTableTennis ? 2 : 1);
+  }
+
   double bergerCoefficient(ReportData data, int boardNum, int playerId) {
     final results = data.boardResults[boardNum]?[playerId] ?? {};
     double sb = 0;
@@ -348,7 +353,7 @@ class ReportService {
                     : fmtResult(data.boardResults[boardNum]?[pId]?[players[j].player.player_id!]),
                 cellSt,
               ),
-          _pdfCell(fmtPts(totalPoints(data, boardNum, pId)), cellBold),
+          _pdfCell(fmtPts(displayPoints(data, boardNum, pId, isTT)), cellBold),
           _pdfCell('${gamesPlayed(data, boardNum, pId)}', cellSt),
           if (!isTT) _pdfCell(fmtPts(bergerCoefficient(data, boardNum, pId)), cellSt),
           if (isTT) _pdfCell('${totalBalls(data, boardNum, pId).scored}', cellSt),
@@ -356,7 +361,7 @@ class ReportService {
           _pdfCell('${s.teamNumber ?? ''}', cellSt),
           _pdfCell('${s.player.player_surname} ${s.player.player_name}'.trim(), cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
-          _pdfCell(fmtPts(totalPoints(data, boardNum, sId)), cellBold),
+          _pdfCell(fmtPts(displayPoints(data, boardNum, sId, isTT)), cellBold),
           if (!isTT) _pdfCell(fmtPts(bergerCoefficient(data, boardNum, sId)), cellSt),
           if (isTT) _pdfCell('${totalBalls(data, boardNum, sId).scored}', cellSt),
           if (isTT) _pdfCell('${totalBalls(data, boardNum, sId).conceded}', cellSt),

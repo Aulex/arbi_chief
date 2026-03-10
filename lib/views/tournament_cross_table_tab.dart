@@ -189,28 +189,58 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     }
     showDialog(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text('$rowPlayerName  vs  $colPlayerName', style: const TextStyle(fontSize: 16)),
-        children: [
-          _resultOption(ctx, label: 'Перемога', symbol: '1', color: Colors.green, value: 1.0, current: currentResult),
-          _resultOption(ctx, label: 'Нічия', symbol: '½', color: Colors.amber, value: 0.5, current: currentResult),
-          _resultOption(ctx, label: 'Поразка', symbol: '0', color: Colors.red, value: 0.0, current: currentResult),
-          if (currentResult != null) ...[
-            const Divider(),
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, -1.0),
-              child: Row(children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(6)),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.close, size: 18, color: Colors.grey.shade700),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  rowPlayerName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
                 ),
-                const SizedBox(width: 12),
-                const Text('Очистити'),
-              ]),
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('vs', style: TextStyle(fontSize: 13, color: Colors.indigo.shade400)),
+              ),
+              Expanded(
+                child: Text(
+                  colPlayerName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                ),
+              ),
+            ],
+          ),
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _resultOptionCard(ctx, label: 'Перемога', symbol: '1', color: Colors.green, value: 1.0, current: currentResult),
+            const SizedBox(height: 6),
+            _resultOptionCard(ctx, label: 'Нічия', symbol: '½', color: Colors.amber, value: 0.5, current: currentResult),
+            const SizedBox(height: 6),
+            _resultOptionCard(ctx, label: 'Поразка', symbol: '0', color: Colors.red, value: 0.0, current: currentResult),
+            if (currentResult != null) ...[
+              const SizedBox(height: 10),
+              Divider(height: 1, color: Colors.grey.shade200),
+              const SizedBox(height: 6),
+              _resultOptionCard(ctx, label: 'Очистити', symbol: '×', color: Colors.grey, value: -1.0, current: currentResult),
+            ],
           ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
         ],
       ),
     ).then((value) {
@@ -259,104 +289,216 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 else if (c > r) colWins++;
               }
             }
+            // Also count 3rd set if not disabled
+            if (rowWins < 2 && colWins < 2) {
+              final r3 = int.tryParse(controllers[2].row.text) ?? 0;
+              final c3 = int.tryParse(controllers[2].col.text) ?? 0;
+              if (r3 > 0 || c3 > 0) {
+                if (r3 > c3) rowWins++;
+                else if (c3 > r3) colWins++;
+              }
+            }
             final thirdSetDisabled = rowWins >= 2 || colWins >= 2;
             if (thirdSetDisabled) {
               controllers[2].row.text = '';
               controllers[2].col.text = '';
             }
 
+            // Determine live result for preview
+            final hasResult = rowWins > 0 || colWins > 0;
+            Color scoreColor = Colors.black54;
+            if (hasResult) {
+              if (rowWins > colWins) scoreColor = Colors.green.shade700;
+              else if (colWins > rowWins) scoreColor = Colors.red.shade700;
+              else scoreColor = Colors.amber.shade800;
+            }
+
             return AlertDialog(
-              title: Text('$rowPlayerName  vs  $colPlayerName', style: const TextStyle(fontSize: 15)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: EdgeInsets.zero,
+              title: Container(
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.sports_tennis, color: Colors.indigo.shade400, size: 20),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                rowPlayerName,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            hasResult ? '$rowWins : $colWins' : 'vs',
+                            style: TextStyle(
+                              fontSize: hasResult ? 22 : 14,
+                              fontWeight: FontWeight.bold,
+                              color: scoreColor,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.sports_tennis, color: Colors.indigo.shade400, size: 20),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                colPlayerName,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
               content: SizedBox(
-                width: 320,
+                width: 300,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header row
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 40),
-                          Expanded(child: Text(rowPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                          const SizedBox(width: 16),
-                          Expanded(child: Text(colPlayerName.split(' ').first, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: 4),
                     // Set rows
                     for (int i = 0; i < 3; i++)
                       Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: Row(
-                          children: [
-                            SizedBox(width: 40, child: Text('Сет ${i + 1}', style: TextStyle(fontSize: 12, color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade300 : Colors.black54))),
-                            Expanded(
-                              child: TextField(
-                                controller: controllers[i].row,
-                                enabled: !(i == 2 && thirdSetDisabled),
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                  filled: (i == 2 && thirdSetDisabled),
-                                  fillColor: Colors.grey.shade100,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade50 : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade200 : Colors.grey.shade300,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade100 : Colors.indigo.shade50,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                                onChanged: (_) => setST(() {}),
-                              ),
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 6),
-                              child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            ),
-                            Expanded(
-                              child: TextField(
-                                controller: controllers[i].col,
-                                enabled: !(i == 2 && thirdSetDisabled),
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                  filled: (i == 2 && thirdSetDisabled),
-                                  fillColor: Colors.grey.shade100,
+                                child: Text(
+                                  'Сет ${i + 1}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade400 : Colors.indigo.shade700,
+                                  ),
                                 ),
-                                onChanged: (_) => setST(() {}),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: controllers[i].row,
+                                  enabled: !(i == 2 && thirdSetDisabled),
+                                  keyboardType: TextInputType.number,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                                    filled: true,
+                                    fillColor: (i == 2 && thirdSetDisabled) ? Colors.grey.shade100 : Colors.grey.shade100,
+                                    hintText: '0',
+                                    hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal),
+                                  ),
+                                  onChanged: (_) => setST(() {}),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade300 : Colors.black54)),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: controllers[i].col,
+                                  enabled: !(i == 2 && thirdSetDisabled),
+                                  keyboardType: TextInputType.number,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                                    filled: true,
+                                    fillColor: (i == 2 && thirdSetDisabled) ? Colors.grey.shade100 : Colors.grey.shade100,
+                                    hintText: '0',
+                                    hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal),
+                                  ),
+                                  onChanged: (_) => setST(() {}),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                   ],
                 ),
               ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               actions: [
                 if (currentResult != null)
-                  TextButton(
+                  TextButton.icon(
+                    icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
                     onPressed: () {
                       Navigator.pop(ctx);
                       _onResultSelected(rowPlayerId, colPlayerId, null);
                     },
-                    child: Text('Очистити', style: TextStyle(color: Colors.grey.shade700)),
+                    label: Text('Очистити', style: TextStyle(color: Colors.red.shade400)),
                   ),
+                const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Скасувати'),
                 ),
-                FilledButton(
+                const SizedBox(width: 4),
+                FilledButton.icon(
+                  icon: const Icon(Icons.check, size: 18),
                   onPressed: () {
                     Navigator.pop(ctx);
                     _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
                   },
                   child: const Text('Зберегти'),
-              ),
-            ],
-          );
+                ),
+              ],
+            );
           },
         );
       },
@@ -416,33 +558,54 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     await _loadData();
   }
 
-  Widget _resultOption(BuildContext ctx, {
+  Widget _resultOptionCard(BuildContext ctx, {
     required String label,
     required String symbol,
     required MaterialColor color,
     required double value,
     required double? current,
   }) {
-    return SimpleDialogOption(
-      onPressed: () => Navigator.pop(ctx, value),
-      child: Row(children: [
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(color: color.shade100, borderRadius: BorderRadius.circular(6)),
-          alignment: Alignment.center,
-          child: Text(symbol, style: TextStyle(fontWeight: FontWeight.bold, color: color.shade800)),
+    final isSelected = current == value;
+    return Material(
+      color: isSelected ? color.shade50 : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => Navigator.pop(ctx, value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isSelected ? color.shade300 : Colors.grey.shade200),
+          ),
+          child: Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: color.shade100, borderRadius: BorderRadius.circular(8)),
+              alignment: Alignment.center,
+              child: Text(symbol, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color.shade800)),
+            ),
+            const SizedBox(width: 14),
+            Text(label, style: TextStyle(fontSize: 14, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+            if (isSelected) ...[const Spacer(), Icon(Icons.check_circle, color: color.shade600, size: 22)],
+          ]),
         ),
-        const SizedBox(width: 12),
-        Text(label),
-        if (current == value) ...[const Spacer(), Icon(Icons.check, color: color.shade700, size: 20)],
-      ]),
+      ),
     );
   }
 
   // --- Calculations ---
 
+  /// Raw points multiplier: 2 for racket sports (TT), 1 for board sports.
+  int get _pointMultiplier => _isTableTennis ? 2 : 1;
+
   double _totalPoints(int boardNum, int playerId) {
     return (_boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
+  }
+
+  /// Display points: for table tennis, a win gives 2 pts (loss 0).
+  double _displayPoints(int boardNum, int playerId) {
+    return _totalPoints(boardNum, playerId) * _pointMultiplier;
   }
 
   int _gamesPlayed(int boardNum, int playerId) {
@@ -522,6 +685,14 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     if (result == 1.0) return '1';
     if (result == 0.0) return '0';
     if (result == 0.5) return '½';
+    return result.toString();
+  }
+
+  /// Format phantom/absent result for table tennis: show "+"/"-" since no sets were played.
+  String _formatTTPhantomResult(double? result) {
+    if (result == null) return '';
+    if (result == 1.0) return '+';
+    if (result == 0.0) return '-';
     return result.toString();
   }
 
@@ -879,45 +1050,90 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final teamAName = teamMap[teamAId]!.teamName;
     final teamBName = teamMap[teamBId]!.teamName;
     final boardNums = _boardPlayers.keys.toList()..sort();
+    final totalScore = _teamMatchScore(teamAId, teamBId);
+    final matchPts = _teamMatchPoints(teamAId, teamBId);
+
+    Color totalColor = Colors.black87;
+    if (totalScore.a > totalScore.b) totalColor = Colors.green.shade700;
+    else if (totalScore.b > totalScore.a) totalColor = Colors.red.shade700;
+    else if (totalScore.a > 0 || totalScore.b > 0) totalColor = Colors.amber.shade800;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$teamAName  —  $teamBName', style: const TextStyle(fontSize: 16)),
-        content: SizedBox(
-          width: 420,
-          child: Table(
-            border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-            defaultColumnWidth: const IntrinsicColumnWidth(),
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
             children: [
-              TableRow(
-                decoration: BoxDecoration(color: Colors.grey.shade100),
+              Row(
                 children: [
-                  _tableCell(widget.config.boardLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54)),
-                  _tableCell(teamAName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54), minWidth: 120, leftAlign: true),
-                  _tableCell('', style: const TextStyle(fontSize: 12)),
-                  _tableCell(teamBName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54), minWidth: 120, leftAlign: true),
+                  Expanded(
+                    child: Text(
+                      teamAName,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_formatPoints(totalScore.a)} : ${_formatPoints(totalScore.b)}',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: totalColor),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      teamBName,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                    ),
+                  ),
                 ],
               ),
-              for (final boardNum in boardNums)
-                _buildBoardMatchRow(boardNum, teamAId, teamBId, dialogContext: ctx, teamMap: teamMap),
-              // Total row
-              TableRow(
-                decoration: BoxDecoration(color: Colors.grey.shade100),
-                children: [
-                  _tableCell('', style: const TextStyle(fontSize: 12)),
-                  _tableCell('Разом', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87), minWidth: 120, leftAlign: true),
-                  _tableCell(
-                    '${_formatPoints(_teamMatchScore(teamAId, teamBId).a)} : ${_formatPoints(_teamMatchScore(teamAId, teamBId).b)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
-                  ),
-                  _tableCell('', style: const TextStyle(fontSize: 12), minWidth: 120),
-                ],
+              const SizedBox(height: 6),
+              Text(
+                'Очки: ${matchPts.a.toInt()} : ${matchPts.b.toInt()}',
+                style: TextStyle(fontSize: 12, color: Colors.indigo.shade400),
               ),
             ],
           ),
         ),
+        content: SizedBox(
+          width: 440,
+          child: Table(
+            border: TableBorder(
+              horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1),
+              bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+              top: BorderSide(color: Colors.grey.shade300, width: 1),
+            ),
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: Colors.grey.shade50),
+                children: [
+                  _tableCell(widget.config.boardLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey.shade600)),
+                  _tableCell(teamAName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo.shade700), minWidth: 120, leftAlign: true),
+                  _tableCell('Рахунок', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey.shade600)),
+                  _tableCell(teamBName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.indigo.shade700), minWidth: 120, leftAlign: true),
+                ],
+              ),
+              for (final boardNum in boardNums)
+                _buildBoardMatchRow(boardNum, teamAId, teamBId, dialogContext: ctx, teamMap: teamMap),
+            ],
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрити')),
         ],
@@ -1105,7 +1321,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 else
                   _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j),
               _tableCell(
-                _formatPoints(_totalPoints(boardNum, players[i].player.player_id!)),
+                _formatPoints(_displayPoints(boardNum, players[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
               _tableCell('${_gamesPlayed(boardNum, players[i].player.player_id!)}', style: cellStyle),
@@ -1129,7 +1345,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               ),
               _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
               _tableCell(
-                _formatPoints(_totalPoints(boardNum, sorted[i].player.player_id!)),
+                _formatPoints(_displayPoints(boardNum, sorted[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
               if (!isTT)
@@ -1323,7 +1539,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final detail = _boardResultDetails[boardNum]?[rowId]?[colId];
     final text = _isTableTennis && detail != null && detail.isNotEmpty
         ? _formatTableTennisCell(detail, result)
-        : _formatResult(result);
+        : _isTableTennis ? _formatTTPhantomResult(result) : _formatResult(result);
 
     Color? bgColor;
     if (result == 1.0) {
