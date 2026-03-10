@@ -495,7 +495,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     Navigator.pop(ctx);
                     _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers);
                   },
-                  child: const Text('Зберегти'),
+                  label: const Text('Зберегти'),
                 ),
               ],
             );
