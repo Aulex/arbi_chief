@@ -859,6 +859,100 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
   // --- Teams cross table ---
 
+  /// Count sets won and lost from a detail string (e.g. "11:7 11:4 8:11").
+  ({int won, int lost}) _countSetsFromDetail(String detail) {
+    int won = 0;
+    int lost = 0;
+    for (final s in detail.split(' ')) {
+      final parts = s.split(':');
+      if (parts.length != 2) continue;
+      final a = int.tryParse(parts[0]);
+      final b = int.tryParse(parts[1]);
+      if (a == null || b == null) continue;
+      if (a > b) {
+        won++;
+      } else if (b > a) {
+        lost++;
+      }
+    }
+    return (won: won, lost: lost);
+  }
+
+  /// Count balls (goals) scored and conceded from a detail string.
+  ({int scored, int conceded}) _countBallsFromDetail(String detail) {
+    int scored = 0;
+    int conceded = 0;
+    for (final s in detail.split(' ')) {
+      final parts = s.split(':');
+      if (parts.length != 2) continue;
+      scored += int.tryParse(parts[0]) ?? 0;
+      conceded += int.tryParse(parts[1]) ?? 0;
+    }
+    return (scored: scored, conceded: conceded);
+  }
+
+  /// Set difference between two teams in their direct match (across all boards).
+  int _teamDirectSetDiff(int teamAId, int teamBId) {
+    int setsWon = 0;
+    int setsLost = 0;
+    for (final boardEntry in _boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
+      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
+      if (playerA == null || playerB == null) continue;
+      final aId = playerA.player.player_id!;
+      final bId = playerB.player.player_id!;
+      if (aId < 0 || bId < 0) continue;
+      final detail = _boardResultDetails[boardNum]?[aId]?[bId];
+      if (detail == null || detail.isEmpty) continue;
+      final sets = _countSetsFromDetail(detail);
+      setsWon += sets.won;
+      setsLost += sets.lost;
+    }
+    return setsWon - setsLost;
+  }
+
+  /// Ball/goal difference between two teams in their direct match (across all boards).
+  int _teamDirectBallDiff(int teamAId, int teamBId) {
+    int scored = 0;
+    int conceded = 0;
+    for (final boardEntry in _boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
+      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
+      if (playerA == null || playerB == null) continue;
+      final aId = playerA.player.player_id!;
+      final bId = playerB.player.player_id!;
+      if (aId < 0 || bId < 0) continue;
+      final detail = _boardResultDetails[boardNum]?[aId]?[bId];
+      if (detail == null || detail.isEmpty) continue;
+      final balls = _countBallsFromDetail(detail);
+      scored += balls.scored;
+      conceded += balls.conceded;
+    }
+    return scored - conceded;
+  }
+
+  /// Total set difference for a team across the entire tournament (all boards, all opponents).
+  int _teamTotalSetDiff(int teamId) {
+    int setsWon = 0;
+    int setsLost = 0;
+    for (final boardEntry in _boardPlayers.entries) {
+      final boardNum = boardEntry.key;
+      final player = boardEntry.value.where((p) => p.teamId == teamId).firstOrNull;
+      if (player == null) continue;
+      final pId = player.player.player_id!;
+      if (pId < 0) continue;
+      final details = _boardResultDetails[boardNum]?[pId] ?? {};
+      for (final detail in details.values) {
+        final sets = _countSetsFromDetail(detail);
+        setsWon += sets.won;
+        setsLost += sets.lost;
+      }
+    }
+    return setsWon - setsLost;
+  }
+
   /// Calculate team match score: sum individual board results for teamA vs teamB.
   ({double a, double b}) _teamMatchScore(int teamAId, int teamBId) {
     double aTotal = 0;
@@ -904,45 +998,47 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     final teamIds = teamMap.keys.toList();
     final teamPoints = <int, double>{};
-    final teamBoardDiff = <int, double>{}; // total board win diff across tournament
     final teamBoard3Pts = <int, double>{}; // women's racket (last board)
     for (final aId in teamIds) {
       double total = 0;
-      double boardWins = 0;
-      double boardLosses = 0;
       for (final bId in teamIds) {
         if (aId == bId) continue;
         total += _teamMatchPoints(aId, bId).a;
-        final score = _teamMatchScore(aId, bId);
-        boardWins += score.a;
-        boardLosses += score.b;
       }
       teamPoints[aId] = total;
-      teamBoardDiff[aId] = boardWins - boardLosses;
       final lastBoard = widget.config.boardCount;
       final b3p = (_boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
       teamBoard3Pts[aId] = b3p != null ? _totalPoints(lastBoard, b3p.player.player_id!) : 0;
     }
 
-    // Sort: points → h2h → board diff between them → board diff in tournament → women's racket
+    // Precompute total set diff for each team across the entire tournament
+    final teamTotalSetDiff = <int, int>{};
+    for (final id in teamIds) {
+      teamTotalSetDiff[id] = _teamTotalSetDiff(id);
+    }
+
+    // Sort: points → h2h → set diff between them → goal diff between them → set diff in tournament → women's racket
     teamIds.sort((a, b) {
       final pa = teamPoints[a]!;
       final pb = teamPoints[b]!;
       if (pa != pb) return pb.compareTo(pa);
-      // 2. Head-to-head
+      // 2. Head-to-head (personal meeting team points)
       final h2h = _teamMatchPoints(a, b);
       if (h2h.a > h2h.b) return -1;
       if (h2h.b > h2h.a) return 1;
-      // 3. Board win diff between them (in direct match)
-      final directScore = _teamMatchScore(a, b);
-      final directDiffA = directScore.a - directScore.b;
-      final directDiffB = directScore.b - directScore.a;
-      if (directDiffA != directDiffB) return directDiffB.compareTo(directDiffA);
-      // 4. Board win diff across entire tournament
-      final bdA = teamBoardDiff[a]!;
-      final bdB = teamBoardDiff[b]!;
-      if (bdA != bdB) return bdB.compareTo(bdA);
-      // 5. Women's racket (last board) result
+      // 3. Set difference between them (in direct match)
+      final setDiffA = _teamDirectSetDiff(a, b);
+      final setDiffB = _teamDirectSetDiff(b, a);
+      if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+      // 4. Goal/ball difference between them (in direct match)
+      final ballDiffA = _teamDirectBallDiff(a, b);
+      final ballDiffB = _teamDirectBallDiff(b, a);
+      if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+      // 5. Set difference across entire tournament
+      final tsdA = teamTotalSetDiff[a]!;
+      final tsdB = teamTotalSetDiff[b]!;
+      if (tsdA != tsdB) return tsdB.compareTo(tsdA);
+      // 6. Women's racket (last board) result
       return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
     });
 
@@ -974,7 +1070,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
-                _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
+                _tableCell('Сети', style: headerStyle),
                 _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
                 _tableCell('Місце', style: headerStyle),
               ],
@@ -994,7 +1090,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     _formatPoints(teamPoints[teamIds[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  _tableCell(_formatPoints(teamBoardDiff[teamIds[i]]!), style: cellStyle),
+                  _tableCell('${teamTotalSetDiff[teamIds[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIds[i]]!}', style: cellStyle),
                   _tableCell(_formatPoints(teamBoard3Pts[teamIds[i]]!), style: cellStyle),
                   _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
                 ],
