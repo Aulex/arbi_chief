@@ -864,6 +864,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
       final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
       if (playerA == null || playerB == null) continue;
+      // Skip games involving phantom players (negative IDs)
+      if (playerA.player.player_id! < 0 || playerB.player.player_id! < 0) continue;
       final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
       final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
       if (aResult != null) aTotal += aResult;
