@@ -105,15 +105,21 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             player_date_birth: '',
           ),
         ));
-        // Set results: absent=0 vs every real player, real player=1 vs absent
+        // Set results: absent=0 vs every real player, real player=2 vs absent
         // No-show players (in absentIds) also get 0 vs phantom
+        // For table tennis: real player wins 2:0 with sets 11:0 11:0
         results.putIfAbsent(boardNum, () => {});
+        details.putIfAbsent(boardNum, () => {});
         results[boardNum]!.putIfAbsent(phantomId, () => {});
+        details[boardNum]!.putIfAbsent(phantomId, () => {});
         for (final realPlayer in boards[boardNum]!) {
           final realId = realPlayer.player.player_id!;
           if (realId == phantomId || absentIds.contains(realId)) continue;
           results[boardNum]![phantomId]![realId] = 0.0;
           results[boardNum]!.putIfAbsent(realId, () => {})[phantomId] = 1.0;
+          // Add set details for phantom games: real wins 11:0 11:0
+          details[boardNum]!.putIfAbsent(realId, () => {})[phantomId] = '11:0 11:0';
+          details[boardNum]![phantomId]![realId] = '0:11 0:11';
         }
       }
     }
@@ -902,7 +908,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       if (playerA == null || playerB == null) continue;
       final aId = playerA.player.player_id!;
       final bId = playerB.player.player_id!;
-      if (aId < 0 || bId < 0) continue;
       final detail = _boardResultDetails[boardNum]?[aId]?[bId];
       if (detail == null || detail.isEmpty) continue;
       final sets = _countSetsFromDetail(detail);
@@ -923,7 +928,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       if (playerA == null || playerB == null) continue;
       final aId = playerA.player.player_id!;
       final bId = playerB.player.player_id!;
-      if (aId < 0 || bId < 0) continue;
       final detail = _boardResultDetails[boardNum]?[aId]?[bId];
       if (detail == null || detail.isEmpty) continue;
       final balls = _countBallsFromDetail(detail);
@@ -942,7 +946,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       final player = boardEntry.value.where((p) => p.teamId == teamId).firstOrNull;
       if (player == null) continue;
       final pId = player.player.player_id!;
-      if (pId < 0) continue;
       final details = _boardResultDetails[boardNum]?[pId] ?? {};
       for (final detail in details.values) {
         final sets = _countSetsFromDetail(detail);
@@ -962,8 +965,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
       final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
       if (playerA == null || playerB == null) continue;
-      // Skip games involving phantom players (negative IDs)
-      if (playerA.player.player_id! < 0 || playerB.player.player_id! < 0) continue;
       final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
       final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
       if (aResult != null) aTotal += aResult;
@@ -1211,16 +1212,53 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 ],
               ),
               const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Очки: ${matchPts.a.toInt()} : ${matchPts.b.toInt()}',
-                  style: const TextStyle(fontSize: 12, color: Colors.white70),
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                alignment: WrapAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Очки: ${matchPts.a.toInt()} : ${matchPts.b.toInt()}',
+                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                    ),
+                  ),
+                  Builder(builder: (_) {
+                    final setDiffA = _teamDirectSetDiff(teamAId, teamBId);
+                    final setDiffB = _teamDirectSetDiff(teamBId, teamAId);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Сети: ${setDiffA >= 0 ? '+' : ''}$setDiffA / ${setDiffB >= 0 ? '+' : ''}$setDiffB',
+                        style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      ),
+                    );
+                  }),
+                  Builder(builder: (_) {
+                    final ballDiffA = _teamDirectBallDiff(teamAId, teamBId);
+                    final ballDiffB = _teamDirectBallDiff(teamBId, teamAId);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'М\'ячі: ${ballDiffA >= 0 ? '+' : ''}$ballDiffA / ${ballDiffB >= 0 ? '+' : ''}$ballDiffB',
+                        style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      ),
+                    );
+                  }),
+                ],
               ),
             ],
           ),
@@ -1281,9 +1319,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     String scoreText = '';
     Color scoreColor = Colors.black87;
     if (hasPhantom && playerA != null && playerB != null) {
-      // Phantom player game: always show 0 : 0
-      scoreText = '0 : 0';
-      scoreColor = Colors.grey.shade500;
+      // Phantom player game: real player wins 2:0
+      final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
+      final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
+      if (aResult != null && bResult != null) {
+        scoreText = '${_formatResult(aResult)} : ${_formatResult(bResult)}';
+        if (aResult > bResult) scoreColor = Colors.green.shade700;
+        else if (aResult < bResult) scoreColor = Colors.red.shade700;
+        else scoreColor = Colors.grey.shade500;
+      } else {
+        scoreText = '0 : 0';
+        scoreColor = Colors.grey.shade500;
+      }
     } else if (playerA != null && playerB != null) {
       final aResult = _boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
       final bResult = _boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
