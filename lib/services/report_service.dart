@@ -84,12 +84,17 @@ class ReportService {
           ),
         ));
         results.putIfAbsent(boardNum, () => {});
+        details.putIfAbsent(boardNum, () => {});
         results[boardNum]!.putIfAbsent(phantomId, () => {});
+        details[boardNum]!.putIfAbsent(phantomId, () => {});
         for (final realPlayer in boardPlayers[boardNum]!) {
           final realId = realPlayer.player.player_id!;
           if (realId == phantomId || absentIds.contains(realId)) continue;
           results[boardNum]![phantomId]![realId] = 0.0;
           results[boardNum]!.putIfAbsent(realId, () => {})[phantomId] = 1.0;
+          // Add set details for phantom games: real wins 11:0 11:0
+          details[boardNum]!.putIfAbsent(realId, () => {})[phantomId] = '11:0 11:0';
+          details[boardNum]![phantomId]![realId] = '0:11 0:11';
         }
       }
     }
@@ -255,7 +260,6 @@ class ReportService {
       if (playerA == null || playerB == null) continue;
       final aId = playerA.player.player_id!;
       final bId = playerB.player.player_id!;
-      if (aId < 0 || bId < 0) continue;
       final detail = data.boardResultDetails[boardNum]?[aId]?[bId];
       if (detail == null || detail.isEmpty) continue;
       final sets = _countSetsFromDetail(detail);
@@ -275,7 +279,6 @@ class ReportService {
       if (playerA == null || playerB == null) continue;
       final aId = playerA.player.player_id!;
       final bId = playerB.player.player_id!;
-      if (aId < 0 || bId < 0) continue;
       final detail = data.boardResultDetails[boardNum]?[aId]?[bId];
       if (detail == null || detail.isEmpty) continue;
       final balls = _countBallsFromDetail(detail);
@@ -293,7 +296,6 @@ class ReportService {
       final player = boardEntry.value.where((p) => p.teamId == teamId).firstOrNull;
       if (player == null) continue;
       final pId = player.player.player_id!;
-      if (pId < 0) continue;
       final details = data.boardResultDetails[boardNum]?[pId] ?? {};
       for (final detail in details.values) {
         final sets = _countSetsFromDetail(detail);
