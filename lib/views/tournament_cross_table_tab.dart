@@ -707,7 +707,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   }
 
   String _formatPoints(double points) {
-    if (points == points.roundToDouble()) return points.toStringAsFixed(1);
+    if (points == points.roundToDouble()) return points.toStringAsFixed(0);
     String s = points.toStringAsFixed(2);
     if (s.endsWith('0')) s = s.substring(0, s.length - 1);
     return s;
