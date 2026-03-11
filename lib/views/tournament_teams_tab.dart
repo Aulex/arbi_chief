@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'team_edit_screen.dart';
 import '../models/tournament_model.dart';
 import '../models/team_model.dart';
 import '../models/player_model.dart';
@@ -466,6 +465,302 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
     }
   }
 
+  void _showAddPlayerToTournamentAndBoard(({Team team, int? teamNumber, Map<int, int> boards}) teamData) {
+    final nameC = TextEditingController();
+    final surnameC = TextEditingController();
+    final lastnameC = TextEditingController();
+    final dobC = TextEditingController();
+    int gender = 0;
+    Player? selectedExisting;
+    List<Player> allPlayers = [];
+    int? selectedBoard;
+
+    ref.read(playerProvider.future).then((players) {
+      allPlayers = players;
+    });
+
+    // Find first empty board
+    for (int i = 1; i <= widget.config.boardCount; i++) {
+      if (!teamData.boards.containsKey(i)) {
+        selectedBoard = i;
+        break;
+      }
+    }
+
+    Future<void> pickDate(BuildContext dialogContext, StateSetter setST) async {
+      final picked = await showDatePicker(
+        context: dialogContext,
+        initialDate: DateTime(2000),
+        firstDate: DateTime(1920),
+        lastDate: DateTime.now(),
+        locale: const Locale('uk'),
+      );
+      if (picked != null) {
+        final day = picked.day.toString().padLeft(2, '0');
+        final month = picked.month.toString().padLeft(2, '0');
+        final year = picked.year.toString();
+        dobC.text = '$day.$month.$year';
+      }
+    }
+
+    Future<void> savePlayer(BuildContext dialogContext) async {
+      if (surnameC.text.trim().isEmpty || nameC.text.trim().isEmpty) return;
+
+      final tournamentSvc = ref.read(tournamentServiceProvider);
+      final teamSvc = ref.read(teamServiceProvider);
+      int playerId;
+
+      if (selectedExisting != null) {
+        // Update and add existing player
+        await ref.read(playerProvider.notifier).updatePlayer(
+          selectedExisting!.copyWith(
+            player_name: nameC.text.trim(),
+            player_surname: surnameC.text.trim(),
+            player_lastname: lastnameC.text.trim(),
+            player_gender: gender,
+            player_date_birth: Player.formatForDB(dobC.text.trim()),
+          ),
+        );
+        playerId = selectedExisting!.player_id!;
+      } else {
+        // Create new player
+        await ref.read(playerProvider.notifier).addPlayer(
+          name: nameC.text.trim(),
+          surname: surnameC.text.trim(),
+          lastname: lastnameC.text.trim(),
+          gender: gender,
+          dob: dobC.text.trim(),
+        );
+        final updatedPlayers = await ref.read(playerProvider.future);
+        final newPlayer = updatedPlayers
+            .where((p) =>
+                p.player_surname == surnameC.text.trim() &&
+                p.player_name == nameC.text.trim())
+            .lastOrNull;
+        if (newPlayer == null || newPlayer.player_id == null) return;
+        playerId = newPlayer.player_id!;
+      }
+
+      // Add to tournament
+      await tournamentSvc.addParticipant(widget.tournament.t_id!, playerId);
+
+      // Assign to board if selected
+      if (selectedBoard != null) {
+        final service = ref.read(teamServiceProvider);
+        final assignments = await service.getTeamAssignments(teamData.team.team_id!, widget.tournament.t_id!);
+        final existingReserves = assignments
+            .where((a) => a.player_state == 1 && a.player_id != null)
+            .map((a) => a.player_id!)
+            .toList();
+        final newBoards = Map<int, int>.from(teamData.boards);
+        newBoards[selectedBoard!] = playerId;
+        await service.saveAssignments(teamData.team.team_id!, widget.tournament.t_id!, newBoards, existingReserves);
+      }
+
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      _reloadData();
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          // Get IDs already assigned to any team
+          final assignedPlayerIds = <int>{};
+          for (final td in _teamData) {
+            assignedPlayerIds.addAll(td.boards.values);
+          }
+
+          return Focus(
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.enter &&
+                  (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+                   HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
+                savePlayer(dialogContext);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 550),
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_add_alt_1, color: Colors.indigo),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Додати гравця — ${teamData.team.team_name}',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          if (selectedExisting != null)
+                            Chip(
+                              label: Text(selectedExisting!.fullName, style: const TextStyle(fontSize: 12)),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setST(() {
+                                  selectedExisting = null;
+                                  nameC.clear();
+                                  surnameC.clear();
+                                  lastnameC.clear();
+                                  dobC.clear();
+                                  gender = 0;
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Autocomplete<Player>(
+                        optionsBuilder: (textEditingValue) {
+                          if (textEditingValue.text.length < 2) return const Iterable<Player>.empty();
+                          return allPlayers.where((p) {
+                            return p.fullName.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                          }).take(8);
+                        },
+                        displayStringForOption: (player) => player.fullName,
+                        fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: textController,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              hintText: 'Пошук з бази гравців...',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              isDense: true,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            ),
+                          );
+                        },
+                        onSelected: (player) {
+                          setST(() {
+                            selectedExisting = player;
+                            surnameC.text = player.player_surname;
+                            nameC.text = player.player_name;
+                            lastnameC.text = player.player_lastname;
+                            dobC.text = player.birthDateForUI;
+                            gender = player.player_gender;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: surnameC,
+                              decoration: InputDecoration(
+                                labelText: 'Прізвище',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextField(
+                              controller: nameC,
+                              decoration: InputDecoration(
+                                labelText: "Ім'я",
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: dobC,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'Дата народження',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.calendar_today, size: 20),
+                                  onPressed: () => pickDate(dialogContext, setST),
+                                ),
+                              ),
+                              onTap: () => pickDate(dialogContext, setST),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: gender,
+                              decoration: InputDecoration(
+                                labelText: 'Стать',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 0, child: Text('Чоловіча')),
+                                DropdownMenuItem(value: 1, child: Text('Жіноча')),
+                              ],
+                              onChanged: (v) => setST(() => gender = v!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<int?>(
+                        value: selectedBoard,
+                        decoration: InputDecoration(
+                          labelText: 'Призначити на ${widget.config.boardLabel.toLowerCase()}у',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        items: [
+                          const DropdownMenuItem<int?>(value: null, child: Text('— Не призначати —')),
+                          for (int i = 1; i <= widget.config.boardCount; i++)
+                            DropdownMenuItem<int?>(
+                              value: i,
+                              child: Text(widget.config.shortTabLabel(i)),
+                            ),
+                        ],
+                        onChanged: (v) => setST(() => selectedBoard = v),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Скасувати'),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => savePlayer(dialogContext),
+                            child: Text(selectedExisting != null ? 'Додати (Ctrl+Enter)' : 'Створити (Ctrl+Enter)'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -677,20 +972,9 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                               ),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () async {
-                                await Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => TeamEditScreen(
-                                      team: selectedData.team,
-                                      tId: widget.tournament.t_id!,
-                                      config: widget.config,
-                                    ),
-                                  ),
-                                );
-                                _reloadData();
-                              },
-                              icon: const Icon(Icons.edit, size: 18),
-                              label: const Text('Редагувати'),
+                              onPressed: () => _showAddPlayerToTournamentAndBoard(selectedData),
+                              icon: const Icon(Icons.person_add, size: 18),
+                              label: const Text('Додати гравця'),
                               style: OutlinedButton.styleFrom(
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

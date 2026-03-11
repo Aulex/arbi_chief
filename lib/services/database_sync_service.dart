@@ -26,6 +26,13 @@ class DatabaseSyncService {
   // ──────────────────────────────────────────────
   //  Canonical table order (used for sync & export)
   // ──────────────────────────────────────────────
+  /// Columns that form a logical unique key for duplicate detection.
+  /// Tables not listed here use all non-PK data columns.
+  static const Map<String, List<String>> _uniqueKeyColumns = {
+    'CMP_PLAYER_EVENT': ['event_id', 'player_id'],
+    'CMP_EVENT': ['ts_id', 'event_date_begin'],
+  };
+
   static const List<String> _tableOrder = [
     'CMP_TOURNAMENT_TYPE',
     'CMP_ENTITY',
@@ -187,11 +194,17 @@ class DatabaseSyncService {
               dataRow[col] = value;
             }
 
-            // Check for duplicate by all non-PK data columns.
+            // For CMP_PLAYER_EVENT and CMP_EVENT, use unique key columns
+            // to avoid duplicates caused by differing result values.
+            final uniqueKeyCols = _uniqueKeyColumns[table];
+            final checkEntries = uniqueKeyCols != null
+                ? dataRow.entries.where((e) => uniqueKeyCols.contains(e.key)).toList()
+                : dataRow.entries.toList();
+
             final nonNullEntries =
-                dataRow.entries.where((e) => e.value != null).toList();
+                checkEntries.where((e) => e.value != null).toList();
             final nullEntries =
-                dataRow.entries.where((e) => e.value == null).toList();
+                checkEntries.where((e) => e.value == null).toList();
 
             String? where;
             List<Object>? whereArgs;

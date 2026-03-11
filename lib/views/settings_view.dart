@@ -7,13 +7,15 @@ import 'package:path_provider/path_provider.dart';
 
 import '../services/database_sync_service.dart';
 import '../viewmodels/shared_providers.dart';
-import 'sport_selection_screen.dart';
+import '../viewmodels/theme_provider.dart';
 
 class SettingsView extends ConsumerWidget {
   const SettingsView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = ref.watch(themeProvider);
+
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -21,8 +23,7 @@ class SettingsView extends ConsumerWidget {
           Card(
             margin: const EdgeInsets.fromLTRB(24, 8, 24, 12),
             elevation: 2,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
@@ -39,29 +40,23 @@ class SettingsView extends ConsumerWidget {
                   Text(
                     'Загальні налаштування додатку.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                   const SizedBox(height: 16),
                   const Divider(),
-                  const SizedBox(height: 24),
-                  ListTile(
-                    leading: const Icon(Icons.sports, color: Colors.indigo),
-                    title: const Text('Вид спорту'),
-                    subtitle: const Text('Змінити поточний вид спорту'),
-                    trailing:
-                        const Icon(Icons.arrow_forward_ios, size: 16),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    secondary: Icon(isDark ? Icons.dark_mode : Icons.light_mode,
+                        color: isDark ? Colors.amber : Colors.indigo),
+                    title: const Text('Темна тема'),
+                    subtitle: Text(isDark ? 'Увімкнено' : 'Вимкнено'),
+                    value: isDark,
+                    onChanged: (_) => ref.read(themeProvider.notifier).toggle(),
                     shape: RoundedRectangleBorder(
-                      side:
-                          BorderSide(color: Colors.grey.shade300, width: 1),
+                      side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    onTap: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                            builder: (_) => const SportSelectionScreen()),
-                      );
-                    },
                   ),
                 ],
               ),

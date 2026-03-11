@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/sport_type_config.dart';
 import '../models/tournament_model.dart';
+import '../viewmodels/report_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
-import 'report_view.dart';
 
 class ReportsListView extends ConsumerWidget {
   const ReportsListView({super.key});
@@ -211,22 +211,36 @@ class _ReportTypeCard extends ConsumerWidget {
 
   void _generateReport(BuildContext context, WidgetRef ref, Tournament tournament) {
     final config = getConfigForType(tournament.t_type);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(
-            title: Text('Звіт: ${tournament.t_name}'),
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ReportView(
-              tournament: tournament,
-              config: config,
-              autoExport: true,
-            ),
-          ),
+    final svc = ref.read(reportServiceProvider);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 24),
+            Expanded(child: Text('Генерація PDF...')),
+          ],
         ),
       ),
     );
+
+    ref.read(reportDataProvider(tournament.t_id!).future).then((data) async {
+      if (data.isNotEmpty) {
+        await svc.exportPdf(tournament, config, data);
+      }
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+    }).catchError((e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Помилка генерації: $e'), backgroundColor: Colors.red),
+        );
+      }
+    });
   }
 }

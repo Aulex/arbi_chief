@@ -210,9 +210,35 @@ class TeamService {
     });
   }
 
-  /// Remove a team from a tournament (deletes all assignment rows).
+  /// Remove a team from a tournament (deletes all assignment rows and resets player results).
   Future<void> removeTeamFromTournament(int teamId, int tId) async {
     final db = await _dbService.database;
+
+    // Get all player IDs assigned to this team in this tournament
+    final playerRows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['player_id'],
+      where: 'team_id = ? AND t_id = ? AND player_id IS NOT NULL',
+      whereArgs: [teamId, tId],
+    );
+    final playerIds = playerRows.map((r) => r['player_id'] as int).toSet();
+
+    // Delete games and results for these players in this tournament
+    for (final playerId in playerIds) {
+      final eventRows = await db.rawQuery('''
+        SELECT DISTINCT e.event_id
+        FROM CMP_EVENT e
+        JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
+        JOIN CMP_PLAYER_EVENT pe ON pe.event_id = e.event_id
+        WHERE ts.t_id = ? AND pe.player_id = ?
+      ''', [tId, playerId]);
+      for (final er in eventRows) {
+        final eventId = er['event_id'] as int;
+        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+        await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+      }
+    }
+
     // Clean up attr values
     final assignments = await db.query(
       'CMP_PLAYER_TEAM',

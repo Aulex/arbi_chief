@@ -38,14 +38,17 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
     if (lower.contains('шашк')) return Icons.apps_rounded;
     if (lower.contains('футзал')) return Icons.sports_soccer;
     if (lower.contains('волейбол')) return Icons.sports_volleyball;
-    if (lower.contains('баскетбол') || lower.contains('стрітбол')) return Icons.sports_basketball;
+    if (lower.contains('стрітбол')) return Icons.sports_basketball;
+    if (lower.contains('баскетбол')) return Icons.sports_basketball;
     if (lower.contains('плаван')) return Icons.pool;
-    if (lower.contains('пауерліфтинг') || lower.contains('гирьов')) return Icons.fitness_center;
-    if (lower.contains('армрестлінг')) return Icons.sports_martial_arts;
+    if (lower.contains('пауерліфтинг')) return Icons.fitness_center;
+    if (lower.contains('гирьов') || lower.contains('важк')) return Icons.fitness_center;
+    if (lower.contains('армрестлінг')) return Icons.front_hand;
     if (lower.contains('легка атлетика')) return Icons.directions_run;
+    if (lower.contains('настільний теніс')) return Icons.sports_tennis;
     if (lower.contains('теніс')) return Icons.sports_tennis;
     if (lower.contains('велоспорт')) return Icons.directions_bike;
-    if (lower.contains('канат')) return Icons.group;
+    if (lower.contains('перетяг') || lower.contains('канат')) return Icons.fitness_center;
     if (lower.contains('орієнтуван')) return Icons.explore;
     if (lower.contains('го') || lower == 'go') return Icons.circle_outlined;
     return Icons.emoji_events;
@@ -138,6 +141,7 @@ class _SportCardState extends State<_SportCard> {
               const SizedBox(height: 12),
               Text(
                 widget.name,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,

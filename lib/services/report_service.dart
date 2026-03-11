@@ -98,6 +98,27 @@ class ReportService {
         }
       }
     }
+    // Ensure no-show players have results vs all real players
+    for (final boardNum in boardPlayers.keys) {
+      results.putIfAbsent(boardNum, () => {});
+      details.putIfAbsent(boardNum, () => {});
+      for (final noShowId in noShowIds) {
+        final onBoard = boardPlayers[boardNum]!.any((p) => p.player.player_id == noShowId);
+        if (!onBoard) continue;
+        results[boardNum]!.putIfAbsent(noShowId, () => {});
+        details[boardNum]!.putIfAbsent(noShowId, () => {});
+        for (final other in boardPlayers[boardNum]!) {
+          final otherId = other.player.player_id!;
+          if (otherId == noShowId || absentIds.contains(otherId)) continue;
+          if (results[boardNum]![noShowId]![otherId] == null) {
+            results[boardNum]![noShowId]![otherId] = 0.0;
+            results[boardNum]!.putIfAbsent(otherId, () => {})[noShowId] = 1.0;
+            details[boardNum]!.putIfAbsent(otherId, () => {})[noShowId] = '11:0 11:0';
+            details[boardNum]![noShowId]![otherId] = '0:11 0:11';
+          }
+        }
+      }
+    }
     // Cross-set absent vs absent (phantom + no-show): both get 0
     for (final boardNum in boardPlayers.keys) {
       final absentOnBoard = boardPlayers[boardNum]!

@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/navigation_viewmodel.dart';
 import '../viewmodels/nav_provider.dart';
+import '../viewmodels/sport_type_provider.dart';
+import '../viewmodels/tournament_viewmodel.dart';
 import 'tournament_view.dart';
 import 'tournament_add_screen.dart';
 import 'tournament_edit_screen.dart';
 import 'reports_list_view.dart';
 import 'settings_view.dart';
+import 'sport_selection_screen.dart';
 
 class MainView extends ConsumerWidget {
   const MainView({super.key});
@@ -43,6 +46,18 @@ class MainView extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(appBarTitle),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const SportSelectionScreen()),
+              );
+            },
+            icon: const Icon(Icons.sports, size: 20),
+            label: const Text('Змінити вид спорту'),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Row(
         children: [

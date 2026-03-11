@@ -21,9 +21,9 @@ class TournamentService {
     final db = await _dbService.database;
     final List<Map<String, dynamic>> maps;
     if (tType != null) {
-      maps = await db.query('CMP_TOURNAMENT', where: 't_type = ?', whereArgs: [tType], orderBy: 't_id DESC');
+      maps = await db.query('CMP_TOURNAMENT', where: 't_type = ?', whereArgs: [tType], orderBy: 't_date_begin DESC');
     } else {
-      maps = await db.query('CMP_TOURNAMENT', orderBy: 't_id DESC');
+      maps = await db.query('CMP_TOURNAMENT', orderBy: 't_date_begin DESC');
     }
     return List.generate(maps.length, (i) => Tournament.fromJson(maps[i]));
   }

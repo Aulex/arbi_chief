@@ -123,6 +123,29 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         }
       }
     }
+    // Ensure no-show players have results vs all real players (fills gaps
+    // when a player was added after someone was marked as no-show).
+    for (final boardNum in boards.keys) {
+      results.putIfAbsent(boardNum, () => {});
+      details.putIfAbsent(boardNum, () => {});
+      for (final noShowId in noShowIds) {
+        final onBoard = boards[boardNum]!.any((p) => p.player.player_id == noShowId);
+        if (!onBoard) continue;
+        results[boardNum]!.putIfAbsent(noShowId, () => {});
+        details[boardNum]!.putIfAbsent(noShowId, () => {});
+        for (final other in boards[boardNum]!) {
+          final otherId = other.player.player_id!;
+          if (otherId == noShowId || absentIds.contains(otherId)) continue;
+          // Only fill if no DB record exists
+          if (results[boardNum]![noShowId]![otherId] == null) {
+            results[boardNum]![noShowId]![otherId] = 0.0;
+            results[boardNum]!.putIfAbsent(otherId, () => {})[noShowId] = 1.0;
+            details[boardNum]!.putIfAbsent(otherId, () => {})[noShowId] = '11:0 11:0';
+            details[boardNum]![noShowId]![otherId] = '0:11 0:11';
+          }
+        }
+      }
+    }
     // Cross-set absent vs absent (phantom + no-show): both get 0
     for (final boardNum in boards.keys) {
       final absentOnBoard = boards[boardNum]!
@@ -848,8 +871,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           ),
         Expanded(
           child: Scrollbar(
+            thumbVisibility: true,
             child: SingleChildScrollView(
               child: Scrollbar(
+                thumbVisibility: true,
                 notificationPredicate: (n) => n.depth == 1,
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -997,12 +1022,12 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       );
     }
 
-    final teamIds = teamMap.keys.toList();
+    final allTeamIds = teamMap.keys.toList();
     final teamPoints = <int, double>{};
     final teamBoard3Pts = <int, double>{}; // women's racket (last board)
-    for (final aId in teamIds) {
+    for (final aId in allTeamIds) {
       double total = 0;
-      for (final bId in teamIds) {
+      for (final bId in allTeamIds) {
         if (aId == bId) continue;
         total += _teamMatchPoints(aId, bId).a;
       }
@@ -1014,42 +1039,49 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     // Precompute total set diff for each team across the entire tournament
     final teamTotalSetDiff = <int, int>{};
-    for (final id in teamIds) {
+    for (final id in allTeamIds) {
       teamTotalSetDiff[id] = _teamTotalSetDiff(id);
     }
 
-    // Sort: points → h2h → set diff between them → goal diff between them → set diff in tournament → women's racket
-    teamIds.sort((a, b) {
-      final pa = teamPoints[a]!;
-      final pb = teamPoints[b]!;
-      if (pa != pb) return pb.compareTo(pa);
-      // 2. Head-to-head (personal meeting team points)
-      final h2h = _teamMatchPoints(a, b);
-      if (h2h.a > h2h.b) return -1;
-      if (h2h.b > h2h.a) return 1;
-      // 3. Set difference between them (in direct match)
-      final setDiffA = _teamDirectSetDiff(a, b);
-      final setDiffB = _teamDirectSetDiff(b, a);
-      if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
-      // 4. Goal/ball difference between them (in direct match)
-      final ballDiffA = _teamDirectBallDiff(a, b);
-      final ballDiffB = _teamDirectBallDiff(b, a);
-      if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
-      // 5. Set difference across entire tournament
-      final tsdA = teamTotalSetDiff[a]!;
-      final tsdB = teamTotalSetDiff[b]!;
-      if (tsdA != tsdB) return tsdB.compareTo(tsdA);
-      // 6. Women's racket (last board) result
-      return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
-    });
+    // Cross-table order: sort by team number
+    final teamIdsByNumber = List<int>.from(allTeamIds)
+      ..sort((a, b) {
+        final aNum = teamMap[a]!.teamNumber ?? 9999;
+        final bNum = teamMap[b]!.teamNumber ?? 9999;
+        if (aNum != bNum) return aNum.compareTo(bNum);
+        return teamMap[a]!.teamName.compareTo(teamMap[b]!.teamName);
+      });
 
-    final n = teamIds.length;
+    // Standings order: sort by points → h2h → set diff → ball diff → tournament set diff → women's racket
+    final sortedTeamIds = List<int>.from(allTeamIds)
+      ..sort((a, b) {
+        final pa = teamPoints[a]!;
+        final pb = teamPoints[b]!;
+        if (pa != pb) return pb.compareTo(pa);
+        final h2h = _teamMatchPoints(a, b);
+        if (h2h.a > h2h.b) return -1;
+        if (h2h.b > h2h.a) return 1;
+        final setDiffA = _teamDirectSetDiff(a, b);
+        final setDiffB = _teamDirectSetDiff(b, a);
+        if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+        final ballDiffA = _teamDirectBallDiff(a, b);
+        final ballDiffB = _teamDirectBallDiff(b, a);
+        if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+        final tsdA = teamTotalSetDiff[a]!;
+        final tsdB = teamTotalSetDiff[b]!;
+        if (tsdA != tsdB) return tsdB.compareTo(tsdA);
+        return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+      });
+
+    final n = teamIdsByNumber.length;
     const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
 
     return Scrollbar(
+      thumbVisibility: true,
       child: SingleChildScrollView(
         child: Scrollbar(
+          thumbVisibility: true,
           notificationPredicate: (n) => n.depth == 1,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1061,18 +1093,23 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             TableRow(
               decoration: BoxDecoration(color: Colors.grey.shade100),
               children: [
+                // Cross table headers
                 _tableCell('№', style: headerStyle),
                 _tableCell('Команда', style: headerStyle, minWidth: 140),
                 for (int i = 0; i < n; i++)
                   _verticalHeaderCell(
-                    number: teamMap[teamIds[i]]!.teamNumber ?? (i + 1),
-                    surname: teamMap[teamIds[i]]!.teamName,
+                    number: teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1),
+                    surname: teamMap[teamIdsByNumber[i]]!.teamName,
                     isHighlighted: _hoveredTeamCol == i,
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
                 _tableCell('Сети', style: headerStyle),
                 _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
+                // Standings headers
+                _tableCell('№', style: headerStyle),
+                _tableCell('Команда', style: headerStyle, minWidth: 140),
+                _tableCell('Очки', style: headerStyle),
                 _tableCell('Місце', style: headerStyle),
               ],
             ),
@@ -1080,19 +1117,30 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               TableRow(
                 decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
                 children: [
-                  _tableCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
-                  _highlightableNameCell(teamMap[teamIds[i]]!.teamName, isHighlighted: _hoveredTeamRow == i, style: cellStyle, minWidth: 140),
+                  // Cross table cells
+                  _tableCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
+                  _highlightableNameCell(teamMap[teamIdsByNumber[i]]!.teamName, isHighlighted: _hoveredTeamRow == i, style: cellStyle, minWidth: 140),
                   for (int j = 0; j < n; j++)
                     if (i == j)
                       _diagonalCell()
                     else
-                      _teamResultCell(teamIds[i], teamIds[j], teamMap, rowIdx: i, colIdx: j),
+                      _teamResultCell(teamIdsByNumber[i], teamIdsByNumber[j], teamMap, rowIdx: i, colIdx: j),
                   _tableCell(
-                    _formatPoints(teamPoints[teamIds[i]]!),
+                    _formatPoints(teamPoints[teamIdsByNumber[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  _tableCell('${teamTotalSetDiff[teamIds[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIds[i]]!}', style: cellStyle),
-                  _tableCell(_formatPoints(teamBoard3Pts[teamIds[i]]!), style: cellStyle),
+                  _tableCell('${teamTotalSetDiff[teamIdsByNumber[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIdsByNumber[i]]!}', style: cellStyle),
+                  _tableCell(_formatPoints(teamBoard3Pts[teamIdsByNumber[i]]!), style: cellStyle),
+                  // Standings cells (sorted by place)
+                  _tableCell(
+                    '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
+                    style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
+                  ),
+                  _tableCell(teamMap[sortedTeamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                  _tableCell(
+                    _formatPoints(teamPoints[sortedTeamIds[i]]!),
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                  ),
                   _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
                 ],
               ),
