@@ -985,15 +985,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                 ],
                               ),
                             ),
-                            OutlinedButton.icon(
-                              onPressed: () => _showAddPlayerToTournamentAndBoard(selectedData),
-                              icon: const Icon(Icons.person_add, size: 18),
-                              label: const Text('Додати гравця'),
-                              style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                            ),
+                            const SizedBox.shrink(),
                           ],
                         ),
                         const Divider(height: 24),
