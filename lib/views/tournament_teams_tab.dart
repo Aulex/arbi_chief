@@ -208,12 +208,22 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                             ),
                     ),
                     const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text('Закрити'),
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            _showAddPlayerToTournamentAndBoard(teamData, preselectedBoard: boardNum);
+                          },
+                          icon: const Icon(Icons.person_add, size: 18),
+                          label: const Text('Додати гравця'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          child: const Text('Закрити'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -465,7 +475,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
     }
   }
 
-  void _showAddPlayerToTournamentAndBoard(({Team team, int? teamNumber, Map<int, int> boards}) teamData) {
+  void _showAddPlayerToTournamentAndBoard(({Team team, int? teamNumber, Map<int, int> boards}) teamData, {int? preselectedBoard}) {
     final nameC = TextEditingController();
     final surnameC = TextEditingController();
     final lastnameC = TextEditingController();
@@ -479,11 +489,15 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
       allPlayers = players;
     });
 
-    // Find first empty board
-    for (int i = 1; i <= widget.config.boardCount; i++) {
-      if (!teamData.boards.containsKey(i)) {
-        selectedBoard = i;
-        break;
+    // Use preselected board or find first empty board
+    if (preselectedBoard != null) {
+      selectedBoard = preselectedBoard;
+    } else {
+      for (int i = 1; i <= widget.config.boardCount; i++) {
+        if (!teamData.boards.containsKey(i)) {
+          selectedBoard = i;
+          break;
+        }
       }
     }
 
