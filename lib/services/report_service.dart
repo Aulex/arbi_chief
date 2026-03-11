@@ -544,6 +544,7 @@ class ReportService {
     if (teamMap.isNotEmpty) {
       final teamIds = teamMap.keys.toList();
       final teamPoints = <int, double>{};
+      final teamBoard1Pts = <int, double>{};
       final teamBoard3Pts = <int, double>{};
       for (final aId in teamIds) {
         double total = 0;
@@ -552,14 +553,19 @@ class ReportService {
           total += teamMatchPoints(data, aId, bId).a;
         }
         teamPoints[aId] = total;
+        final b1p = (data.boardPlayers[1] ?? []).where((p) => p.teamId == aId).firstOrNull;
+        teamBoard1Pts[aId] = b1p != null ? totalPoints(data, 1, b1p.player.player_id!) : 0;
         final lastBoard = config.boardCount;
         final b3p = (data.boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
         teamBoard3Pts[aId] = b3p != null ? totalPoints(data, lastBoard, b3p.player.player_id!) : 0;
       }
 
+      final isTT = isTableTennis;
       final teamTotalSetDiffMap = <int, int>{};
-      for (final id in teamIds) {
-        teamTotalSetDiffMap[id] = teamTotalSetDiff(data, id);
+      if (isTT) {
+        for (final id in teamIds) {
+          teamTotalSetDiffMap[id] = teamTotalSetDiff(data, id);
+        }
       }
 
       teamIds.sort((a, b) {
@@ -569,16 +575,23 @@ class ReportService {
         final h2h = teamMatchPoints(data, a, b);
         if (h2h.a > h2h.b) return -1;
         if (h2h.b > h2h.a) return 1;
-        final setDiffA = teamDirectSetDiff(data, a, b);
-        final setDiffB = teamDirectSetDiff(data, b, a);
-        if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
-        final ballDiffA = teamDirectBallDiff(data, a, b);
-        final ballDiffB = teamDirectBallDiff(data, b, a);
-        if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
-        final tsdA = teamTotalSetDiffMap[a]!;
-        final tsdB = teamTotalSetDiffMap[b]!;
-        if (tsdA != tsdB) return tsdB.compareTo(tsdA);
-        return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        if (isTT) {
+          final setDiffA = teamDirectSetDiff(data, a, b);
+          final setDiffB = teamDirectSetDiff(data, b, a);
+          if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+          final ballDiffA = teamDirectBallDiff(data, a, b);
+          final ballDiffB = teamDirectBallDiff(data, b, a);
+          if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+          final tsdA = teamTotalSetDiffMap[a]!;
+          final tsdB = teamTotalSetDiffMap[b]!;
+          if (tsdA != tsdB) return tsdB.compareTo(tsdA);
+          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        } else {
+          final b1a = teamBoard1Pts[a]!;
+          final b1b = teamBoard1Pts[b]!;
+          if (b1a != b1b) return b1b.compareTo(b1a);
+          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        }
       });
 
       final tn = teamIds.length;
@@ -592,7 +605,10 @@ class ReportService {
         for (int i = 0; i < tn; i++)
           _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
-        _pdfCell('Сети', hdrStyle),
+        if (isTT)
+          _pdfCell('Сети', hdrStyle)
+        else
+          _pdfCell('${config.boardAbbrev}1', hdrStyle),
         _pdfCell('${config.boardAbbrev}${config.boardCount}', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
@@ -617,7 +633,10 @@ class ReportService {
             else
               _pdfTeamResultCell(data, tid, teamIds[j], cellSt, cellBold),
           _pdfCell(fmtPts(teamPoints[tid]!), cellBold),
-          _pdfCell('${teamTotalSetDiffMap[tid]! >= 0 ? '+' : ''}${teamTotalSetDiffMap[tid]!}', cellSt),
+          if (isTT)
+            _pdfCell('${teamTotalSetDiffMap[tid]! >= 0 ? '+' : ''}${teamTotalSetDiffMap[tid]!}', cellSt)
+          else
+            _pdfCell(fmtPts(teamBoard1Pts[tid]!), cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
           _pdfCell('${i + 1}', cellBold),
         ];
