@@ -177,7 +177,10 @@ class _TeamEditScreenState extends ConsumerState<TeamEditScreen> {
 
   Widget _buildBoardRow(int boardNum, List<Player> allPlayers) {
     final available = _availableForBoard(boardNum, allPlayers);
-    final currentId = _boards[boardNum];
+    final rawId = _boards[boardNum];
+    // Guard: if the saved player ID no longer exists in the available list
+    // (e.g. player deleted or moved), fall back to null to avoid assertion error.
+    final currentId = rawId != null && available.any((p) => p.player_id == rawId) ? rawId : null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
