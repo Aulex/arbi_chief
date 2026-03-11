@@ -1051,7 +1051,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     final allTeamIds = teamMap.keys.toList();
     final teamPoints = <int, double>{};
-    final teamBoard3Pts = <int, double>{}; // women's racket (last board)
+    final teamBoard1Pts = <int, double>{}; // board 1 points
+    final teamBoard3Pts = <int, double>{}; // last board points
     for (final aId in allTeamIds) {
       double total = 0;
       for (final bId in allTeamIds) {
@@ -1059,15 +1060,21 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         total += _teamMatchPoints(aId, bId).a;
       }
       teamPoints[aId] = total;
+      final b1p = (_boardPlayers[1] ?? []).where((p) => p.teamId == aId).firstOrNull;
+      teamBoard1Pts[aId] = b1p != null ? _totalPoints(1, b1p.player.player_id!) : 0;
       final lastBoard = widget.config.boardCount;
       final b3p = (_boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
       teamBoard3Pts[aId] = b3p != null ? _totalPoints(lastBoard, b3p.player.player_id!) : 0;
     }
 
-    // Precompute total set diff for each team across the entire tournament
+    final isTT = _isTableTennis;
+
+    // Precompute total set diff for each team across the entire tournament (table tennis only)
     final teamTotalSetDiff = <int, int>{};
-    for (final id in allTeamIds) {
-      teamTotalSetDiff[id] = _teamTotalSetDiff(id);
+    if (isTT) {
+      for (final id in allTeamIds) {
+        teamTotalSetDiff[id] = _teamTotalSetDiff(id);
+      }
     }
 
     // Cross-table order: sort by team number
@@ -1079,7 +1086,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         return teamMap[a]!.teamName.compareTo(teamMap[b]!.teamName);
       });
 
-    // Standings order: sort by points → h2h → set diff → ball diff → tournament set diff → women's racket
+    // Standings order: sport-specific tiebreakers
     final sortedTeamIds = List<int>.from(allTeamIds)
       ..sort((a, b) {
         final pa = teamPoints[a]!;
@@ -1088,16 +1095,25 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         final h2h = _teamMatchPoints(a, b);
         if (h2h.a > h2h.b) return -1;
         if (h2h.b > h2h.a) return 1;
-        final setDiffA = _teamDirectSetDiff(a, b);
-        final setDiffB = _teamDirectSetDiff(b, a);
-        if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
-        final ballDiffA = _teamDirectBallDiff(a, b);
-        final ballDiffB = _teamDirectBallDiff(b, a);
-        if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
-        final tsdA = teamTotalSetDiff[a]!;
-        final tsdB = teamTotalSetDiff[b]!;
-        if (tsdA != tsdB) return tsdB.compareTo(tsdA);
-        return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        if (isTT) {
+          // Table tennis: set diff → ball diff → tournament set diff → last board
+          final setDiffA = _teamDirectSetDiff(a, b);
+          final setDiffB = _teamDirectSetDiff(b, a);
+          if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+          final ballDiffA = _teamDirectBallDiff(a, b);
+          final ballDiffB = _teamDirectBallDiff(b, a);
+          if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+          final tsdA = teamTotalSetDiff[a]!;
+          final tsdB = teamTotalSetDiff[b]!;
+          if (tsdA != tsdB) return tsdB.compareTo(tsdA);
+          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        } else {
+          // Chess/checkers: board 1 points → board 3 (women's) points
+          final b1a = teamBoard1Pts[a]!;
+          final b1b = teamBoard1Pts[b]!;
+          if (b1a != b1b) return b1b.compareTo(b1a);
+          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        }
       });
 
     final n = teamIdsByNumber.length;
@@ -1138,7 +1154,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
-                _tableCell('Сети', style: headerStyle),
+                if (isTT)
+                  _tableCell('Сети', style: headerStyle)
+                else
+                  _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
                 _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
                 // Standings headers
                 _tableCell('№', style: headerStyle),
@@ -1163,7 +1182,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     _formatPoints(teamPoints[teamIdsByNumber[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  _tableCell('${teamTotalSetDiff[teamIdsByNumber[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIdsByNumber[i]]!}', style: cellStyle),
+                  if (isTT)
+                    _tableCell('${teamTotalSetDiff[teamIdsByNumber[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIdsByNumber[i]]!}', style: cellStyle)
+                  else
+                    _tableCell(_formatPoints(teamBoard1Pts[teamIdsByNumber[i]]!), style: cellStyle),
                   _tableCell(_formatPoints(teamBoard3Pts[teamIdsByNumber[i]]!), style: cellStyle),
                   // Standings cells (sorted by place)
                   _tableCell(
