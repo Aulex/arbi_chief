@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
 import '../viewmodels/tournament_viewmodel.dart';
@@ -103,7 +104,7 @@ class GameResultsTabState extends ConsumerState<GameResultsTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.sports_esports_outlined, size: 48, color: Colors.grey.shade400),
+                Icon(Symbols.sports_esports_rounded, size: 48, color: Colors.grey.shade400),
                 const SizedBox(height: 16),
                 Text(
                   'Ігор ще немає',

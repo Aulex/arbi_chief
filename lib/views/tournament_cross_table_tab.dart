@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
@@ -387,7 +388,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Icon(Icons.sports_tennis, color: Colors.indigo.shade400, size: 20),
+                                child: Icon(Symbols.sports_tennis_rounded, color: Colors.indigo.shade400, size: 20),
                               ),
                               const SizedBox(height: 6),
                               Text(
@@ -418,7 +419,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Icon(Icons.sports_tennis, color: Colors.indigo.shade400, size: 20),
+                                child: Icon(Symbols.sports_tennis_rounded, color: Colors.indigo.shade400, size: 20),
                               ),
                               const SizedBox(height: 6),
                               Text(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/sport_type_provider.dart';
@@ -34,24 +35,24 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
 
   IconData _iconForType(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('шах')) return Icons.castle_rounded;          // Chess
-    if (lower.contains('шашк')) return Icons.grid_on_rounded;        // Checkers
-    if (lower.contains('футзал')) return Icons.sports_soccer;
-    if (lower.contains('волейбол')) return Icons.sports_volleyball;
-    if (lower.contains('стрітбол')) return Icons.sports_basketball;
-    if (lower.contains('баскетбол')) return Icons.sports_basketball;
-    if (lower.contains('плаван')) return Icons.pool;
-    if (lower.contains('пауерліфтинг')) return Icons.fitness_center;
-    if (lower.contains('гирьов') || lower.contains('важк')) return Icons.monitor_weight_rounded;
-    if (lower.contains('армрестлінг')) return Icons.sports_martial_arts;
-    if (lower.contains('легка атлетика')) return Icons.directions_run;
-    if (lower.contains('настільний теніс')) return Icons.sports_tennis;
-    if (lower.contains('теніс')) return Icons.sports_tennis;
-    if (lower.contains('велоспорт')) return Icons.pedal_bike;
-    if (lower.contains('перетяг') || lower.contains('канат')) return Icons.group_work_rounded;
-    if (lower.contains('орієнтуван')) return Icons.explore;
-    if (lower.contains('го') || lower == 'go') return Icons.circle_outlined;
-    return Icons.emoji_events;
+    if (lower.contains('шах')) return Symbols.chess_rounded;              // Chess
+    if (lower.contains('шашк')) return Symbols.grid_on_rounded;           // Checkers
+    if (lower.contains('футзал')) return Symbols.sports_soccer_rounded;
+    if (lower.contains('волейбол')) return Symbols.sports_volleyball_rounded;
+    if (lower.contains('стрітбол')) return Symbols.sports_basketball_rounded;
+    if (lower.contains('баскетбол')) return Symbols.sports_basketball_rounded;
+    if (lower.contains('плаван')) return Symbols.pool_rounded;
+    if (lower.contains('пауерліфтинг')) return Symbols.fitness_center_rounded;
+    if (lower.contains('гирьов') || lower.contains('важк')) return Symbols.exercise_rounded;
+    if (lower.contains('армрестлінг')) return Symbols.sports_martial_arts_rounded;
+    if (lower.contains('легка атлетика')) return Symbols.sprint_rounded;
+    if (lower.contains('настільний теніс')) return Symbols.sports_tennis_rounded;
+    if (lower.contains('теніс')) return Symbols.sports_tennis_rounded;
+    if (lower.contains('велоспорт')) return Symbols.directions_bike_rounded;
+    if (lower.contains('перетяг') || lower.contains('канат')) return Symbols.group_work_rounded;
+    if (lower.contains('орієнтуван')) return Symbols.explore_rounded;
+    if (lower.contains('го') || lower == 'go') return Symbols.circle_rounded;
+    return Symbols.emoji_events_rounded;
   }
 
   void _selectType(int typeId) {

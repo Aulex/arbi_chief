@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/nav_provider.dart';
 
@@ -91,7 +92,7 @@ class TournamentView extends ConsumerWidget {
                                           .showEdit(t);
                                     },
                                     leading: const Icon(
-                                      Icons.emoji_events_outlined,
+                                      Symbols.emoji_events_rounded,
                                       color: Colors.indigo,
                                     ),
                                     title: Text(

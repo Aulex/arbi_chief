@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../viewmodels/navigation_viewmodel.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/sport_type_provider.dart';
@@ -74,7 +75,7 @@ class MainView extends ConsumerWidget {
             labelType: NavigationRailLabelType.all,
             destinations: const [
               NavigationRailDestination(
-                icon: Icon(Icons.emoji_events),
+                icon: Icon(Symbols.emoji_events_rounded),
                 label: Text('Турніри'),
               ),
               NavigationRailDestination(
