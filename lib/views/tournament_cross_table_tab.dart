@@ -1332,36 +1332,38 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                       style: const TextStyle(fontSize: 12, color: Colors.white70),
                     ),
                   ),
-                  Builder(builder: (_) {
-                    final setDiffA = _teamDirectSetDiff(teamAId, teamBId);
-                    final setDiffB = _teamDirectSetDiff(teamBId, teamAId);
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Сети: ${setDiffA >= 0 ? '+' : ''}$setDiffA / ${setDiffB >= 0 ? '+' : ''}$setDiffB',
-                        style: const TextStyle(fontSize: 12, color: Colors.white70),
-                      ),
-                    );
-                  }),
-                  Builder(builder: (_) {
-                    final ballDiffA = _teamDirectBallDiff(teamAId, teamBId);
-                    final ballDiffB = _teamDirectBallDiff(teamBId, teamAId);
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'М\'ячі: ${ballDiffA >= 0 ? '+' : ''}$ballDiffA / ${ballDiffB >= 0 ? '+' : ''}$ballDiffB',
-                        style: const TextStyle(fontSize: 12, color: Colors.white70),
-                      ),
-                    );
-                  }),
+                  if (_isTableTennis)
+                    Builder(builder: (_) {
+                      final setDiffA = _teamDirectSetDiff(teamAId, teamBId);
+                      final setDiffB = _teamDirectSetDiff(teamBId, teamAId);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Сети: ${setDiffA >= 0 ? '+' : ''}$setDiffA / ${setDiffB >= 0 ? '+' : ''}$setDiffB',
+                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                        ),
+                      );
+                    }),
+                  if (_isTableTennis)
+                    Builder(builder: (_) {
+                      final ballDiffA = _teamDirectBallDiff(teamAId, teamBId);
+                      final ballDiffB = _teamDirectBallDiff(teamBId, teamAId);
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'М\'ячі: ${ballDiffA >= 0 ? '+' : ''}$ballDiffA / ${ballDiffB >= 0 ? '+' : ''}$ballDiffB',
+                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                        ),
+                      );
+                    }),
                 ],
               ),
             ],
