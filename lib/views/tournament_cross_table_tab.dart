@@ -901,7 +901,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               child: Scrollbar(
                 thumbVisibility: true,
                 controller: _getBoardHorizontalController(boardNum),
-                notificationPredicate: (n) => n.depth == 1,
                 child: SingleChildScrollView(
                   controller: _getBoardHorizontalController(boardNum),
                   scrollDirection: Axis.horizontal,
@@ -1116,7 +1115,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         child: Scrollbar(
           thumbVisibility: true,
           controller: _teamsHorizontalController,
-          notificationPredicate: (n) => n.depth == 1,
           child: SingleChildScrollView(
             controller: _teamsHorizontalController,
             scrollDirection: Axis.horizontal,
