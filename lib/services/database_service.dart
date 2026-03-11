@@ -1,6 +1,40 @@
+import 'dart:math';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:io';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Generates a globally-unique sync identifier for each row.
+/// Format: `<timestamp_ms>_<machine_id>_<random>`
+/// [machineId] should be loaded once from SharedPreferences at app start.
+class SyncUidGenerator {
+  static String? _machineId;
+
+  static Future<String> getMachineId() async {
+    if (_machineId != null) return _machineId!;
+    final prefs = await SharedPreferences.getInstance();
+    _machineId = prefs.getString('sync_machine_id');
+    if (_machineId == null) {
+      _machineId = _randomHex(8);
+      await prefs.setString('sync_machine_id', _machineId!);
+    }
+    return _machineId!;
+  }
+
+  static String _randomHex(int length) {
+    final rng = Random.secure();
+    return List.generate(length, (_) => rng.nextInt(16).toRadixString(16)).join();
+  }
+
+  static Future<String> generate() async {
+    final mid = await getMachineId();
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final rnd = _randomHex(6);
+    return '${ts}_${mid}_$rnd';
+  }
+}
 
 class DatabaseService {
   static Database? _db;
@@ -21,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -62,13 +96,41 @@ class DatabaseService {
             await db.execute('ALTER TABLE CMP_PLAYER_EVENT ADD COLUMN event_result_detail TEXT');
           }
         }
+        if (oldVersion < 5) {
+          // Add sync_uid column to every user table for reliable duplicate detection during sync.
+          final tables = await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'",
+          );
+          final machineId = await SyncUidGenerator.getMachineId();
+          final rng = Random.secure();
+          for (final row in tables) {
+            final table = row['name'] as String;
+            final cols = await db.rawQuery('PRAGMA table_info($table)');
+            final hasSyncUid = cols.any((c) => c['name'] == 'sync_uid');
+            if (!hasSyncUid) {
+              await db.execute('ALTER TABLE $table ADD COLUMN sync_uid TEXT');
+              // Backfill existing rows with unique sync_uid
+              final pkCol = cols.firstWhere((c) => (c['pk'] as int) == 1)['name'] as String;
+              final existing = await db.rawQuery('SELECT $pkCol FROM $table');
+              for (final r in existing) {
+                final pk = r[pkCol];
+                final ts = DateTime.now().microsecondsSinceEpoch;
+                final rnd = List.generate(6, (_) => rng.nextInt(16).toRadixString(16)).join();
+                final uid = '${ts}_${machineId}_$rnd';
+                await db.execute('UPDATE $table SET sync_uid = ? WHERE $pkCol = ?', [uid, pk]);
+              }
+            }
+          }
+        }
       },
       onCreate: (db, version) async {
         // 1. CMP_TOURNAMENT_TYPE
         await db.execute('''
           CREATE TABLE CMP_TOURNAMENT_TYPE (
             type_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type_name TEXT
+            type_name TEXT,
+            sync_uid TEXT
           )
         ''');
 
@@ -78,6 +140,7 @@ class DatabaseService {
             ent_id INTEGER PRIMARY KEY AUTOINCREMENT,
             ent_t_type INTEGER,
             ent_name TEXT,
+            sync_uid TEXT,
             FOREIGN KEY (ent_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
@@ -92,6 +155,7 @@ class DatabaseService {
             attr_t_type INTEGER DEFAULT 1,
             attr_data_type TEXT,
             attr_entity_type INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (attr_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id),
             FOREIGN KEY (attr_entity_type) REFERENCES CMP_ENTITY (ent_id)
           )
@@ -103,6 +167,7 @@ class DatabaseService {
             dict_id INTEGER PRIMARY KEY AUTOINCREMENT,
             attr_id INTEGER NOT NULL,
             dict_value TEXT,
+            sync_uid TEXT,
             FOREIGN KEY (attr_id) REFERENCES CMP_ATTR (attr_id)
           )
         ''');
@@ -113,7 +178,8 @@ class DatabaseService {
             location_id INTEGER PRIMARY KEY AUTOINCREMENT,
             location_country TEXT,
             location_city TEXT,
-            location_address TEXT
+            location_address TEXT,
+            sync_uid TEXT
           )
         ''');
 
@@ -123,7 +189,8 @@ class DatabaseService {
             organizer_id INTEGER PRIMARY KEY AUTOINCREMENT,
             organizer_name TEXT,
             organizer_email TEXT,
-            organizer_phone TEXT
+            organizer_phone TEXT,
+            sync_uid TEXT
           )
         ''');
 
@@ -137,6 +204,7 @@ class DatabaseService {
             t_date_end TEXT,
             t_location INTEGER,
             t_org INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id),
             FOREIGN KEY (t_location) REFERENCES CMP_TOURNAMENT_LOCATION (location_id),
             FOREIGN KEY (t_org) REFERENCES CMP_TOURNAMENT_ORGANIZER (organizer_id)
@@ -151,6 +219,7 @@ class DatabaseService {
             attr_id INTEGER,
             attr_value TEXT,
             att_value_dict_id INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (attr_id) REFERENCES CMP_ATTR (attr_id),
             FOREIGN KEY (att_value_dict_id) REFERENCES CMP_ATTR_DICT (dict_id)
@@ -163,6 +232,7 @@ class DatabaseService {
             ts_id INTEGER PRIMARY KEY AUTOINCREMENT,
             t_id INTEGER,
             ts_name TEXT,
+            sync_uid TEXT,
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id)
           )
         ''');
@@ -175,6 +245,7 @@ class DatabaseService {
             event_date_begin TEXT,
             event_date_end TEXT,
             ts_id INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (ts_id) REFERENCES CMP_TOURNAMENT_STAGE (ts_id)
           )
         ''');
@@ -189,6 +260,7 @@ class DatabaseService {
             player_gender INTEGER,
             player_date_birth TEXT,
             t_type INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
@@ -203,6 +275,7 @@ class DatabaseService {
             event_result REAL,
             event_result_valid INTEGER,
             event_result_detail TEXT,
+            sync_uid TEXT,
             FOREIGN KEY (event_id) REFERENCES CMP_EVENT (event_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
           )
@@ -214,6 +287,7 @@ class DatabaseService {
             team_id INTEGER PRIMARY KEY AUTOINCREMENT,
             team_name TEXT,
             t_type INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
@@ -228,6 +302,7 @@ class DatabaseService {
             team_number INTEGER,
             asgn_date TEXT,
             player_state INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id)
@@ -242,6 +317,7 @@ class DatabaseService {
             attr_id INTEGER,
             attr_value TEXT,
             att_value_dict_id INTEGER,
+            sync_uid TEXT,
             FOREIGN KEY (pte_id) REFERENCES CMP_PLAYER_TEAM (pte_id),
             FOREIGN KEY (attr_id) REFERENCES CMP_ATTR (attr_id),
             FOREIGN KEY (att_value_dict_id) REFERENCES CMP_ATTR_DICT (dict_id)
@@ -255,6 +331,7 @@ class DatabaseService {
             t_id INTEGER,
             player_id INTEGER,
             asgn_date TEXT,
+            sync_uid TEXT,
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
           )

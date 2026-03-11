@@ -33,6 +33,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   int? _hoveredTeamRow;
   int? _hoveredTeamCol;
 
+  // ScrollControllers for board tabs (vertical + horizontal per board)
+  final Map<int, ScrollController> _boardVerticalControllers = {};
+  final Map<int, ScrollController> _boardHorizontalControllers = {};
+  // ScrollControllers for teams tab
+  final ScrollController _teamsVerticalController = ScrollController();
+  final ScrollController _teamsHorizontalController = ScrollController();
+
   bool get _isTableTennis => widget.tType == 11;
 
   @override
@@ -42,9 +49,25 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     _loadData();
   }
 
+  ScrollController _getBoardVerticalController(int boardNum) {
+    return _boardVerticalControllers.putIfAbsent(boardNum, () => ScrollController());
+  }
+
+  ScrollController _getBoardHorizontalController(int boardNum) {
+    return _boardHorizontalControllers.putIfAbsent(boardNum, () => ScrollController());
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
+    for (final c in _boardVerticalControllers.values) {
+      c.dispose();
+    }
+    for (final c in _boardHorizontalControllers.values) {
+      c.dispose();
+    }
+    _teamsVerticalController.dispose();
+    _teamsHorizontalController.dispose();
     super.dispose();
   }
 
@@ -872,11 +895,15 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         Expanded(
           child: Scrollbar(
             thumbVisibility: true,
+            controller: _getBoardVerticalController(boardNum),
             child: SingleChildScrollView(
+              controller: _getBoardVerticalController(boardNum),
               child: Scrollbar(
                 thumbVisibility: true,
+                controller: _getBoardHorizontalController(boardNum),
                 notificationPredicate: (n) => n.depth == 1,
                 child: SingleChildScrollView(
+                  controller: _getBoardHorizontalController(boardNum),
                   scrollDirection: Axis.horizontal,
                   child: _buildCombinedTable(boardNum, players),
                 ),
@@ -1074,24 +1101,32 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       });
 
     final n = teamIdsByNumber.length;
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.grey.shade400 : Colors.black54);
+    final cellStyle = TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade300 : Colors.black87);
+    final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
+    final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
+    final oddRowBg = isDark ? const Color(0xFF152238) : Colors.grey.shade50;
 
     return Scrollbar(
       thumbVisibility: true,
+      controller: _teamsVerticalController,
       child: SingleChildScrollView(
+        controller: _teamsVerticalController,
         child: Scrollbar(
           thumbVisibility: true,
+          controller: _teamsHorizontalController,
           notificationPredicate: (n) => n.depth == 1,
           child: SingleChildScrollView(
+            controller: _teamsHorizontalController,
             scrollDirection: Axis.horizontal,
             child: Table(
-              border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+              border: TableBorder.all(color: borderColor, width: 1),
               defaultColumnWidth: const IntrinsicColumnWidth(),
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
             TableRow(
-              decoration: BoxDecoration(color: Colors.grey.shade100),
+              decoration: BoxDecoration(color: headerBg),
               children: [
                 // Cross table headers
                 _tableCell('№', style: headerStyle),
@@ -1115,7 +1150,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             ),
             for (int i = 0; i < n; i++)
               TableRow(
-                decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
+                decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
                 children: [
                   // Cross table cells
                   _tableCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
@@ -1134,7 +1169,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                   // Standings cells (sorted by place)
                   _tableCell(
                     '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
-                    style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
+                    style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
                   ),
                   _tableCell(teamMap[sortedTeamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
                   _tableCell(
@@ -1465,19 +1500,23 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       });
     final n = players.length;
     final sorted = _sortedStandings(boardNum, players);
-    const headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    const cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isDark ? Colors.grey.shade400 : Colors.black54);
+    final cellStyle = TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade300 : Colors.black87);
+    final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
+    final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
+    final oddRowBg = isDark ? const Color(0xFF152238) : Colors.grey.shade50;
 
     final isTT = _isTableTennis;
 
     return Table(
-      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
+      border: TableBorder.all(color: borderColor, width: 1),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
         // Header row
         TableRow(
-          decoration: BoxDecoration(color: Colors.grey.shade100),
+          decoration: BoxDecoration(color: headerBg),
           children: [
             // Cross table headers
             _tableCell('№к', style: headerStyle),
@@ -1509,12 +1548,12 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         // Data rows
         for (int i = 0; i < n; i++)
           TableRow(
-            decoration: i.isEven ? null : BoxDecoration(color: Colors.grey.shade50),
+            decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
             children: [
               // Cross table cells
               _tableCell(
                 '${players[i].teamNumber ?? ''}',
-                style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
+                style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               if (_absentPlayerIds.contains(players[i].player.player_id) && players[i].player.player_id! < 0)
@@ -1563,7 +1602,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               // Standings cells (sorted order)
               _tableCell(
                 '${sorted[i].teamNumber ?? ''}',
-                style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11),
+                style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell(
                 '${sorted[i].player.player_surname} ${sorted[i].player.player_name}',
@@ -1695,6 +1734,31 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showBoardAssignmentPicker(boardNum, player);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(color: Colors.indigo.shade100, borderRadius: BorderRadius.circular(6)),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.swap_horiz, size: 18, color: Colors.indigo.shade800),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Замінити гравця (${widget.config.shortTabLabel(boardNum)})'),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (!isNoShow)
               InkWell(
                 borderRadius: BorderRadius.circular(10),
@@ -1753,6 +1817,207 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         ],
       ),
     );
+  }
+
+  void _showBoardAssignmentPicker(
+    int boardNum,
+    ({int teamId, String teamName, int? teamNumber, Player player}) currentPlayer,
+  ) {
+    String search = '';
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          // Get all tournament participants
+          final currentBoardPlayers = _boardPlayers[boardNum] ?? [];
+          final assignedPlayerIds = <int>{};
+          // Collect all player IDs assigned to this board across all teams
+          for (final p in currentBoardPlayers) {
+            if (p.player.player_id != null && p.player.player_id! > 0) {
+              assignedPlayerIds.add(p.player.player_id!);
+            }
+          }
+          // Collect all players from all boards for this team
+          final teamPlayersOnOtherBoards = <int>{};
+          for (final boardEntry in _boardPlayers.entries) {
+            if (boardEntry.key == boardNum) continue;
+            for (final p in boardEntry.value) {
+              if (p.teamId == currentPlayer.teamId && p.player.player_id! > 0) {
+                teamPlayersOnOtherBoards.add(p.player.player_id!);
+              }
+            }
+          }
+
+          // Get available players (from tournament participants, not assigned to any board for this team)
+          // We need to load from the team service
+          return FutureBuilder<List<({int playerId, String fullName})>>(
+            future: _getAvailablePlayersForBoard(currentPlayer.teamId, boardNum),
+            builder: (context, snapshot) {
+              final availablePlayers = snapshot.data ?? [];
+              final filtered = search.isEmpty
+                  ? availablePlayers
+                  : availablePlayers.where((p) => p.fullName.toLowerCase().contains(search.toLowerCase())).toList();
+
+              return Dialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Colors.indigo,
+                              child: Text('$boardNum', style: const TextStyle(color: Colors.white, fontSize: 14)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '${widget.config.shortTabLabel(boardNum)} — ${currentPlayer.teamName}',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Поточний: ${currentPlayer.player.player_surname} ${currentPlayer.player.player_name}',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Пошук гравця...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            isDense: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onChanged: (v) => setST(() => search = v),
+                        ),
+                        const SizedBox(height: 12),
+                        Flexible(
+                          child: filtered.isEmpty
+                              ? const Center(child: Text('Немає доступних гравців'))
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: filtered.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final p = filtered[index];
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(p.fullName),
+                                      trailing: const Icon(Icons.swap_horiz, color: Colors.indigo),
+                                      contentPadding: EdgeInsets.zero,
+                                      onTap: () async {
+                                        await _reassignBoard(
+                                          currentPlayer.teamId,
+                                          boardNum,
+                                          p.playerId,
+                                        );
+                                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                      },
+                                    );
+                                  },
+                                ),
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Закрити'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<List<({int playerId, String fullName})>> _getAvailablePlayersForBoard(int teamId, int boardNum) async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final tournamentSvc = ref.read(tournamentServiceProvider);
+
+    // Get all participants in the tournament
+    final participants = await tournamentSvc.getParticipants(widget.tId);
+
+    // Get current team's board assignments
+    final assignments = await teamSvc.getTeamAssignments(teamId, widget.tId);
+    final assignedToOtherBoards = <int>{};
+    for (final a in assignments) {
+      if (a.player_id != null && a.player_state != 1) {
+        assignedToOtherBoards.add(a.player_id!);
+      }
+    }
+
+    // Get all players assigned to any team in this tournament
+    final allTeamPlayerIds = <int>{};
+    for (final boardEntry in _boardPlayers.entries) {
+      for (final p in boardEntry.value) {
+        if (p.player.player_id! > 0) {
+          allTeamPlayerIds.add(p.player.player_id!);
+        }
+      }
+    }
+
+    // Available: in tournament, not assigned to other teams, not on other boards of this team
+    final available = <({int playerId, String fullName})>[];
+    for (final p in participants) {
+      final pid = p.player_id;
+      if (pid == null) continue;
+      // Exclude players assigned to other teams (but allow current team's players)
+      if (allTeamPlayerIds.contains(pid)) {
+        // Check if it's on THIS team
+        final isOnThisTeam = _boardPlayers.values.any(
+          (boardPlayers) => boardPlayers.any((bp) => bp.teamId == teamId && bp.player.player_id == pid),
+        );
+        if (!isOnThisTeam) continue;
+      }
+      available.add((
+        playerId: pid,
+        fullName: '${p.player_surname} ${p.player_name}',
+      ));
+    }
+
+    available.sort((a, b) => a.fullName.compareTo(b.fullName));
+    return available;
+  }
+
+  Future<void> _reassignBoard(int teamId, int boardNum, int newPlayerId) async {
+    final teamSvc = ref.read(teamServiceProvider);
+
+    // Build current board map from loaded data
+    final boards = <int, int>{};
+    for (final boardEntry in _boardPlayers.entries) {
+      for (final p in boardEntry.value) {
+        if (p.teamId == teamId && p.player.player_id! > 0) {
+          boards[boardEntry.key] = p.player.player_id!;
+        }
+      }
+    }
+
+    // Get reserves
+    final assignments = await teamSvc.getTeamAssignments(teamId, widget.tId);
+    final reserves = assignments
+        .where((a) => a.player_state == 1 && a.player_id != null)
+        .map((a) => a.player_id!)
+        .toList();
+
+    boards[boardNum] = newPlayerId;
+    await teamSvc.saveAssignments(teamId, widget.tId, boards, reserves);
+    await _loadData();
   }
 
   Future<void> _markPlayerNoShow(

@@ -34,21 +34,21 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
 
   IconData _iconForType(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('шах')) return Icons.grid_view_rounded;
-    if (lower.contains('шашк')) return Icons.apps_rounded;
+    if (lower.contains('шах')) return Icons.castle_rounded;          // Chess
+    if (lower.contains('шашк')) return Icons.grid_on_rounded;        // Checkers
     if (lower.contains('футзал')) return Icons.sports_soccer;
     if (lower.contains('волейбол')) return Icons.sports_volleyball;
     if (lower.contains('стрітбол')) return Icons.sports_basketball;
     if (lower.contains('баскетбол')) return Icons.sports_basketball;
     if (lower.contains('плаван')) return Icons.pool;
     if (lower.contains('пауерліфтинг')) return Icons.fitness_center;
-    if (lower.contains('гирьов') || lower.contains('важк')) return Icons.fitness_center;
-    if (lower.contains('армрестлінг')) return Icons.front_hand;
+    if (lower.contains('гирьов') || lower.contains('важк')) return Icons.monitor_weight_rounded;
+    if (lower.contains('армрестлінг')) return Icons.sports_martial_arts;
     if (lower.contains('легка атлетика')) return Icons.directions_run;
     if (lower.contains('настільний теніс')) return Icons.sports_tennis;
     if (lower.contains('теніс')) return Icons.sports_tennis;
-    if (lower.contains('велоспорт')) return Icons.directions_bike;
-    if (lower.contains('перетяг') || lower.contains('канат')) return Icons.fitness_center;
+    if (lower.contains('велоспорт')) return Icons.pedal_bike;
+    if (lower.contains('перетяг') || lower.contains('канат')) return Icons.group_work_rounded;
     if (lower.contains('орієнтуван')) return Icons.explore;
     if (lower.contains('го') || lower == 'go') return Icons.circle_outlined;
     return Icons.emoji_events;
@@ -124,10 +124,14 @@ class _SportCardState extends State<_SportCard> {
           width: 160,
           height: 160,
           decoration: BoxDecoration(
-            color: _hovering ? Colors.indigo.shade50 : Colors.white,
+            color: _hovering
+                ? Colors.indigo.shade50
+                : Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1B2838)
+                    : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _hovering ? Colors.indigo : Colors.grey.shade300,
+              color: _hovering ? Colors.indigo : (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2A3A4E) : Colors.grey.shade300),
               width: _hovering ? 2 : 1,
             ),
             boxShadow: _hovering
@@ -137,7 +141,7 @@ class _SportCardState extends State<_SportCard> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(widget.icon, size: 48, color: _hovering ? Colors.indigo : Colors.grey.shade700),
+              Icon(widget.icon, size: 48, color: _hovering ? Colors.indigo : (Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade700)),
               const SizedBox(height: 12),
               Text(
                 widget.name,
@@ -145,7 +149,7 @@ class _SportCardState extends State<_SportCard> {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: _hovering ? Colors.indigo : Colors.black87,
+                  color: _hovering ? Colors.indigo : (Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade300 : Colors.black87),
                 ),
               ),
             ],

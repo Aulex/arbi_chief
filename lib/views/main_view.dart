@@ -53,7 +53,7 @@ class MainView extends ConsumerWidget {
                 MaterialPageRoute(builder: (_) => const SportSelectionScreen()),
               );
             },
-            icon: const Icon(Icons.sports, size: 20),
+            icon: const Icon(Icons.swap_horiz_rounded, size: 28),
             label: const Text('Змінити вид спорту'),
           ),
           const SizedBox(width: 8),

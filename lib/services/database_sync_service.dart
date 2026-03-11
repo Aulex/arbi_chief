@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-import 'database_service.dart';
+import 'database_service.dart' show DatabaseService, SyncUidGenerator;
 
 /// Describes a single column in a table.
 class ColumnInfo {
@@ -194,39 +194,53 @@ class DatabaseSyncService {
               dataRow[col] = value;
             }
 
-            // For CMP_PLAYER_EVENT and CMP_EVENT, use unique key columns
-            // to avoid duplicates caused by differing result values.
-            final uniqueKeyCols = _uniqueKeyColumns[table];
-            final checkEntries = uniqueKeyCols != null
-                ? dataRow.entries.where((e) => uniqueKeyCols.contains(e.key)).toList()
-                : dataRow.entries.toList();
+            // Use sync_uid for reliable duplicate detection.
+            // If the external row has a sync_uid, check if it already exists.
+            // Fall back to data-column comparison for old DBs without sync_uid.
+            final extSyncUid = row['sync_uid'] as String?;
 
-            final nonNullEntries =
-                checkEntries.where((e) => e.value != null).toList();
-            final nullEntries =
-                checkEntries.where((e) => e.value == null).toList();
+            List<Map<String, Object?>> existing;
+            if (extSyncUid != null && extSyncUid.isNotEmpty) {
+              existing = await txn.query(
+                table,
+                columns: [pkCol],
+                where: 'sync_uid = ?',
+                whereArgs: [extSyncUid],
+              );
+            } else {
+              // Fallback: match by data columns for legacy DBs
+              final uniqueKeyCols = _uniqueKeyColumns[table];
+              final checkEntries = uniqueKeyCols != null
+                  ? dataRow.entries.where((e) => uniqueKeyCols.contains(e.key)).toList()
+                  : dataRow.entries.where((e) => e.key != 'sync_uid').toList();
 
-            String? where;
-            List<Object>? whereArgs;
-            if (nonNullEntries.isNotEmpty || nullEntries.isNotEmpty) {
-              final parts = <String>[];
-              whereArgs = <Object>[];
-              for (final e in nonNullEntries) {
-                parts.add('${e.key} = ?');
-                whereArgs.add(e.value);
+              final nonNullEntries =
+                  checkEntries.where((e) => e.value != null).toList();
+              final nullEntries =
+                  checkEntries.where((e) => e.value == null).toList();
+
+              String? where;
+              List<Object>? whereArgs;
+              if (nonNullEntries.isNotEmpty || nullEntries.isNotEmpty) {
+                final parts = <String>[];
+                whereArgs = <Object>[];
+                for (final e in nonNullEntries) {
+                  parts.add('${e.key} = ?');
+                  whereArgs.add(e.value);
+                }
+                for (final e in nullEntries) {
+                  parts.add('${e.key} IS NULL');
+                }
+                where = parts.join(' AND ');
               }
-              for (final e in nullEntries) {
-                parts.add('${e.key} IS NULL');
-              }
-              where = parts.join(' AND ');
+
+              existing = await txn.query(
+                table,
+                columns: [pkCol],
+                where: where,
+                whereArgs: whereArgs,
+              );
             }
-
-            final existing = await txn.query(
-              table,
-              columns: [pkCol],
-              where: where,
-              whereArgs: whereArgs,
-            );
 
             if (existing.isNotEmpty) {
               // Row already exists — record PK mapping and skip.
@@ -237,6 +251,10 @@ class DatabaseSyncService {
               continue;
             }
 
+            // Generate a sync_uid for the new row if it doesn't have one.
+            if (dataRow['sync_uid'] == null || (dataRow['sync_uid'] as String).isEmpty) {
+              dataRow['sync_uid'] = await SyncUidGenerator.generate();
+            }
             // Insert without PK — let AUTOINCREMENT assign a new one.
             final newPk = await txn.insert(table, dataRow);
             if (oldPk != null) {
