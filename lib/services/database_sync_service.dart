@@ -72,13 +72,37 @@ class DatabaseSyncService {
   //  SYNCHRONISE from an external .db file
   // ──────────────────────────────────────────────
 
+  /// Returns foreign-key info for [table]: list of {from, table, to} maps.
+  Future<List<Map<String, String>>> _getForeignKeys(
+      Database db, String table) async {
+    final rows = await db.rawQuery('PRAGMA foreign_key_list($table)');
+    return rows.map((r) {
+      return {
+        'from': r['from'] as String,
+        'table': r['table'] as String,
+        'to': r['to'] as String,
+      };
+    }).toList();
+  }
+
+  /// Returns the primary-key column name for [table] (the column with pk=1).
+  Future<String> _getPkColumn(Database db, String table) async {
+    final rows = await db.rawQuery('PRAGMA table_info($table)');
+    for (final r in rows) {
+      if (r['pk'] as int == 1) return r['name'] as String;
+    }
+    // Fallback: first column.
+    return rows.first['name'] as String;
+  }
+
   /// Synchronise data from [externalDbPath] into the current database.
   ///
   /// 1. Opens the external DB.
   /// 2. For each known table, adds any missing columns to the external DB so
   ///    that the schemas match (handles old DB files).
   /// 3. Reads all rows from the external DB and inserts them into the current
-  ///    DB, skipping rows whose primary key already exists.
+  ///    DB, detecting duplicates by **data columns** (not auto-generated PK).
+  /// 4. Remaps foreign-key references so relationships stay intact.
   ///
   /// Returns a human-readable log of what happened.
   Future<String> synchroniseFrom(String externalDbPath) async {
@@ -92,6 +116,9 @@ class DatabaseSyncService {
         await db.execute('PRAGMA foreign_keys = OFF');
       },
     );
+
+    // old PK → new PK mapping per table, so FK references can be remapped.
+    final idMap = <String, Map<int, int>>{};
 
     try {
       final extTables = await _getUserTables(extDb);
@@ -122,39 +149,86 @@ class DatabaseSyncService {
         final rows = await extDb.query(table);
         if (rows.isEmpty) continue;
 
-        // Determine primary key column name (first column by convention).
-        final pkCol = currentCols.first.name;
+        final pkCol = await _getPkColumn(currentDb, table);
+        final fks = await _getForeignKeys(currentDb, table);
+        final currentColNames = currentCols.map((c) => c.name).toSet();
+        // Data columns = everything except the auto-increment PK.
+        final dataCols =
+            currentColNames.where((c) => c != pkCol).toList()..sort();
 
+        idMap[table] = {};
         int inserted = 0;
         int skipped = 0;
 
         await currentDb.transaction((txn) async {
           for (final row in rows) {
-            // Check if the row already exists.
-            final pkValue = row[pkCol];
-            if (pkValue != null) {
-              final existing = await txn.query(
-                table,
-                where: '$pkCol = ?',
-                whereArgs: [pkValue],
-              );
-              if (existing.isNotEmpty) {
-                skipped++;
-                continue;
+            final oldPk = row[pkCol] as int?;
+
+            // Build a row with only valid columns, minus the PK.
+            final dataRow = <String, dynamic>{};
+            for (final col in dataCols) {
+              if (!row.containsKey(col)) continue;
+              var value = row[col];
+
+              // Remap FK values to IDs in the current DB.
+              if (value != null) {
+                for (final fk in fks) {
+                  if (fk['from'] == col) {
+                    final refTable = fk['table']!;
+                    final mapped = idMap[refTable]?[value as int];
+                    if (mapped != null) {
+                      value = mapped;
+                    }
+                    break;
+                  }
+                }
               }
+
+              dataRow[col] = value;
             }
 
-            // Only insert columns that exist in the current schema.
-            final validRow = <String, dynamic>{};
-            final currentColNames = currentCols.map((c) => c.name).toSet();
-            for (final entry in row.entries) {
-              if (currentColNames.contains(entry.key)) {
-                validRow[entry.key] = entry.value;
+            // Check for duplicate by all non-PK data columns.
+            final nonNullEntries =
+                dataRow.entries.where((e) => e.value != null).toList();
+            final nullEntries =
+                dataRow.entries.where((e) => e.value == null).toList();
+
+            String? where;
+            List<Object>? whereArgs;
+            if (nonNullEntries.isNotEmpty || nullEntries.isNotEmpty) {
+              final parts = <String>[];
+              whereArgs = <Object>[];
+              for (final e in nonNullEntries) {
+                parts.add('${e.key} = ?');
+                whereArgs.add(e.value);
               }
+              for (final e in nullEntries) {
+                parts.add('${e.key} IS NULL');
+              }
+              where = parts.join(' AND ');
             }
 
-            await txn.insert(table, validRow,
-                conflictAlgorithm: ConflictAlgorithm.ignore);
+            final existing = await txn.query(
+              table,
+              columns: [pkCol],
+              where: where,
+              whereArgs: whereArgs,
+            );
+
+            if (existing.isNotEmpty) {
+              // Row already exists — record PK mapping and skip.
+              if (oldPk != null) {
+                idMap[table]![oldPk] = existing.first[pkCol] as int;
+              }
+              skipped++;
+              continue;
+            }
+
+            // Insert without PK — let AUTOINCREMENT assign a new one.
+            final newPk = await txn.insert(table, dataRow);
+            if (oldPk != null) {
+              idMap[table]![oldPk] = newPk;
+            }
             inserted++;
           }
         });
