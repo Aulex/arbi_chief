@@ -28,11 +28,12 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
 
   // Register callback for desktop_multi_window sub-window plugin registration.
-  DesktopMultiWindowSetWindowCreatedCallback(
-      [](FlutterDesktopViewControllerRef controller) {
-        auto *engine = FlutterDesktopViewControllerGetEngine(controller);
-        RegisterPlugins(engine);
-      });
+  DesktopMultiWindowSetWindowCreatedCallback([](void *controller) {
+    auto *flutter_view_controller =
+        reinterpret_cast<flutter::FlutterViewController *>(controller);
+    auto *registry = flutter_view_controller->engine();
+    RegisterPlugins(registry);
+  });
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
