@@ -542,31 +542,37 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setST) {
-            int rowWins = 0;
-            int colWins = 0;
+            // Count set wins from sets 1 & 2 only to determine if 3rd set should be disabled
+            int rowWinsFromFirst2 = 0;
+            int colWinsFromFirst2 = 0;
             for (int s = 0; s < 2; s++) {
               final r = int.tryParse(controllers[s].row.text) ?? 0;
               final c = int.tryParse(controllers[s].col.text) ?? 0;
               if (r > 0 || c > 0) {
-                if (r > c) rowWins++;
-                else if (c > r) colWins++;
+                if (r > c) rowWinsFromFirst2++;
+                else if (c > r) colWinsFromFirst2++;
               }
             }
-            if (rowWins < 2 && colWins < 2) {
-              final r3 = int.tryParse(controllers[2].row.text) ?? 0;
-              final c3 = int.tryParse(controllers[2].col.text) ?? 0;
-              if (r3 > 0 || c3 > 0) {
-                if (r3 > c3) rowWins++;
-                else if (c3 > r3) colWins++;
-              }
-            }
-            final thirdSetDisabled = rowWins >= 2 || colWins >= 2;
+            // 3rd set is only disabled when someone already won both sets 1 & 2
+            final thirdSetDisabled = rowWinsFromFirst2 >= 2 || colWinsFromFirst2 >= 2;
             if (thirdSetDisabled) {
               if (controllers[2].row.text.isNotEmpty) {
                 controllers[2].row.clear();
               }
               if (controllers[2].col.text.isNotEmpty) {
                 controllers[2].col.clear();
+              }
+            }
+
+            // Full score for preview includes 3rd set
+            int rowWins = rowWinsFromFirst2;
+            int colWins = colWinsFromFirst2;
+            if (!thirdSetDisabled) {
+              final r3 = int.tryParse(controllers[2].row.text) ?? 0;
+              final c3 = int.tryParse(controllers[2].col.text) ?? 0;
+              if (r3 > 0 || c3 > 0) {
+                if (r3 > c3) rowWins++;
+                else if (c3 > r3) colWins++;
               }
             }
 
@@ -824,35 +830,38 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setST) {
-            // Count set wins to determine if 3rd set should be disabled
-            int rowWins = 0;
-            int colWins = 0;
+            // Count set wins from sets 1 & 2 only to determine if 3rd set should be disabled
+            int rowWinsFromFirst2 = 0;
+            int colWinsFromFirst2 = 0;
             for (int s = 0; s < 2; s++) {
               final r = int.tryParse(controllers[s].row.text) ?? 0;
               final c = int.tryParse(controllers[s].col.text) ?? 0;
               if (r > 0 || c > 0) {
-                if (r > c) rowWins++;
-                else if (c > r) colWins++;
+                if (r > c) rowWinsFromFirst2++;
+                else if (c > r) colWinsFromFirst2++;
               }
             }
-            // Also count 3rd set if not disabled
-            if (rowWins < 2 && colWins < 2) {
-              final r3 = int.tryParse(controllers[2].row.text) ?? 0;
-              final c3 = int.tryParse(controllers[2].col.text) ?? 0;
-              if (r3 > 0 || c3 > 0) {
-                if (r3 > c3) rowWins++;
-                else if (c3 > r3) colWins++;
-              }
-            }
-            final thirdSetDisabled = rowWins >= 2 || colWins >= 2;
+            // 3rd set is only disabled when someone already won both sets 1 & 2
+            final thirdSetDisabled = rowWinsFromFirst2 >= 2 || colWinsFromFirst2 >= 2;
             if (thirdSetDisabled) {
-              // Clear without triggering onChanged/focus changes:
-              // use silent clear by checking first to avoid unnecessary rebuilds
+              // Clear without triggering onChanged/focus changes
               if (controllers[2].row.text.isNotEmpty) {
                 controllers[2].row.clear();
               }
               if (controllers[2].col.text.isNotEmpty) {
                 controllers[2].col.clear();
+              }
+            }
+
+            // Full score for preview includes 3rd set
+            int rowWins = rowWinsFromFirst2;
+            int colWins = colWinsFromFirst2;
+            if (!thirdSetDisabled) {
+              final r3 = int.tryParse(controllers[2].row.text) ?? 0;
+              final c3 = int.tryParse(controllers[2].col.text) ?? 0;
+              if (r3 > 0 || c3 > 0) {
+                if (r3 > c3) rowWins++;
+                else if (c3 > r3) colWins++;
               }
             }
 
