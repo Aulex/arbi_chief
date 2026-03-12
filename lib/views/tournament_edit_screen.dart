@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'tournament_add_screen.dart';
 import 'tournament_players_tab.dart';
 import 'tournament_teams_tab.dart';
@@ -10,6 +12,7 @@ import '../models/sport_type_config.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
+import '../viewmodels/standings_window_provider.dart';
 
 class TournamentEditScreen extends ConsumerStatefulWidget {
   final Tournament tournament;
@@ -22,6 +25,38 @@ class TournamentEditScreen extends ConsumerStatefulWidget {
 
 class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   SportTypeConfig get _sportConfig => getConfigForType(widget.tournament.t_type);
+
+  Future<void> _openStandingsWindow() async {
+    // If already open, bring it to focus
+    final existing = ref.read(standingsWindowControllerProvider);
+    if (existing != null) {
+      try {
+        await existing.show();
+        // Send latest standings data
+        final snapshot = ref.read(standingsSnapshotProvider);
+        if (snapshot != null) {
+          await sendStandingsToWindow(existing, snapshot);
+        }
+        return;
+      } catch (_) {
+        // Window was closed, create new one
+        ref.read(standingsWindowControllerProvider.notifier).state = null;
+      }
+    }
+
+    final snapshot = ref.read(standingsSnapshotProvider);
+    final initialData = snapshot != null ? jsonEncode(snapshot.toJson()) : '{}';
+
+    final window = await WindowController.create(
+      WindowConfiguration(
+        arguments: initialData,
+      ),
+    );
+    await window.show();
+    await window.center();
+
+    ref.read(standingsWindowControllerProvider.notifier).state = window;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +106,21 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
                             Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
                           ],
+                        ),
+                      ),
+                      SizedBox(
+                        height: 32,
+                        child: VerticalDivider(
+                          thickness: 1,
+                          width: 24,
+                          color: Colors.grey.shade300,
+                        ),
+                      ),
+                      Tooltip(
+                        message: 'Відкрити таблицю на другому моніторі',
+                        child: IconButton(
+                          icon: const Icon(Icons.open_in_new, size: 20),
+                          onPressed: _openStandingsWindow,
                         ),
                       ),
                     ],

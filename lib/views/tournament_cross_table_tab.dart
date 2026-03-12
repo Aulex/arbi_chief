@@ -6,6 +6,7 @@ import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
+import '../viewmodels/standings_window_provider.dart';
 
 /// Tab with sub-tabs: Дошка 1, Дошка 2, Дошка 3, Команди.
 /// Cross-tables are interactive — tap cells to enter results.
@@ -192,7 +193,132 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         _absentPlayerIds = absentIds;
         _loading = false;
       });
+      _updateStandingsSnapshot();
     }
+  }
+
+  /// Build a StandingsSnapshot from current in-memory data and push to provider + sub-window.
+  void _updateStandingsSnapshot() {
+    final boardStandings = <int, List<StandingsPlayerRow>>{};
+    for (final boardNum in _boardPlayers.keys) {
+      final players = _boardPlayers[boardNum] ?? [];
+      final sorted = _sortedStandings(boardNum, players);
+      boardStandings[boardNum] = List.generate(sorted.length, (i) {
+        final p = sorted[i];
+        final pid = p.player.player_id!;
+        final balls = _isTableTennis ? _totalBalls(boardNum, pid) : null;
+        return StandingsPlayerRow(
+          place: i + 1,
+          playerName: '${p.player.player_surname} ${p.player.player_name}',
+          teamName: p.teamName,
+          teamNumber: p.teamNumber,
+          points: _totalPoints(boardNum, pid),
+          displayPoints: _displayPoints(boardNum, pid),
+          gamesPlayed: _gamesPlayed(boardNum, pid),
+          bergerCoefficient: _isTableTennis ? null : _bergerCoefficient(boardNum, pid),
+          ballsScored: balls?.scored,
+          ballsConceded: balls?.conceded,
+        );
+      });
+    }
+
+    // Team standings
+    final teamMap = <int, ({String teamName, int? teamNumber})>{};
+    for (final boardEntry in _boardPlayers.entries) {
+      for (final p in boardEntry.value) {
+        teamMap.putIfAbsent(p.teamId, () => (teamName: p.teamName, teamNumber: p.teamNumber));
+      }
+    }
+    final allTeamIds = teamMap.keys.toList();
+    final teamPoints = <int, double>{};
+    final teamBoard1Pts = <int, double>{};
+    final teamBoard3Pts = <int, double>{};
+    for (final aId in allTeamIds) {
+      double total = 0;
+      for (final bId in allTeamIds) {
+        if (aId == bId) continue;
+        total += _teamMatchPoints(aId, bId).a;
+      }
+      teamPoints[aId] = total;
+      final b1p = (_boardPlayers[1] ?? []).where((p) => p.teamId == aId).firstOrNull;
+      teamBoard1Pts[aId] = b1p != null ? _totalPoints(1, b1p.player.player_id!) : 0;
+      final lastBoard = widget.config.boardCount;
+      final b3p = (_boardPlayers[lastBoard] ?? []).where((p) => p.teamId == aId).firstOrNull;
+      teamBoard3Pts[aId] = b3p != null ? _totalPoints(lastBoard, b3p.player.player_id!) : 0;
+    }
+    final isTT = _isTableTennis;
+    final teamTotalSetDiffMap = <int, int>{};
+    if (isTT) {
+      for (final id in allTeamIds) {
+        teamTotalSetDiffMap[id] = _teamTotalSetDiff(id);
+      }
+    }
+    final sortedTeamIds = List<int>.from(allTeamIds)
+      ..sort((a, b) {
+        final pa = teamPoints[a]!;
+        final pb = teamPoints[b]!;
+        if (pa != pb) return pb.compareTo(pa);
+        final h2h = _teamMatchPoints(a, b);
+        if (h2h.a > h2h.b) return -1;
+        if (h2h.b > h2h.a) return 1;
+        if (isTT) {
+          final setDiffA = _teamDirectSetDiff(a, b);
+          final setDiffB = _teamDirectSetDiff(b, a);
+          if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+          final ballDiffA = _teamDirectBallDiff(a, b);
+          final ballDiffB = _teamDirectBallDiff(b, a);
+          if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+          final tsdA = teamTotalSetDiffMap[a]!;
+          final tsdB = teamTotalSetDiffMap[b]!;
+          if (tsdA != tsdB) return tsdB.compareTo(tsdA);
+          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        } else {
+          final b1a = teamBoard1Pts[a]!;
+          final b1b = teamBoard1Pts[b]!;
+          if (b1a != b1b) return b1b.compareTo(b1a);
+          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+        }
+      });
+
+    final teamStandings = List.generate(sortedTeamIds.length, (i) {
+      final tid = sortedTeamIds[i];
+      String tiebreaker;
+      if (isTT) {
+        tiebreaker = 'Сети: ${teamTotalSetDiffMap[tid]! >= 0 ? '+' : ''}${teamTotalSetDiffMap[tid]!}';
+      } else {
+        tiebreaker = '${widget.config.boardAbbrev}1: ${_formatPoints(teamBoard1Pts[tid]!)}';
+      }
+      return StandingsTeamRow(
+        place: i + 1,
+        teamName: teamMap[tid]!.teamName,
+        teamNumber: teamMap[tid]!.teamNumber,
+        points: teamPoints[tid]!,
+        tiebreaker: tiebreaker,
+      );
+    });
+
+    final boardTabLabels = <int, String>{};
+    for (int i = 1; i <= widget.config.boardCount; i++) {
+      boardTabLabels[i] = widget.config.shortTabLabel(i);
+    }
+
+    final snapshot = StandingsSnapshot(
+      tournamentName: widget.tournamentName,
+      tType: widget.tType,
+      boardCount: widget.config.boardCount,
+      boardLabel: widget.config.boardLabel,
+      boardLabelPlural: widget.config.boardLabelPlural,
+      boardAbbrev: widget.config.boardAbbrev,
+      boardStandings: boardStandings,
+      teamStandings: teamStandings,
+      boardTabLabels: boardTabLabels,
+    );
+
+    ref.read(standingsSnapshotProvider.notifier).state = snapshot;
+
+    // Send to sub-window if open
+    final controller = ref.read(standingsWindowControllerProvider);
+    sendStandingsToWindow(controller, snapshot);
   }
 
   // --- Result entry ---
