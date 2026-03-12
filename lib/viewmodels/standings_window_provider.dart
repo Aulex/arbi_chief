@@ -195,8 +195,7 @@ Future<void> sendStandingsToWindow(
   if (controller == null) return;
   try {
     final json = jsonEncode(snapshot.toJson());
-    await DesktopMultiWindow.invokeMethod(
-        controller.windowId, 'updateStandings', json);
+    await controller.invokeMethod('updateStandings', json);
   } catch (_) {
     // Window may have been closed
   }

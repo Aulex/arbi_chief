@@ -47,12 +47,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     final snapshot = ref.read(standingsSnapshotProvider);
     final initialData = snapshot != null ? jsonEncode(snapshot.toJson()) : '{}';
 
-    final window = await DesktopMultiWindow.createWindow(initialData);
-    window
-      ..setFrame(const Offset(0, 0) & const Size(1200, 800))
-      ..setTitle('Турнірна таблиця — ${widget.tournament.t_name}')
-      ..center()
-      ..show();
+    final window = await WindowController.create(
+      WindowConfiguration(arguments: initialData),
+    );
+    await window.show();
+    await window.center();
 
     ref.read(standingsWindowControllerProvider.notifier).setController(window);
   }
