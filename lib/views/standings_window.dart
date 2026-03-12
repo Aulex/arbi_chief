@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../viewmodels/standings_window_provider.dart';
 
 /// Standalone app that runs in the sub-window.
@@ -66,13 +68,88 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
   }
 }
 
-class _StandingsDisplay extends StatelessWidget {
+class _StandingsDisplay extends StatefulWidget {
   final StandingsSnapshot? snapshot;
   const _StandingsDisplay({required this.snapshot});
 
   @override
+  State<_StandingsDisplay> createState() => _StandingsDisplayState();
+}
+
+class _StandingsDisplayState extends State<_StandingsDisplay>
+    with SingleTickerProviderStateMixin {
+  TabController? _tabController;
+  Timer? _autoTabTimer;
+  int _autoTabSeconds = 0; // 0 = disabled
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAutoTabSetting();
+    _initTabController();
+  }
+
+  Future<void> _loadAutoTabSetting() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seconds = prefs.getInt('auto_tab_cycle_seconds') ?? 10;
+      if (mounted) {
+        setState(() {
+          _autoTabSeconds = seconds;
+        });
+        _restartAutoTabTimer();
+      }
+    } catch (_) {}
+  }
+
+  void _initTabController() {
+    final s = widget.snapshot;
+    if (s != null) {
+      _tabController?.dispose();
+      _tabController = TabController(length: s.boardCount + 1, vsync: this);
+    }
+  }
+
+  void _restartAutoTabTimer() {
+    _autoTabTimer?.cancel();
+    if (_autoTabSeconds > 0 && _tabController != null) {
+      _autoTabTimer = Timer.periodic(
+        Duration(seconds: _autoTabSeconds),
+        (_) {
+          if (_tabController != null && mounted) {
+            final next = (_tabController!.index + 1) % _tabController!.length;
+            _tabController!.animateTo(next);
+          }
+        },
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _StandingsDisplay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldCount = oldWidget.snapshot?.boardCount ?? 0;
+    final newCount = widget.snapshot?.boardCount ?? 0;
+    if (oldCount != newCount) {
+      final oldIndex = _tabController?.index ?? 0;
+      _initTabController();
+      if (_tabController != null && oldIndex < _tabController!.length) {
+        _tabController!.index = oldIndex;
+      }
+      _restartAutoTabTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoTabTimer?.cancel();
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (snapshot == null) {
+    if (widget.snapshot == null) {
       return const Scaffold(
         body: Center(
           child: Column(
@@ -87,263 +164,438 @@ class _StandingsDisplay extends StatelessWidget {
       );
     }
 
-    final s = snapshot!;
+    final s = widget.snapshot!;
     final isTT = s.tType == 11;
 
+    if (_tabController == null || _tabController!.length != s.boardCount + 1) {
+      _initTabController();
+      _restartAutoTabTimer();
+    }
+
     return Scaffold(
-      body: DefaultTabController(
-        length: s.boardCount + 1,
-        child: Column(
-          children: [
-            // Header
-            Container(
-              color: Colors.indigo,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.leaderboard, color: Colors.white, size: 24),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      s.tournamentName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+      body: Column(
+        children: [
+          // Header
+          Container(
+            color: Colors.indigo,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.leaderboard, color: Colors.white, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    s.tournamentName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
-            ),
-            // Sub-tabs
-            Container(
-              color: Colors.indigo.shade50,
-              child: TabBar(
-                isScrollable: true,
-                labelColor: Colors.indigo,
-                indicatorColor: Colors.indigo,
-                tabAlignment: TabAlignment.start,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 16),
-                tabs: [
-                  for (int i = 1; i <= s.boardCount; i++)
-                    Tab(
-                      text: s.boardTabLabels[i] ?? '${s.boardAbbrev}$i',
-                      height: 36,
+                ),
+                if (_autoTabSeconds > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  const Tab(text: 'Команди', height: 36),
-                ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.autorenew, color: Colors.white70, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${_autoTabSeconds}с',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Sub-tabs
+          Container(
+            color: Colors.indigo.shade50,
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              labelColor: Colors.indigo,
+              indicatorColor: Colors.indigo,
+              tabAlignment: TabAlignment.start,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+              tabs: [
+                for (int i = 1; i <= s.boardCount; i++)
+                  Tab(
+                    text: s.boardTabLabels[i] ?? '${s.boardAbbrev}$i',
+                    height: 36,
+                  ),
+                const Tab(text: 'Команди', height: 36),
+              ],
+            ),
+          ),
+          // Tab content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                for (int i = 1; i <= s.boardCount; i++)
+                  _buildBoardTab(s, i, isTT),
+                _buildTeamsTab(s, isTT),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBoardTab(StandingsSnapshot s, int boardNum, bool isTT) {
+    final crossTable = s.crossTableData[boardNum] ?? [];
+    final standings = s.boardStandings[boardNum] ?? [];
+
+    if (crossTable.isEmpty && standings.isEmpty) {
+      return Center(
+        child: Text(
+          'Немає даних',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: SingleChildScrollView(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: _buildCombinedBoardTable(crossTable, standings, isTT),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCombinedBoardTable(
+    List<CrossTablePlayerRow> crossTable,
+    List<StandingsPlayerRow> standings,
+    bool isTT,
+  ) {
+    final n = crossTable.length;
+    if (n == 0) return const SizedBox.shrink();
+
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
+    final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    final borderColor = Colors.grey.shade300;
+    final headerBg = Colors.grey.shade100;
+    final oddRowBg = Colors.grey.shade50;
+
+    return Table(
+      border: TableBorder.all(color: borderColor, width: 1),
+      defaultColumnWidth: const IntrinsicColumnWidth(),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        // Header row
+        TableRow(
+          decoration: BoxDecoration(color: headerBg),
+          children: [
+            _tableCell('№к', style: headerStyle),
+            _tableCell('Команда', style: headerStyle, minWidth: 70),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            for (int i = 0; i < n; i++)
+              _verticalHeaderCell(number: i + 1, surname: crossTable[i].playerName, style: headerStyle),
+            _tableCell('Бали', style: headerStyle),
+            _tableCell('Ігор', style: headerStyle),
+            // Standings headers
+            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            _tableCell('Команда', style: headerStyle, minWidth: 90),
+            _tableCell('Бали', style: headerStyle),
+            _tableCell('Місце', style: headerStyle),
+          ],
+        ),
+        // Data rows
+        for (int i = 0; i < n; i++)
+          TableRow(
+            decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+            children: [
+              _tableCell('${crossTable[i].teamNumber ?? ''}', style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11)),
+              _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
+              _tableCell(crossTable[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
+              for (int j = 0; j < n; j++)
+                if (i == j)
+                  _diagonalCell()
+                else
+                  _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
+              _tableCell(
+                _formatPts(crossTable[i].points),
+                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+              ),
+              _tableCell('${crossTable[i].gamesPlayed}', style: cellStyle),
+              // Standings cells (sorted by place)
+              if (i < standings.length) ...[
+                _tableCell(standings[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
+                _tableCell(standings[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
+                _tableCell(
+                  _formatPts(standings[i].displayPoints),
+                  style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                ),
+                _placeCell(standings[i].place, cellStyle),
+              ] else ...[
+                _tableCell('', style: cellStyle, minWidth: 130),
+                _tableCell('', style: cellStyle, minWidth: 90),
+                _tableCell('', style: cellStyle),
+                _tableCell('', style: cellStyle),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTeamsTab(StandingsSnapshot s, bool isTT) {
+    final crossTable = s.teamCrossTableData;
+    final standings = s.teamStandings;
+
+    if (crossTable.isEmpty && standings.isEmpty) {
+      return Center(
+        child: Text(
+          'Немає даних',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: SingleChildScrollView(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: _buildTeamCrossTable(crossTable, standings, isTT),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamCrossTable(
+    List<CrossTableTeamRow> crossTable,
+    List<StandingsTeamRow> standings,
+    bool isTT,
+  ) {
+    final n = crossTable.length;
+    if (n == 0) return const SizedBox.shrink();
+
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
+    final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
+    final borderColor = Colors.grey.shade300;
+    final headerBg = Colors.grey.shade100;
+    final oddRowBg = Colors.grey.shade50;
+
+    return Table(
+      border: TableBorder.all(color: borderColor, width: 1),
+      defaultColumnWidth: const IntrinsicColumnWidth(),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        TableRow(
+          decoration: BoxDecoration(color: headerBg),
+          children: [
+            _tableCell('№', style: headerStyle),
+            _tableCell('Команда', style: headerStyle, minWidth: 140),
+            for (int i = 0; i < n; i++)
+              _verticalHeaderCell(
+                number: crossTable[i].teamNumber ?? (i + 1),
+                surname: crossTable[i].teamName,
+                style: headerStyle,
+              ),
+            _tableCell('Очки', style: headerStyle),
+            // Standings
+            _tableCell('Команда', style: headerStyle, minWidth: 140),
+            _tableCell('Очки', style: headerStyle),
+            _tableCell('Місце', style: headerStyle),
+          ],
+        ),
+        for (int i = 0; i < n; i++)
+          TableRow(
+            decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+            children: [
+              _tableCell('${crossTable[i].teamNumber ?? (i + 1)}', style: cellStyle),
+              _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+              for (int j = 0; j < n; j++)
+                if (i == j)
+                  _diagonalCell()
+                else
+                  _teamMatchCell(crossTable[i].matchPoints[j] ?? 0),
+              _tableCell(
+                _formatPts(crossTable[i].totalPoints),
+                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+              ),
+              // Standings
+              if (i < standings.length) ...[
+                _tableCell(standings[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                _tableCell(
+                  _formatPts(standings[i].points),
+                  style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                ),
+                _placeCell(standings[i].place, cellStyle),
+              ] else ...[
+                _tableCell('', style: cellStyle, minWidth: 140),
+                _tableCell('', style: cellStyle),
+                _tableCell('', style: cellStyle),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _resultCell(double? result, String? detail, bool isTT) {
+    String text;
+    if (isTT && detail != null && detail.isNotEmpty) {
+      // Show set score like "2:0"
+      final sets = detail.split(' ');
+      int rowWins = 0;
+      int colWins = 0;
+      for (final s in sets) {
+        final parts = s.split(':');
+        if (parts.length != 2) continue;
+        final a = int.tryParse(parts[0]) ?? 0;
+        final b = int.tryParse(parts[1]) ?? 0;
+        if (a > b) rowWins++;
+        else if (b > a) colWins++;
+      }
+      text = '$rowWins:$colWins';
+    } else if (result == null) {
+      text = '';
+    } else if (result == 1.0) {
+      text = '1';
+    } else if (result == 0.0) {
+      text = '0';
+    } else if (result == 0.5) {
+      text = '½';
+    } else {
+      text = '';
+    }
+
+    Color? bgColor;
+    if (result == 1.0) bgColor = Colors.green.shade50;
+    else if (result == 0.0 && result != null) bgColor = Colors.red.shade50;
+    else if (result == 0.5) bgColor = Colors.amber.shade50;
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      color: bgColor ?? Colors.transparent,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      child: text.isEmpty
+          ? const SizedBox.shrink()
+          : Text(
+              text,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: result == 1.0
+                    ? Colors.green.shade700
+                    : result == 0.0 && result != null
+                        ? Colors.red.shade700
+                        : result == 0.5
+                            ? Colors.amber.shade800
+                            : Colors.black87,
               ),
             ),
-            // Tab content
-            Expanded(
-              child: TabBarView(
-                children: [
-                  for (int i = 1; i <= s.boardCount; i++)
-                    _buildBoardStandings(s.boardStandings[i] ?? [], isTT),
-                  _buildTeamStandings(s.teamStandings, isTT),
-                ],
-              ),
+    );
+  }
+
+  Widget _teamMatchCell(double pts) {
+    Color? bgColor;
+    if (pts == 2.0) bgColor = Colors.green.shade50;
+    else if (pts == 0.0) bgColor = Colors.red.shade50;
+    else if (pts == 1.0) bgColor = Colors.amber.shade50;
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+      color: bgColor ?? Colors.transparent,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Text(
+        '${pts.toInt()}',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: pts == 2.0
+              ? Colors.green.shade700
+              : pts == 0.0
+                  ? Colors.red.shade700
+                  : Colors.amber.shade800,
+        ),
+      ),
+    );
+  }
+
+  Widget _placeCell(int place, TextStyle cellStyle) {
+    final isTopThree = place <= 3;
+    Color? bgColor;
+    Color? textColor;
+    if (place == 1) {
+      bgColor = Colors.amber.shade50;
+      textColor = Colors.amber.shade800;
+    } else if (place == 2) {
+      bgColor = Colors.blueGrey.shade50;
+      textColor = Colors.blueGrey.shade700;
+    } else if (place == 3) {
+      bgColor = Colors.orange.shade50;
+      textColor = Colors.orange.shade700;
+    }
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      color: bgColor ?? Colors.transparent,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      child: Text(
+        '$place',
+        style: cellStyle.copyWith(
+          fontWeight: FontWeight.bold,
+          fontSize: isTopThree ? 14 : 12,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
+    return Container(
+      constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
+      child: Text(text, textAlign: leftAlign ? TextAlign.left : TextAlign.center, style: style),
+    );
+  }
+
+  Widget _verticalHeaderCell({required int number, required String surname, TextStyle? style}) {
+    return TableCell(
+      verticalAlignment: TableCellVerticalAlignment.bottom,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 36),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RotatedBox(
+              quarterTurns: 3,
+              child: Text(surname, style: style),
             ),
+            const SizedBox(height: 2),
+            Text('$number', style: style),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBoardStandings(List<StandingsPlayerRow> rows, bool isTT) {
-    if (rows.isEmpty) {
-      return Center(
-        child: Text(
-          'Немає даних',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
-              columnSpacing: 24,
-              columns: [
-                const DataColumn(
-                    label: Text('Місце',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                const DataColumn(
-                    label: Text('ПІБ',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                const DataColumn(
-                    label: Text('Команда',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                const DataColumn(
-                    label: Text('Бали',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    numeric: true),
-                const DataColumn(
-                    label: Text('Ігор',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    numeric: true),
-                if (!isTT)
-                  const DataColumn(
-                      label: Text('К.Б.',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                if (isTT) ...[
-                  const DataColumn(
-                      label: Text('М.З.',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                  const DataColumn(
-                      label: Text('М.П.',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      numeric: true),
-                ],
-              ],
-              rows: rows.map((r) {
-                final isTopThree = r.place <= 3;
-                return DataRow(
-                  color: isTopThree
-                      ? WidgetStateProperty.all(
-                          r.place == 1
-                              ? Colors.amber.shade50
-                              : r.place == 2
-                                  ? Colors.grey.shade100
-                                  : Colors.orange.shade50,
-                        )
-                      : null,
-                  cells: [
-                    DataCell(Text(
-                      '${r.place}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isTopThree ? 16 : 14,
-                        color: r.place == 1
-                            ? Colors.amber.shade800
-                            : r.place == 2
-                                ? Colors.grey.shade700
-                                : r.place == 3
-                                    ? Colors.orange.shade700
-                                    : null,
-                      ),
-                    )),
-                    DataCell(Text(r.playerName)),
-                    DataCell(Text(r.teamName,
-                        style: TextStyle(color: Colors.grey.shade600))),
-                    DataCell(Text(
-                      _formatPts(r.displayPoints),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    )),
-                    DataCell(Text('${r.gamesPlayed}')),
-                    if (!isTT)
-                      DataCell(
-                          Text(_formatPts(r.bergerCoefficient ?? 0))),
-                    if (isTT) ...[
-                      DataCell(Text('${r.ballsScored ?? 0}')),
-                      DataCell(Text('${r.ballsConceded ?? 0}')),
-                    ],
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTeamStandings(List<StandingsTeamRow> rows, bool isTT) {
-    if (rows.isEmpty) {
-      return Center(
-        child: Text(
-          'Немає даних',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(Colors.grey.shade100),
-              columnSpacing: 24,
-              columns: const [
-                DataColumn(
-                    label: Text('Місце',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Команда',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Очки',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    numeric: true),
-                DataColumn(
-                    label: Text('Додатковий показник',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              rows: rows.map((r) {
-                final isTopThree = r.place <= 3;
-                return DataRow(
-                  color: isTopThree
-                      ? WidgetStateProperty.all(
-                          r.place == 1
-                              ? Colors.amber.shade50
-                              : r.place == 2
-                                  ? Colors.grey.shade100
-                                  : Colors.orange.shade50,
-                        )
-                      : null,
-                  cells: [
-                    DataCell(Text(
-                      '${r.place}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isTopThree ? 16 : 14,
-                        color: r.place == 1
-                            ? Colors.amber.shade800
-                            : r.place == 2
-                                ? Colors.grey.shade700
-                                : r.place == 3
-                                    ? Colors.orange.shade700
-                                    : null,
-                      ),
-                    )),
-                    DataCell(Text(r.teamName,
-                        style: const TextStyle(fontWeight: FontWeight.w500))),
-                    DataCell(Text(
-                      _formatPts(r.points),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    )),
-                    DataCell(Text(r.tiebreaker,
-                        style: TextStyle(color: Colors.grey.shade600))),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ),
+  Widget _diagonalCell() {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      color: Colors.grey.shade800,
     );
   }
 

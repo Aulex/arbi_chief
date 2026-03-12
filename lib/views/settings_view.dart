@@ -4,16 +4,49 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/database_sync_service.dart';
 import '../viewmodels/shared_providers.dart';
 import '../viewmodels/theme_provider.dart';
 
-class SettingsView extends ConsumerWidget {
+class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsView> createState() => _SettingsViewState();
+}
+
+class _SettingsViewState extends ConsumerState<SettingsView> {
+  int _autoTabSeconds = 10;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAutoTabSetting();
+  }
+
+  Future<void> _loadAutoTabSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _autoTabSeconds = prefs.getInt('auto_tab_cycle_seconds') ?? 10;
+      });
+    }
+  }
+
+  Future<void> _saveAutoTabSetting(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('auto_tab_cycle_seconds', seconds);
+    if (mounted) {
+      setState(() {
+        _autoTabSeconds = seconds;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider);
 
     return SingleChildScrollView(
@@ -53,6 +86,39 @@ class SettingsView extends ConsumerWidget {
                     subtitle: Text(isDark ? 'Увімкнено' : 'Вимкнено'),
                     value: isDark,
                     onChanged: (_) => ref.read(themeProvider.notifier).toggle(),
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.autorenew, color: Colors.teal),
+                    title: const Text('Автоперемикання вкладок (нове вікно)'),
+                    subtitle: Text(
+                      _autoTabSeconds == 0
+                          ? 'Вимкнено'
+                          : 'Кожні $_autoTabSeconds секунд',
+                    ),
+                    trailing: SizedBox(
+                      width: 160,
+                      child: DropdownButton<int>(
+                        value: _autoTabSeconds,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(value: 0, child: Text('Вимкнено')),
+                          DropdownMenuItem(value: 5, child: Text('5 секунд')),
+                          DropdownMenuItem(value: 10, child: Text('10 секунд')),
+                          DropdownMenuItem(value: 15, child: Text('15 секунд')),
+                          DropdownMenuItem(value: 20, child: Text('20 секунд')),
+                          DropdownMenuItem(value: 30, child: Text('30 секунд')),
+                          DropdownMenuItem(value: 60, child: Text('60 секунд')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) _saveAutoTabSetting(val);
+                        },
+                      ),
+                    ),
                     shape: RoundedRectangleBorder(
                       side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),

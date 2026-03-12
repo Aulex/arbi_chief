@@ -302,6 +302,79 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       boardTabLabels[i] = widget.config.shortTabLabel(i);
     }
 
+    // Build cross-table data per board
+    final crossTableData = <int, List<CrossTablePlayerRow>>{};
+    for (final boardNum in _boardPlayers.keys) {
+      final players = List.of(_boardPlayers[boardNum] ?? [])
+        ..sort((a, b) {
+          final aNum = a.teamNumber ?? 9999;
+          final bNum = b.teamNumber ?? 9999;
+          if (aNum != bNum) return aNum.compareTo(bNum);
+          return a.teamName.compareTo(b.teamName);
+        });
+      crossTableData[boardNum] = List.generate(players.length, (i) {
+        final p = players[i];
+        final pid = p.player.player_id!;
+        final results = <int, double?>{};
+        final details = <int, String>{};
+        for (int j = 0; j < players.length; j++) {
+          if (i == j) {
+            results[j] = -1.0; // self
+          } else {
+            results[j] = _boardResults[boardNum]?[pid]?[players[j].player.player_id!];
+            final detail = _boardResultDetails[boardNum]?[pid]?[players[j].player.player_id!];
+            if (detail != null && detail.isNotEmpty) {
+              details[j] = detail;
+            }
+          }
+        }
+        return CrossTablePlayerRow(
+          playerName: '${p.player.player_surname} ${p.player.player_name}',
+          teamName: p.teamName,
+          teamNumber: p.teamNumber,
+          results: results,
+          details: details,
+          points: _displayPoints(boardNum, pid),
+          gamesPlayed: _gamesPlayed(boardNum, pid),
+        );
+      });
+    }
+
+    // Build team cross-table data
+    final teamCrossTableData = <CrossTableTeamRow>[];
+    for (int i = 0; i < sortedTeamIds.length; i++) {
+      final tid = sortedTeamIds[i]; // use sortedTeamIds here (standings order)
+      // Actually use teamIdsByNumber order for cross table display
+    }
+    // Use team number order for cross table
+    final teamIdsByNumOrder = List<int>.from(allTeamIds)
+      ..sort((a, b) {
+        final aNum = teamMap[a]!.teamNumber ?? 9999;
+        final bNum = teamMap[b]!.teamNumber ?? 9999;
+        if (aNum != bNum) return aNum.compareTo(bNum);
+        return teamMap[a]!.teamName.compareTo(teamMap[b]!.teamName);
+      });
+    for (int i = 0; i < teamIdsByNumOrder.length; i++) {
+      final tid = teamIdsByNumOrder[i];
+      final matchPtsMap = <int, double>{};
+      final scoreDetailsMap = <int, String>{};
+      for (int j = 0; j < teamIdsByNumOrder.length; j++) {
+        if (i == j) continue;
+        final other = teamIdsByNumOrder[j];
+        final pts = _teamMatchPoints(tid, other);
+        matchPtsMap[j] = pts.a;
+        final score = _teamMatchScore(tid, other);
+        scoreDetailsMap[j] = '${_formatPoints(score.a)}:${_formatPoints(score.b)}';
+      }
+      teamCrossTableData.add(CrossTableTeamRow(
+        teamName: teamMap[tid]!.teamName,
+        teamNumber: teamMap[tid]!.teamNumber,
+        matchPoints: matchPtsMap,
+        scoreDetails: scoreDetailsMap,
+        totalPoints: teamPoints[tid]!,
+      ));
+    }
+
     final snapshot = StandingsSnapshot(
       tournamentName: widget.tournamentName,
       tType: widget.tType,
@@ -312,6 +385,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       boardStandings: boardStandings,
       teamStandings: teamStandings,
       boardTabLabels: boardTabLabels,
+      crossTableData: crossTableData,
+      teamCrossTableData: teamCrossTableData,
     );
 
     ref.read(standingsSnapshotProvider.notifier).update(snapshot);
@@ -343,6 +418,293 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     }
 
     await _loadData();
+  }
+
+  /// Shows result picker from inside the team match details dialog.
+  /// The team dialog stays open and refreshes after the result is saved.
+  void _showResultPickerFromTeamDialog(
+    BuildContext dialogContext, {
+    required int rowPlayerId,
+    required int colPlayerId,
+    required String rowPlayerName,
+    required String colPlayerName,
+    required double? currentResult,
+    int? boardNum,
+    VoidCallback? onResultChanged,
+  }) {
+    if (_isTableTennis) {
+      _showTableTennisResultPickerFromTeamDialog(
+        dialogContext,
+        rowPlayerId: rowPlayerId,
+        colPlayerId: colPlayerId,
+        rowPlayerName: rowPlayerName,
+        colPlayerName: colPlayerName,
+        currentResult: currentResult,
+        boardNum: boardNum,
+        onResultChanged: onResultChanged,
+      );
+      return;
+    }
+    showDialog(
+      context: dialogContext,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  rowPlayerName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('vs', style: TextStyle(fontSize: 13, color: Colors.indigo.shade400)),
+              ),
+              Expanded(
+                child: Text(
+                  colPlayerName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                ),
+              ),
+            ],
+          ),
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _resultOptionCard(ctx, label: 'Перемога', symbol: '1', color: Colors.green, value: 1.0, current: currentResult),
+            const SizedBox(height: 6),
+            _resultOptionCard(ctx, label: 'Нічия', symbol: '½', color: Colors.amber, value: 0.5, current: currentResult),
+            const SizedBox(height: 6),
+            _resultOptionCard(ctx, label: 'Поразка', symbol: '0', color: Colors.red, value: 0.0, current: currentResult),
+            if (currentResult != null) ...[
+              const SizedBox(height: 10),
+              Divider(height: 1, color: Colors.grey.shade200),
+              const SizedBox(height: 6),
+              _resultOptionCard(ctx, label: 'Очистити', symbol: '×', color: Colors.grey, value: -1.0, current: currentResult),
+            ],
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+        ],
+      ),
+    ).then((value) {
+      if (value == null) return;
+      _onResultSelected(rowPlayerId, colPlayerId, value == -1.0 ? null : value).then((_) {
+        onResultChanged?.call();
+      });
+    });
+  }
+
+  /// Table tennis result picker shown from inside the team match details dialog.
+  void _showTableTennisResultPickerFromTeamDialog(
+    BuildContext dialogContext, {
+    required int rowPlayerId,
+    required int colPlayerId,
+    required String rowPlayerName,
+    required String colPlayerName,
+    required double? currentResult,
+    int? boardNum,
+    VoidCallback? onResultChanged,
+  }) {
+    final existingDetail = boardNum != null
+        ? (_boardResultDetails[boardNum]?[rowPlayerId]?[colPlayerId])
+        : null;
+    final existingSets = existingDetail?.split(' ') ?? [];
+
+    final controllers = List.generate(3, (i) {
+      final parts = i < existingSets.length ? existingSets[i].split(':') : [];
+      return (
+        row: TextEditingController(text: parts.length == 2 ? parts[0] : ''),
+        col: TextEditingController(text: parts.length == 2 ? parts[1] : ''),
+      );
+    });
+    final focusNodes = List.generate(3, (i) => (
+      row: FocusNode(),
+      col: FocusNode(),
+    ));
+
+    showDialog(
+      context: dialogContext,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setST) {
+            int rowWins = 0;
+            int colWins = 0;
+            for (int s = 0; s < 2; s++) {
+              final r = int.tryParse(controllers[s].row.text) ?? 0;
+              final c = int.tryParse(controllers[s].col.text) ?? 0;
+              if (r > 0 || c > 0) {
+                if (r > c) rowWins++;
+                else if (c > r) colWins++;
+              }
+            }
+            if (rowWins < 2 && colWins < 2) {
+              final r3 = int.tryParse(controllers[2].row.text) ?? 0;
+              final c3 = int.tryParse(controllers[2].col.text) ?? 0;
+              if (r3 > 0 || c3 > 0) {
+                if (r3 > c3) rowWins++;
+                else if (c3 > r3) colWins++;
+              }
+            }
+            final thirdSetDisabled = rowWins >= 2 || colWins >= 2;
+            if (thirdSetDisabled) {
+              if (controllers[2].row.text.isNotEmpty) {
+                controllers[2].row.clear();
+              }
+              if (controllers[2].col.text.isNotEmpty) {
+                controllers[2].col.clear();
+              }
+            }
+
+            final hasResult = rowWins > 0 || colWins > 0;
+            Color scoreColor = Colors.black54;
+            if (hasResult) {
+              if (rowWins > colWins) scoreColor = Colors.green.shade700;
+              else if (colWins > rowWins) scoreColor = Colors.red.shade700;
+              else scoreColor = Colors.amber.shade800;
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              titlePadding: EdgeInsets.zero,
+              title: Container(
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(rowPlayerName, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.indigo.shade900))),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(hasResult ? '$rowWins : $colWins' : 'vs', style: TextStyle(fontSize: hasResult ? 22 : 14, fontWeight: FontWeight.bold, color: scoreColor)),
+                        ),
+                        Expanded(child: Text(colPlayerName, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.indigo.shade900))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 4),
+                    for (int i = 0; i < 3; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade50 : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade200 : Colors.grey.shade300),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade100 : Colors.indigo.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text('Сет ${i + 1}', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade400 : Colors.indigo.shade700)),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(child: TextField(
+                                controller: controllers[i].row,
+                                focusNode: focusNodes[i].row,
+                                enabled: !(i == 2 && thirdSetDisabled),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none), filled: true, fillColor: Colors.grey.shade100, hintText: '0', hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal)),
+                                onChanged: (_) => setST(() {}),
+                              )),
+                              Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade300 : Colors.black54))),
+                              Expanded(child: TextField(
+                                controller: controllers[i].col,
+                                focusNode: focusNodes[i].col,
+                                enabled: !(i == 2 && thirdSetDisabled),
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none), filled: true, fillColor: Colors.grey.shade100, hintText: '0', hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal)),
+                                onChanged: (_) => setST(() {}),
+                              )),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              actions: [
+                Row(
+                  children: [
+                    if (currentResult != null)
+                      TextButton.icon(
+                        icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade400),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _onResultSelected(rowPlayerId, colPlayerId, null).then((_) {
+                            onResultChanged?.call();
+                          });
+                        },
+                        label: Text('Очистити', style: TextStyle(color: Colors.red.shade400)),
+                      ),
+                    const Spacer(),
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+                    const SizedBox(width: 4),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.check, size: 18),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _onTableTennisResultSaved(rowPlayerId, colPlayerId, controllers).then((_) {
+                          onResultChanged?.call();
+                        });
+                      },
+                      label: const Text('Зберегти'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).then((_) {
+      for (final c in controllers) {
+        c.row.dispose();
+        c.col.dispose();
+      }
+      for (final f in focusNodes) {
+        f.row.dispose();
+        f.col.dispose();
+      }
+    });
   }
 
   void _showResultPicker(
@@ -451,6 +813,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         col: TextEditingController(text: parts.length == 2 ? parts[1] : ''),
       );
     });
+    // Create FocusNodes to prevent focus from jumping between sets on rebuild
+    final focusNodes = List.generate(3, (i) => (
+      row: FocusNode(),
+      col: FocusNode(),
+    ));
 
     showDialog(
       context: context,
@@ -479,8 +846,14 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             }
             final thirdSetDisabled = rowWins >= 2 || colWins >= 2;
             if (thirdSetDisabled) {
-              controllers[2].row.text = '';
-              controllers[2].col.text = '';
+              // Clear without triggering onChanged/focus changes:
+              // use silent clear by checking first to avoid unnecessary rebuilds
+              if (controllers[2].row.text.isNotEmpty) {
+                controllers[2].row.clear();
+              }
+              if (controllers[2].col.text.isNotEmpty) {
+                controllers[2].col.clear();
+              }
             }
 
             // Determine live result for preview
@@ -603,6 +976,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                               Expanded(
                                 child: TextField(
                                   controller: controllers[i].row,
+                                  focusNode: focusNodes[i].row,
                                   enabled: !(i == 2 && thirdSetDisabled),
                                   keyboardType: TextInputType.number,
                                   textAlign: TextAlign.center,
@@ -627,6 +1001,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                               Expanded(
                                 child: TextField(
                                   controller: controllers[i].col,
+                                  focusNode: focusNodes[i].col,
                                   enabled: !(i == 2 && thirdSetDisabled),
                                   keyboardType: TextInputType.number,
                                   textAlign: TextAlign.center,
@@ -689,6 +1064,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       for (final c in controllers) {
         c.row.dispose();
         c.col.dispose();
+      }
+      for (final f in focusNodes) {
+        f.row.dispose();
+        f.col.dispose();
       }
     });
   }
@@ -1383,17 +1762,21 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final teamAName = teamMap[teamAId]!.teamName;
     final teamBName = teamMap[teamBId]!.teamName;
     final boardNums = _boardPlayers.keys.toList()..sort();
-    final totalScore = _teamMatchScore(teamAId, teamBId);
-    final matchPts = _teamMatchPoints(teamAId, teamBId);
-
-    Color totalColor = Colors.black87;
-    if (totalScore.a > totalScore.b) totalColor = Colors.green.shade700;
-    else if (totalScore.b > totalScore.a) totalColor = Colors.red.shade700;
-    else if (totalScore.a > 0 || totalScore.b > 0) totalColor = Colors.amber.shade800;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final totalScore = _teamMatchScore(teamAId, teamBId);
+            final matchPts = _teamMatchPoints(teamAId, teamBId);
+
+            Color totalColor = Colors.black87;
+            if (totalScore.a > totalScore.b) totalColor = Colors.green.shade700;
+            else if (totalScore.b > totalScore.a) totalColor = Colors.red.shade700;
+            else if (totalScore.a > 0 || totalScore.b > 0) totalColor = Colors.amber.shade800;
+
+            return AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         titlePadding: EdgeInsets.zero,
         contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -1517,7 +1900,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 ],
               ),
               for (final boardNum in boardNums)
-                _buildBoardMatchRow(boardNum, teamAId, teamBId, dialogContext: ctx, teamMap: teamMap),
+                _buildBoardMatchRow(boardNum, teamAId, teamBId, dialogContext: ctx, teamMap: teamMap, onResultChanged: () {
+                  // Refresh the team match dialog after result entry
+                  setDialogState(() {});
+                }),
             ],
           ),
         ),
@@ -1528,11 +1914,14 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             child: const Text('Закрити'),
           ),
         ],
-      ),
+      );
+          },
+        );
+      },
     );
   }
 
-  TableRow _buildBoardMatchRow(int boardNum, int teamAId, int teamBId, {BuildContext? dialogContext, Map<int, ({String teamName, int? teamNumber})>? teamMap}) {
+  TableRow _buildBoardMatchRow(int boardNum, int teamAId, int teamBId, {BuildContext? dialogContext, Map<int, ({String teamName, int? teamNumber})>? teamMap, VoidCallback? onResultChanged}) {
     final playersOnBoard = _boardPlayers[boardNum] ?? [];
     final playerA = playersOnBoard.where((p) => p.teamId == teamAId).firstOrNull;
     final playerB = playersOnBoard.where((p) => p.teamId == teamBId).firstOrNull;
@@ -1591,17 +1980,16 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             final rowId = playerA.player.player_id!;
             final colId = playerB.player.player_id!;
             final currentResult = _boardResults[boardNum]?[rowId]?[colId];
-            // Close the team details dialog first
-            Navigator.pop(dialogContext);
-            // Show result picker
-            _showResultPicker(
-              context,
+            // Show result picker on top of the team details dialog (don't close it)
+            _showResultPickerFromTeamDialog(
+              dialogContext,
               rowPlayerId: rowId,
               colPlayerId: colId,
               rowPlayerName: aName,
               colPlayerName: bName,
               currentResult: currentResult,
               boardNum: boardNum,
+              onResultChanged: onResultChanged,
             );
           },
           child: Container(

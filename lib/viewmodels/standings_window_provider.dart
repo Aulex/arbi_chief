@@ -36,6 +36,13 @@ class StandingsSnapshot {
   /// Short tab labels for boards
   final Map<int, String> boardTabLabels;
 
+  /// Cross-table data per board: boardNum → list of players (ordered) with their results
+  /// Each player has results map: opponentIndex → result value (1.0, 0.5, 0.0)
+  final Map<int, List<CrossTablePlayerRow>> crossTableData;
+
+  /// Team cross-table data
+  final List<CrossTableTeamRow> teamCrossTableData;
+
   StandingsSnapshot({
     required this.tournamentName,
     required this.tType,
@@ -46,6 +53,8 @@ class StandingsSnapshot {
     required this.boardStandings,
     required this.teamStandings,
     required this.boardTabLabels,
+    this.crossTableData = const {},
+    this.teamCrossTableData = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -60,6 +69,10 @@ class StandingsSnapshot {
           (k, v) => MapEntry('$k', v.map((r) => r.toJson()).toList()),
         ),
         'teamStandings': teamStandings.map((r) => r.toJson()).toList(),
+        'crossTableData': crossTableData.map(
+          (k, v) => MapEntry('$k', v.map((r) => r.toJson()).toList()),
+        ),
+        'teamCrossTableData': teamCrossTableData.map((r) => r.toJson()).toList(),
       };
 
   factory StandingsSnapshot.fromJson(Map<String, dynamic> json) {
@@ -81,6 +94,16 @@ class StandingsSnapshot {
       ),
       teamStandings: (json['teamStandings'] as List? ?? [])
           .map((r) => StandingsTeamRow.fromJson(r))
+          .toList(),
+      crossTableData:
+          (json['crossTableData'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(
+          int.parse(k),
+          (v as List).map((r) => CrossTablePlayerRow.fromJson(r)).toList(),
+        ),
+      ),
+      teamCrossTableData: (json['teamCrossTableData'] as List? ?? [])
+          .map((r) => CrossTableTeamRow.fromJson(r))
           .toList(),
     );
   }
@@ -170,6 +193,96 @@ class StandingsTeamRow {
       teamNumber: json['teamNumber'],
       points: (json['points'] ?? 0).toDouble(),
       tiebreaker: json['tiebreaker'] ?? '',
+    );
+  }
+}
+
+/// A player row in the cross table (ordered by team number).
+class CrossTablePlayerRow {
+  final String playerName;
+  final String teamName;
+  final int? teamNumber;
+  /// Results vs each player by index in the same list (null = not played, -1 = self)
+  final Map<int, double?> results;
+  /// Detail strings (table tennis set scores) vs each player by index
+  final Map<int, String> details;
+  final double points;
+  final int gamesPlayed;
+
+  CrossTablePlayerRow({
+    required this.playerName,
+    required this.teamName,
+    this.teamNumber,
+    required this.results,
+    this.details = const {},
+    required this.points,
+    required this.gamesPlayed,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'playerName': playerName,
+    'teamName': teamName,
+    'teamNumber': teamNumber,
+    'results': results.map((k, v) => MapEntry('$k', v)),
+    'details': details.map((k, v) => MapEntry('$k', v)),
+    'points': points,
+    'gamesPlayed': gamesPlayed,
+  };
+
+  factory CrossTablePlayerRow.fromJson(Map<String, dynamic> json) {
+    return CrossTablePlayerRow(
+      playerName: json['playerName'] ?? '',
+      teamName: json['teamName'] ?? '',
+      teamNumber: json['teamNumber'],
+      results: (json['results'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(int.parse(k), v?.toDouble()),
+      ),
+      details: (json['details'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(int.parse(k), v as String),
+      ),
+      points: (json['points'] ?? 0).toDouble(),
+      gamesPlayed: json['gamesPlayed'] ?? 0,
+    );
+  }
+}
+
+/// A team row in the cross table.
+class CrossTableTeamRow {
+  final String teamName;
+  final int? teamNumber;
+  /// Match points vs each team by index in the same list
+  final Map<int, double> matchPoints;
+  /// Board score detail vs each team: "2.5 : 0.5" style
+  final Map<int, String> scoreDetails;
+  final double totalPoints;
+
+  CrossTableTeamRow({
+    required this.teamName,
+    this.teamNumber,
+    required this.matchPoints,
+    this.scoreDetails = const {},
+    required this.totalPoints,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'teamName': teamName,
+    'teamNumber': teamNumber,
+    'matchPoints': matchPoints.map((k, v) => MapEntry('$k', v)),
+    'scoreDetails': scoreDetails.map((k, v) => MapEntry('$k', v)),
+    'totalPoints': totalPoints,
+  };
+
+  factory CrossTableTeamRow.fromJson(Map<String, dynamic> json) {
+    return CrossTableTeamRow(
+      teamName: json['teamName'] ?? '',
+      teamNumber: json['teamNumber'],
+      matchPoints: (json['matchPoints'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(int.parse(k), (v ?? 0).toDouble()),
+      ),
+      scoreDetails: (json['scoreDetails'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(int.parse(k), v as String),
+      ),
+      totalPoints: (json['totalPoints'] ?? 0).toDouble(),
     );
   }
 }
