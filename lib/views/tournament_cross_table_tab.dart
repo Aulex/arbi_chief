@@ -77,9 +77,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final teamSvc = ref.read(teamServiceProvider);
     final tournamentSvc = ref.read(tournamentServiceProvider);
 
-    final boards = await teamSvc.getBoardAssignmentsForTournament(widget.tId);
-    final games = await tournamentSvc.getGamesGroupedByBoard(widget.tId);
-    final allTeams = await teamSvc.getTeamListForTournament(widget.tId);
+    // Run independent DB queries in parallel for speed
+    late final Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>> boards;
+    late final Map<int, List<({int eventId, Player white, Player black, String? dateBegin, double? whiteResult, double? blackResult, String? whiteDetail, String? blackDetail})>> games;
+    late final List<({int teamId, String teamName, int? teamNumber})> allTeams;
+    late final Set<int> noShowIds;
+
+    await Future.wait([
+      teamSvc.getBoardAssignmentsForTournament(widget.tId).then((v) => boards = v),
+      tournamentSvc.getGamesGroupedByBoard(widget.tId).then((v) => games = v),
+      teamSvc.getTeamListForTournament(widget.tId).then((v) => allTeams = v),
+      teamSvc.getNoShowPlayerIds(widget.tId).then((v) => noShowIds = v),
+    ]);
 
     final results = <int, Map<int, Map<int, double>>>{};
     final details = <int, Map<int, Map<int, String>>>{};
@@ -105,8 +114,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       }
     }
 
-    // Load no-show players first so phantom logic treats them as absent too
-    final noShowIds = await teamSvc.getNoShowPlayerIds(widget.tId);
+    // noShowIds already loaded in parallel above
 
     // Add phantom "absent" entries for teams missing from each board.
     final absentIds = <int>{...noShowIds};
@@ -399,6 +407,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   // --- Result entry ---
 
   Future<void> _onResultSelected(int rowPlayerId, int colPlayerId, double? result) async {
+    // Optimistic in-memory update for instant UI feedback
+    _applyResultInMemory(rowPlayerId, colPlayerId, result);
+
     final svc = ref.read(tournamentServiceProvider);
 
     if (result == null) {
@@ -407,17 +418,53 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         await svc.saveResultForPlayer(eventId, rowPlayerId, null);
       }
     } else {
-      final tsId = await svc.getOrCreateDefaultStage(widget.tId);
-      var eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
+      // Run independent lookups in parallel
+      late final int tsId;
+      int? eventId;
+      await Future.wait([
+        svc.getOrCreateDefaultStage(widget.tId).then((v) => tsId = v),
+        svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId).then((v) => eventId = v),
+      ]);
       eventId ??= await svc.createGame(
         tsId: tsId,
         whitePlayerId: rowPlayerId,
         blackPlayerId: colPlayerId,
       );
-      await svc.saveResultForPlayer(eventId, rowPlayerId, result);
+      await svc.saveResultForPlayer(eventId!, rowPlayerId, result);
     }
 
+    // Full reload to ensure consistency (runs in background after DB write)
     await _loadData();
+  }
+
+  /// Apply a result change directly to in-memory data for instant UI update.
+  void _applyResultInMemory(int rowPlayerId, int colPlayerId, double? result) {
+    final complement = result != null ? 1.0 - result : null;
+
+    for (final boardNum in _boardPlayers.keys) {
+      final players = _boardPlayers[boardNum]!;
+      final hasRow = players.any((p) => p.player.player_id == rowPlayerId);
+      final hasCol = players.any((p) => p.player.player_id == colPlayerId);
+      if (!hasRow || !hasCol) continue;
+
+      _boardResults.putIfAbsent(boardNum, () => {});
+      if (result != null) {
+        _boardResults[boardNum]!.putIfAbsent(rowPlayerId, () => {})[colPlayerId] = result;
+        _boardResults[boardNum]!.putIfAbsent(colPlayerId, () => {})[rowPlayerId] = complement!;
+      } else {
+        _boardResults[boardNum]?[rowPlayerId]?.remove(colPlayerId);
+        _boardResults[boardNum]?[colPlayerId]?.remove(rowPlayerId);
+        // Also clear details
+        _boardResultDetails[boardNum]?[rowPlayerId]?.remove(colPlayerId);
+        _boardResultDetails[boardNum]?[colPlayerId]?.remove(rowPlayerId);
+      }
+      break; // A player pair exists on only one board
+    }
+
+    if (mounted) {
+      setState(() {});
+      _updateStandingsSnapshot();
+    }
   }
 
   /// Shows result picker from inside the team match details dialog.
@@ -1112,21 +1159,56 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final rowDetail = rowSets.join(' ');
     final colDetail = colSets.join(' ');
 
+    // Optimistic in-memory update for instant UI feedback
+    _applyTTResultInMemory(rowPlayerId, colPlayerId, rowResult, rowDetail, colDetail);
+
     final svc = ref.read(tournamentServiceProvider);
-    final tsId = await svc.getOrCreateDefaultStage(widget.tId);
-    var eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
+    // Run independent lookups in parallel
+    late final int tsId;
+    int? eventId;
+    await Future.wait([
+      svc.getOrCreateDefaultStage(widget.tId).then((v) => tsId = v),
+      svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId).then((v) => eventId = v),
+    ]);
     eventId ??= await svc.createGame(
       tsId: tsId,
       whitePlayerId: rowPlayerId,
       blackPlayerId: colPlayerId,
     );
-    await svc.saveTableTennisResult(eventId, rowPlayerId,
+    await svc.saveTableTennisResult(eventId!, rowPlayerId,
       rowResult: rowResult,
       rowDetail: rowDetail,
       colDetail: colDetail,
     );
 
+    // Full reload for consistency
     await _loadData();
+  }
+
+  /// Apply table tennis result directly to in-memory data for instant UI.
+  void _applyTTResultInMemory(int rowPlayerId, int colPlayerId, double rowResult, String rowDetail, String colDetail) {
+    final complement = 1.0 - rowResult;
+
+    for (final boardNum in _boardPlayers.keys) {
+      final players = _boardPlayers[boardNum]!;
+      final hasRow = players.any((p) => p.player.player_id == rowPlayerId);
+      final hasCol = players.any((p) => p.player.player_id == colPlayerId);
+      if (!hasRow || !hasCol) continue;
+
+      _boardResults.putIfAbsent(boardNum, () => {});
+      _boardResults[boardNum]!.putIfAbsent(rowPlayerId, () => {})[colPlayerId] = rowResult;
+      _boardResults[boardNum]!.putIfAbsent(colPlayerId, () => {})[rowPlayerId] = complement;
+
+      _boardResultDetails.putIfAbsent(boardNum, () => {});
+      _boardResultDetails[boardNum]!.putIfAbsent(rowPlayerId, () => {})[colPlayerId] = rowDetail;
+      _boardResultDetails[boardNum]!.putIfAbsent(colPlayerId, () => {})[rowPlayerId] = colDetail;
+      break;
+    }
+
+    if (mounted) {
+      setState(() {});
+      _updateStandingsSnapshot();
+    }
   }
 
   Widget _resultOptionCard(BuildContext ctx, {

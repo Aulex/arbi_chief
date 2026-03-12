@@ -506,25 +506,28 @@ class TournamentService {
     final complement = playerResult != null ? 1.0 - playerResult : null;
     final clearDetail = playerResult == null;
 
-    if (player1Id == playerId) {
-      await db.update('CMP_PLAYER_EVENT', {
-        'event_result': playerResult,
-        if (clearDetail) 'event_result_detail': null,
-      }, where: 'pe_id = ?', whereArgs: [pe1Id]);
-      await db.update('CMP_PLAYER_EVENT', {
-        'event_result': complement,
-        if (clearDetail) 'event_result_detail': null,
-      }, where: 'pe_id = ?', whereArgs: [pe2Id]);
-    } else {
-      await db.update('CMP_PLAYER_EVENT', {
-        'event_result': playerResult,
-        if (clearDetail) 'event_result_detail': null,
-      }, where: 'pe_id = ?', whereArgs: [pe2Id]);
-      await db.update('CMP_PLAYER_EVENT', {
-        'event_result': complement,
-        if (clearDetail) 'event_result_detail': null,
-      }, where: 'pe_id = ?', whereArgs: [pe1Id]);
-    }
+    // Use transaction for atomic write of both player results
+    await db.transaction((txn) async {
+      if (player1Id == playerId) {
+        await txn.update('CMP_PLAYER_EVENT', {
+          'event_result': playerResult,
+          if (clearDetail) 'event_result_detail': null,
+        }, where: 'pe_id = ?', whereArgs: [pe1Id]);
+        await txn.update('CMP_PLAYER_EVENT', {
+          'event_result': complement,
+          if (clearDetail) 'event_result_detail': null,
+        }, where: 'pe_id = ?', whereArgs: [pe2Id]);
+      } else {
+        await txn.update('CMP_PLAYER_EVENT', {
+          'event_result': playerResult,
+          if (clearDetail) 'event_result_detail': null,
+        }, where: 'pe_id = ?', whereArgs: [pe2Id]);
+        await txn.update('CMP_PLAYER_EVENT', {
+          'event_result': complement,
+          if (clearDetail) 'event_result_detail': null,
+        }, where: 'pe_id = ?', whereArgs: [pe1Id]);
+      }
+    });
   }
 
   /// Save table tennis match result with set-by-set scores.
@@ -550,13 +553,16 @@ class TournamentService {
     final player1Id = rows[0]['player_id'] as int;
     final colResult = 1.0 - rowResult;
 
-    if (player1Id == rowPlayerId) {
-      await db.update('CMP_PLAYER_EVENT', {'event_result': rowResult, 'event_result_detail': rowDetail}, where: 'pe_id = ?', whereArgs: [pe1Id]);
-      await db.update('CMP_PLAYER_EVENT', {'event_result': colResult, 'event_result_detail': colDetail}, where: 'pe_id = ?', whereArgs: [pe2Id]);
-    } else {
-      await db.update('CMP_PLAYER_EVENT', {'event_result': rowResult, 'event_result_detail': rowDetail}, where: 'pe_id = ?', whereArgs: [pe2Id]);
-      await db.update('CMP_PLAYER_EVENT', {'event_result': colResult, 'event_result_detail': colDetail}, where: 'pe_id = ?', whereArgs: [pe1Id]);
-    }
+    // Use transaction for atomic write of both player results
+    await db.transaction((txn) async {
+      if (player1Id == rowPlayerId) {
+        await txn.update('CMP_PLAYER_EVENT', {'event_result': rowResult, 'event_result_detail': rowDetail}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+        await txn.update('CMP_PLAYER_EVENT', {'event_result': colResult, 'event_result_detail': colDetail}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+      } else {
+        await txn.update('CMP_PLAYER_EVENT', {'event_result': rowResult, 'event_result_detail': rowDetail}, where: 'pe_id = ?', whereArgs: [pe2Id]);
+        await txn.update('CMP_PLAYER_EVENT', {'event_result': colResult, 'event_result_detail': colDetail}, where: 'pe_id = ?', whereArgs: [pe1Id]);
+      }
+    });
   }
 
   /// Get set score details for a specific player in a game.
