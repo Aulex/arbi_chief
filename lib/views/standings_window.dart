@@ -6,12 +6,12 @@ import '../viewmodels/standings_window_provider.dart';
 /// Standalone app that runs in the sub-window.
 /// Receives standings data from the main window via inter-window messaging.
 class StandingsWindowApp extends StatefulWidget {
-  final WindowController controller;
+  final int windowId;
   final String argument;
 
   const StandingsWindowApp({
     super.key,
-    required this.controller,
+    required this.windowId,
     required this.argument,
   });
 
@@ -34,7 +34,7 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
     } catch (_) {}
 
     // Listen for updates from main window
-    widget.controller.setWindowMethodHandler((call) async {
+    DesktopMultiWindow.setMethodHandler((call, fromWindowId) async {
       if (call.method == 'updateStandings') {
         try {
           final data =

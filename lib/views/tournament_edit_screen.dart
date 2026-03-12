@@ -40,22 +40,21 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         return;
       } catch (_) {
         // Window was closed, create new one
-        ref.read(standingsWindowControllerProvider.notifier).state = null;
+        ref.read(standingsWindowControllerProvider.notifier).setController(null);
       }
     }
 
     final snapshot = ref.read(standingsSnapshotProvider);
     final initialData = snapshot != null ? jsonEncode(snapshot.toJson()) : '{}';
 
-    final window = await WindowController.create(
-      WindowConfiguration(
-        arguments: initialData,
-      ),
-    );
-    await window.show();
-    await window.center();
+    final window = await DesktopMultiWindow.createWindow(initialData);
+    window
+      ..setFrame(const Offset(0, 0) & const Size(1200, 800))
+      ..setTitle('Турнірна таблиця — ${widget.tournament.t_name}')
+      ..center()
+      ..show();
 
-    ref.read(standingsWindowControllerProvider.notifier).state = window;
+    ref.read(standingsWindowControllerProvider.notifier).setController(window);
   }
 
   @override

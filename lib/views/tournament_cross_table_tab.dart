@@ -314,7 +314,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       boardTabLabels: boardTabLabels,
     );
 
-    ref.read(standingsSnapshotProvider.notifier).state = snapshot;
+    ref.read(standingsSnapshotProvider.notifier).update(snapshot);
 
     // Send to sub-window if open
     final controller = ref.read(standingsWindowControllerProvider);

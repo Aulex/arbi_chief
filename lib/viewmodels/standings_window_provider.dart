@@ -3,8 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 /// Holds the current sub-window controller (if open).
+class StandingsWindowNotifier extends Notifier<WindowController?> {
+  @override
+  WindowController? build() => null;
+
+  void setController(WindowController? controller) {
+    state = controller;
+  }
+}
+
 final standingsWindowControllerProvider =
-    StateProvider<WindowController?>((ref) => null);
+    NotifierProvider<StandingsWindowNotifier, WindowController?>(
+  () => StandingsWindowNotifier(),
+);
 
 /// Serializable standings snapshot that gets sent to the sub-window.
 /// Updated every time CrossTableTab reloads data.
@@ -164,8 +175,19 @@ class StandingsTeamRow {
 }
 
 /// Provider holding the latest standings data. CrossTableTab updates this.
+class StandingsSnapshotNotifier extends Notifier<StandingsSnapshot?> {
+  @override
+  StandingsSnapshot? build() => null;
+
+  void update(StandingsSnapshot snapshot) {
+    state = snapshot;
+  }
+}
+
 final standingsSnapshotProvider =
-    StateProvider<StandingsSnapshot?>((ref) => null);
+    NotifierProvider<StandingsSnapshotNotifier, StandingsSnapshot?>(
+  () => StandingsSnapshotNotifier(),
+);
 
 /// Send standings data to the sub-window (if open).
 Future<void> sendStandingsToWindow(
@@ -173,7 +195,8 @@ Future<void> sendStandingsToWindow(
   if (controller == null) return;
   try {
     final json = jsonEncode(snapshot.toJson());
-    await controller.invokeMethod('updateStandings', json);
+    await DesktopMultiWindow.invokeMethod(
+        controller.windowId, 'updateStandings', json);
   } catch (_) {
     // Window may have been closed
   }

@@ -3,29 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'viewmodels/theme_provider.dart';
 import 'views/sport_selection_screen.dart';
 import 'views/standings_window.dart';
 
-void main(List<String> args) async {
+void main(List<String> args) {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Check if this is a sub-window created by desktop_multi_window
-  try {
-    final controller = await WindowController.fromCurrentEngine();
-    final windowArgs = controller.arguments;
-    if (windowArgs != null && windowArgs.toString().isNotEmpty) {
-      // This is a sub-window — run the standings display
-      runApp(StandingsWindowApp(
-        controller: controller,
-        argument: windowArgs.toString(),
-      ));
-      return;
-    }
-  } catch (_) {
-    // Not a sub-window or plugin not ready — proceed as main window
+  // Sub-window entry point: desktop_multi_window passes args as
+  // ['multi_window', '<windowId>', '<json arguments>']
+  if (args.firstOrNull == 'multi_window') {
+    final windowId = int.parse(args[1]);
+    final argument = args.length > 2 ? args[2] : '{}';
+    runApp(StandingsWindowApp(windowId: windowId, argument: argument));
+    return;
   }
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
