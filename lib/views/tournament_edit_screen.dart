@@ -50,7 +50,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     final window = await WindowController.create(
       WindowConfiguration(arguments: initialData),
     );
-    await window.center();
     await window.show();
 
     ref.read(standingsWindowControllerProvider.notifier).setController(window);
