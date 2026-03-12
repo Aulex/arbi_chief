@@ -189,13 +189,17 @@ final standingsSnapshotProvider =
   () => StandingsSnapshotNotifier(),
 );
 
-/// Send standings data to the sub-window (if open).
+/// Channel name used for main↔sub-window communication.
+const standingsChannelName = 'standings_channel';
+
+/// Send standings data to the sub-window (if open) via WindowMethodChannel.
 Future<void> sendStandingsToWindow(
     WindowController? controller, StandingsSnapshot snapshot) async {
   if (controller == null) return;
   try {
     final json = jsonEncode(snapshot.toJson());
-    await controller.invokeMethod('updateStandings', json);
+    const channel = WindowMethodChannel(standingsChannelName);
+    await channel.invokeMethod('updateStandings', json);
   } catch (_) {
     // Window may have been closed
   }

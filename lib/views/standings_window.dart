@@ -33,8 +33,9 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
       }
     } catch (_) {}
 
-    // Listen for updates from main window
-    widget.controller.setWindowMethodHandler((call) async {
+    // Listen for updates from main window via WindowMethodChannel
+    const channel = WindowMethodChannel(standingsChannelName);
+    channel.setMethodCallHandler((call) async {
       if (call.method == 'updateStandings') {
         try {
           final data =
