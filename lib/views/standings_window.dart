@@ -63,14 +63,24 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
         brightness: Brightness.light,
         colorSchemeSeed: Colors.indigo,
       ),
-      home: _StandingsDisplay(snapshot: _snapshot),
+      home: _StandingsDisplay(
+        snapshot: _snapshot,
+        onSnapshotRefreshed: (fresh) {
+          if (mounted) {
+            setState(() {
+              _snapshot = fresh;
+            });
+          }
+        },
+      ),
     );
   }
 }
 
 class _StandingsDisplay extends StatefulWidget {
   final StandingsSnapshot? snapshot;
-  const _StandingsDisplay({required this.snapshot});
+  final ValueChanged<StandingsSnapshot>? onSnapshotRefreshed;
+  const _StandingsDisplay({required this.snapshot, this.onSnapshotRefreshed});
 
   @override
   State<_StandingsDisplay> createState() => _StandingsDisplayState();
@@ -115,14 +125,59 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     if (_autoTabSeconds > 0 && _tabController != null) {
       _autoTabTimer = Timer.periodic(
         Duration(seconds: _autoTabSeconds),
-        (_) {
+        (_) async {
           if (_tabController != null && mounted) {
+            // Refresh data from file on each tab cycle
+            await _refreshFromFile();
             final next = (_tabController!.index + 1) % _tabController!.length;
             _tabController!.animateTo(next);
           }
         },
       );
     }
+  }
+
+  Future<void> _refreshFromFile() async {
+    try {
+      final fresh = await readStandingsFromFile();
+      if (fresh != null && mounted) {
+        // Only rebuild if data actually changed (compare tournament name + standings)
+        final current = widget.snapshot;
+        if (current == null ||
+            fresh.tournamentName != current.tournamentName ||
+            fresh.boardCount != current.boardCount ||
+            _snapshotChanged(current, fresh)) {
+          // We can't directly update widget.snapshot, so we trigger rebuild
+          // through the parent StandingsWindowApp
+          widget.onSnapshotRefreshed?.call(fresh);
+        }
+      }
+    } catch (_) {}
+  }
+
+  bool _snapshotChanged(StandingsSnapshot a, StandingsSnapshot b) {
+    // Quick check: compare serialized cross table and standings lengths
+    for (final boardNum in b.boardStandings.keys) {
+      final aRows = a.boardStandings[boardNum] ?? [];
+      final bRows = b.boardStandings[boardNum] ?? [];
+      if (aRows.length != bRows.length) return true;
+      for (int i = 0; i < aRows.length; i++) {
+        if (aRows[i].points != bRows[i].points ||
+            aRows[i].gamesPlayed != bRows[i].gamesPlayed) return true;
+      }
+      final aCross = a.crossTableData[boardNum] ?? [];
+      final bCross = b.crossTableData[boardNum] ?? [];
+      if (aCross.length != bCross.length) return true;
+      for (int i = 0; i < aCross.length; i++) {
+        if (aCross[i].points != bCross[i].points ||
+            aCross[i].gamesPlayed != bCross[i].gamesPlayed) return true;
+      }
+    }
+    if (a.teamStandings.length != b.teamStandings.length) return true;
+    for (int i = 0; i < a.teamStandings.length; i++) {
+      if (a.teamStandings[i].points != b.teamStandings[i].points) return true;
+    }
+    return false;
   }
 
   @override
@@ -264,14 +319,20 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: SingleChildScrollView(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: _buildCombinedBoardTable(crossTable, standings, isTT),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth,
+              ),
+              child: _buildCombinedBoardTable(crossTable, standings, isTT),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -289,9 +350,19 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
+    // Column layout: №к | Команда | ПІБ | [n result cols] | Бали | Ігор | ПІБ | Команда | Бали | Місце
+    // Indices:        0     1       2     3..n+2             n+3    n+4    n+5    n+6     n+7    n+8
+    final columnWidths = <int, TableColumnWidth>{};
+    // Team and name columns expand to fill available space
+    columnWidths[1] = const FlexColumnWidth(1); // Команда (cross)
+    columnWidths[2] = const FlexColumnWidth(2); // ПІБ (cross)
+    columnWidths[n + 5] = const FlexColumnWidth(2); // ПІБ (standings)
+    columnWidths[n + 6] = const FlexColumnWidth(1); // Команда (standings)
+
     return Table(
       border: TableBorder.all(color: borderColor, width: 1),
       defaultColumnWidth: const IntrinsicColumnWidth(),
+      columnWidths: columnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
         // Header row
@@ -364,14 +435,20 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: SingleChildScrollView(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: _buildTeamCrossTable(crossTable, standings, isTT),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth,
+              ),
+              child: _buildTeamCrossTable(crossTable, standings, isTT),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -389,9 +466,16 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
+    // Column layout: № | Команда | [n result cols] | Очки | Команда | Очки | Місце
+    // Indices:       0     1      2..n+1              n+2    n+3      n+4    n+5
+    final teamColumnWidths = <int, TableColumnWidth>{};
+    teamColumnWidths[1] = const FlexColumnWidth(2); // Команда (cross)
+    teamColumnWidths[n + 3] = const FlexColumnWidth(2); // Команда (standings)
+
     return Table(
       border: TableBorder.all(color: borderColor, width: 1),
       defaultColumnWidth: const IntrinsicColumnWidth(),
+      columnWidths: teamColumnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
         TableRow(

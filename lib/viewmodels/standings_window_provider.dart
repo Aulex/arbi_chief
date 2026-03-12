@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Holds the current sub-window controller (if open).
 class StandingsWindowNotifier extends Notifier<WindowController?> {
@@ -305,15 +307,47 @@ final standingsSnapshotProvider =
 /// Channel name used for main↔sub-window communication.
 const standingsChannelName = 'standings_channel';
 
-/// Send standings data to the sub-window (if open) via WindowMethodChannel.
+/// File name for sharing standings data between windows.
+const _standingsFileName = 'standings_snapshot.json';
+
+/// Get the path to the shared standings file.
+Future<String> _getStandingsFilePath() async {
+  final dir = await getApplicationDocumentsDirectory();
+  return '${dir.path}/$_standingsFileName';
+}
+
+/// Send standings data to the sub-window (if open) via WindowMethodChannel,
+/// and also write to a shared file for reliable polling.
 Future<void> sendStandingsToWindow(
     WindowController? controller, StandingsSnapshot snapshot) async {
+  final json = jsonEncode(snapshot.toJson());
+
+  // Always write to file so sub-window can poll
+  try {
+    final path = await _getStandingsFilePath();
+    await File(path).writeAsString(json);
+  } catch (_) {}
+
   if (controller == null) return;
   try {
-    final json = jsonEncode(snapshot.toJson());
     const channel = WindowMethodChannel(standingsChannelName);
     await channel.invokeMethod('updateStandings', json);
   } catch (_) {
     // Window may have been closed
+  }
+}
+
+/// Read the latest standings snapshot from the shared file.
+Future<StandingsSnapshot?> readStandingsFromFile() async {
+  try {
+    final path = await _getStandingsFilePath();
+    final file = File(path);
+    if (!await file.exists()) return null;
+    final json = await file.readAsString();
+    final data = jsonDecode(json) as Map<String, dynamic>;
+    if (data.isEmpty) return null;
+    return StandingsSnapshot.fromJson(data);
+  } catch (_) {
+    return null;
   }
 }
