@@ -331,6 +331,12 @@ class ReportService {
   // Formatting helpers
   // ---------------------------------------------------------------------------
 
+  String fmtPlayerName(Player player) {
+    final name = player.player_name.trim();
+    if (name.isEmpty) return player.player_surname;
+    return '${player.player_surname} ${name[0]}.';
+  }
+
   String fmtPts(double points) {
     if (points == points.roundToDouble()) return points.toStringAsFixed(0);
     String s = points.toStringAsFixed(2);
@@ -407,7 +413,7 @@ class ReportService {
       final useA3 = n > 10;
       final pageFormat = useA3 ? PdfPageFormat.a3.landscape : PdfPageFormat.a4.landscape;
       final fontSize = useA3 ? 7.0 : 7.0;
-      final matchCellWidth = n <= 6 ? 52.0 : n <= 10 ? 44.0 : n <= 14 ? 38.0 : 32.0;
+      final matchCellWidth = n <= 6 ? 44.0 : n <= 10 ? 38.0 : n <= 14 ? 32.0 : 28.0;
 
       final hdrStyle = pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold);
       final cellSt = pw.TextStyle(fontSize: fontSize, font: fontRegular);
@@ -417,7 +423,7 @@ class ReportService {
 
       final headerCells = <pw.Widget>[
         _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('Прізвище', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Прізвище Ім\'я', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < n; i++)
           _pdfCell('${i + 1}', hdrStyle, align: pw.Alignment.center),
@@ -427,7 +433,7 @@ class ReportService {
         if (isTT) _pdfCell('М.З.', hdrStyle, align: pw.Alignment.center),
         if (isTT) _pdfCell('М.П.', hdrStyle, align: pw.Alignment.center),
         _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('Прізвище', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Прізвище Ім\'я', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
         if (!isTT) _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
@@ -456,7 +462,7 @@ class ReportService {
 
         final cells = <pw.Widget>[
           _pdfCell('${p.teamNumber ?? ''}', cellSt),
-          _pdfCell(p.player.player_surname, nameStyle, align: pw.Alignment.centerLeft),
+          _pdfCell(fmtPlayerName(p.player), nameStyle, align: pw.Alignment.centerLeft),
           _pdfCell(p.teamName, cellSt, align: pw.Alignment.centerLeft),
           for (int j = 0; j < n; j++)
             if (i == j)
@@ -474,7 +480,7 @@ class ReportService {
           if (isTT) _pdfCell('${totalBalls(data, boardNum, pId).scored}', cellSt),
           if (isTT) _pdfCell('${totalBalls(data, boardNum, pId).conceded}', cellSt),
           _pdfCell('${s.teamNumber ?? ''}', cellSt),
-          _pdfCell(s.player.player_surname, cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell(fmtPlayerName(s.player), cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(fmtPts(displayPoints(data, boardNum, sId, isTT)), cellBold),
           if (!isTT) _pdfCell(fmtPts(bergerCoefficient(data, boardNum, sId)), cellSt),
@@ -624,7 +630,11 @@ class ReportService {
         _pdfCell('№', hdrStyle),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < tn; i++)
-          _pdfCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
+          _pdfTeamHeaderCell(
+            '${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}',
+            teamMap[teamIdsByNumber[i]]!.teamName,
+            hdrStyle,
+          ),
         _pdfCell('Очки', hdrStyle),
         if (isTT)
           _pdfCell('Сети', hdrStyle)
@@ -678,7 +688,7 @@ class ReportService {
         0: const pw.FixedColumnWidth(28),
         1: const pw.FlexColumnWidth(3),
         for (int i = 0; i < tn; i++)
-          2 + i: const pw.FixedColumnWidth(44),
+          2 + i: const pw.FixedColumnWidth(38),
         2 + tn: const pw.FixedColumnWidth(36),
         2 + tn + 1: const pw.FixedColumnWidth(32),
         2 + tn + 2: const pw.FixedColumnWidth(32),
@@ -732,6 +742,21 @@ class ReportService {
       padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
       alignment: align,
       child: pw.Text(text, style: style, textAlign: align == pw.Alignment.centerLeft ? pw.TextAlign.left : pw.TextAlign.center),
+    );
+  }
+
+  pw.Widget _pdfTeamHeaderCell(String number, String teamName, pw.TextStyle style) {
+    final smallStyle = style.copyWith(fontSize: (style.fontSize ?? 8) - 2);
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      alignment: pw.Alignment.center,
+      child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.Text(number, style: style, textAlign: pw.TextAlign.center),
+          pw.Text(teamName, style: smallStyle, textAlign: pw.TextAlign.center, maxLines: 2),
+        ],
+      ),
     );
   }
 

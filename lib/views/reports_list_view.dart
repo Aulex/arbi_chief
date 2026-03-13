@@ -227,6 +227,8 @@ class _ReportTypeCard extends ConsumerWidget {
       ),
     );
 
+    // Invalidate cached report data to ensure fresh results
+    ref.invalidate(reportDataProvider(tournament.t_id!));
     ref.read(reportDataProvider(tournament.t_id!).future).then((data) async {
       if (data.isNotEmpty) {
         await svc.exportPdf(tournament, config, data);

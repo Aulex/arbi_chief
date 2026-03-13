@@ -25,6 +25,15 @@ class ReportView extends ConsumerStatefulWidget {
 
 class _ReportViewState extends ConsumerState<ReportView> {
   @override
+  void initState() {
+    super.initState();
+    // Invalidate cached report data so fresh results are loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(reportDataProvider(widget.tournament.t_id!));
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final dataAsync = ref.watch(reportDataProvider(widget.tournament.t_id!));
 
