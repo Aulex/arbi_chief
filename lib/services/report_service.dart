@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' show pi;
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -750,16 +751,17 @@ class ReportService {
   }
 
   pw.Widget _pdfPlayerHeaderCell(String number, String playerName, pw.TextStyle style) {
-    final smallStyle = style.copyWith(fontSize: (style.fontSize ?? 7) - 2);
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 1, vertical: 2),
       alignment: pw.Alignment.center,
-      child: pw.Column(
-        mainAxisSize: pw.MainAxisSize.min,
-        children: [
-          pw.Text(number, style: style, textAlign: pw.TextAlign.center),
-          pw.Text(playerName, style: smallStyle, textAlign: pw.TextAlign.center, maxLines: 2),
-        ],
+      child: pw.Transform.rotateBox(
+        angle: -pi / 2,
+        child: pw.Text(
+          '$number $playerName',
+          style: style,
+          textAlign: pw.TextAlign.center,
+          maxLines: 1,
+        ),
       ),
     );
   }
