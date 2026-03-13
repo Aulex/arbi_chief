@@ -679,6 +679,151 @@ class ReportService {
       );
     }
 
+    // --- Detailed team match results pages (table tennis only) ---
+    if (isTableTennis && teamMap.isNotEmpty) {
+      final teamIds = teamMap.keys.toList()
+        ..sort((a, b) {
+          final aNum = teamMap[a]!.teamNumber ?? 9999;
+          final bNum = teamMap[b]!.teamNumber ?? 9999;
+          return aNum.compareTo(bNum);
+        });
+
+      final matchWidgets = <pw.Widget>[];
+      final hdrStyle = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
+      final cellSt = pw.TextStyle(fontSize: 8, font: fontRegular);
+      final cellBold = pw.TextStyle(fontSize: 9, font: fontBold, fontWeight: pw.FontWeight.bold);
+
+      for (int i = 0; i < teamIds.length; i++) {
+        for (int j = i + 1; j < teamIds.length; j++) {
+          final aId = teamIds[i];
+          final bId = teamIds[j];
+          final aName = teamMap[aId]!.teamName;
+          final bName = teamMap[bId]!.teamName;
+          final score = teamMatchScore(data, aId, bId);
+          final matchPts = teamMatchPoints(data, aId, bId);
+
+          // Header row: Team A vs Team B — match score
+          matchWidgets.add(pw.Container(
+            margin: const pw.EdgeInsets.only(top: 10, bottom: 4),
+            child: pw.RichText(
+              text: pw.TextSpan(
+                children: [
+                  pw.TextSpan(text: aName, style: cellBold),
+                  pw.TextSpan(text: '  —  ', style: cellSt),
+                  pw.TextSpan(text: bName, style: cellBold),
+                  pw.TextSpan(
+                    text: '    ${fmtPts(score.a)} : ${fmtPts(score.b)}  (${matchPts.a.toInt()} : ${matchPts.b.toInt()})',
+                    style: hdrStyle,
+                  ),
+                ],
+              ),
+            ),
+          ));
+
+          // Board-by-board details table
+          final detailRows = <pw.TableRow>[];
+          detailRows.add(pw.TableRow(
+            decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            children: [
+              _pdfCell(config.boardLabel, hdrStyle, align: pw.Alignment.center),
+              _pdfCell(aName, hdrStyle, align: pw.Alignment.center),
+              _pdfCell('Рахунок', hdrStyle, align: pw.Alignment.center),
+              _pdfCell(bName, hdrStyle, align: pw.Alignment.center),
+              _pdfCell('Сети', hdrStyle, align: pw.Alignment.center),
+            ],
+          ));
+
+          for (final boardNum in boards) {
+            final playerA = (data.boardPlayers[boardNum] ?? [])
+                .where((p) => p.teamId == aId)
+                .firstOrNull;
+            final playerB = (data.boardPlayers[boardNum] ?? [])
+                .where((p) => p.teamId == bId)
+                .firstOrNull;
+
+            final aPlayerName = playerA != null
+                ? '${playerA.player.player_surname} ${playerA.player.player_name}'.trim()
+                : '—';
+            final bPlayerName = playerB != null
+                ? '${playerB.player.player_surname} ${playerB.player.player_name}'.trim()
+                : '—';
+
+            String scoreStr = '';
+            String setsStr = '';
+            if (playerA != null && playerB != null) {
+              final aRes = data.boardResults[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
+              final bRes = data.boardResults[boardNum]?[playerB.player.player_id!]?[playerA.player.player_id!];
+              if (aRes != null && bRes != null) {
+                // Count set wins
+                final detail = data.boardResultDetails[boardNum]?[playerA.player.player_id!]?[playerB.player.player_id!];
+                if (detail != null && detail.isNotEmpty) {
+                  int aWins = 0, bWins = 0;
+                  for (final s in detail.split(' ')) {
+                    final parts = s.split(':');
+                    if (parts.length != 2) continue;
+                    final x = int.tryParse(parts[0]) ?? 0;
+                    final y = int.tryParse(parts[1]) ?? 0;
+                    if (x > y) aWins++;
+                    else if (y > x) bWins++;
+                  }
+                  scoreStr = '$aWins : $bWins';
+                  setsStr = detail.replaceAll(' ', ', ');
+                } else {
+                  scoreStr = '${fmtResult(aRes)} : ${fmtResult(bRes)}';
+                }
+              }
+            }
+
+            final boardLabel2 = config.tabLabel(boardNum);
+            final rowBg = boardNum.isOdd ? null : const pw.BoxDecoration(color: PdfColors.grey100);
+
+            detailRows.add(pw.TableRow(
+              decoration: rowBg,
+              children: [
+                _pdfCell(boardLabel2, cellSt, align: pw.Alignment.center),
+                _pdfCell(aPlayerName, cellSt, align: pw.Alignment.centerLeft),
+                _pdfCell(scoreStr, cellBold, align: pw.Alignment.center),
+                _pdfCell(bPlayerName, cellSt, align: pw.Alignment.centerLeft),
+                _pdfCell(setsStr, cellSt, align: pw.Alignment.center),
+              ],
+            ));
+          }
+
+          matchWidgets.add(pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(80),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(50),
+              3: const pw.FlexColumnWidth(3),
+              4: const pw.FlexColumnWidth(2),
+            },
+            defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: detailRows,
+          ));
+        }
+      }
+
+      // Split match widgets across pages
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.all(20),
+          theme: theme,
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(tournamentName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 4),
+              pw.Text('Детальні результати матчів', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
+            ],
+          ),
+          build: (context) => matchWidgets,
+        ),
+      );
+    }
+
     return pdf;
   }
 
