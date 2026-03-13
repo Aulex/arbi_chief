@@ -661,7 +661,11 @@ class ReportService {
         final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
 
         final cells = <pw.Widget>[
-          _pdfCell('${teamMap[tid]!.teamNumber ?? (i + 1)}', cellSt),
+          _pdfTeamHeaderCell(
+            '${teamMap[tid]!.teamNumber ?? (i + 1)}',
+            teamMap[tid]!.teamName,
+            cellSt,
+          ),
           _pdfCell(teamMap[tid]!.teamName, cellSt, align: pw.Alignment.centerLeft),
           for (int j = 0; j < tn; j++)
             if (i == j)
@@ -685,7 +689,7 @@ class ReportService {
       }
 
       final teamColWidths = <int, pw.TableColumnWidth>{
-        0: const pw.FixedColumnWidth(28),
+        0: const pw.FixedColumnWidth(38),
         1: const pw.FlexColumnWidth(3),
         for (int i = 0; i < tn; i++)
           2 + i: const pw.FixedColumnWidth(38),
