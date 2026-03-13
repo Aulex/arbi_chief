@@ -427,7 +427,7 @@ class ReportService {
         _pdfCell('Прізвище Ім\'я', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < n; i++)
-          _pdfPlayerHeaderCell('${i + 1}', fmtPlayerName(players[i].player), hdrStyle),
+          _pdfCell('${i + 1}', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Ігор', hdrStyle, align: pw.Alignment.center),
         if (!isTT) _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
