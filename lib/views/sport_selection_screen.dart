@@ -18,6 +18,27 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
   List<({int typeId, String typeName})> _types = [];
   bool _loading = true;
 
+  /// Sports that are fully implemented and clickable.
+  static const _enabledSports = {'Шахи', 'Шашки', 'Настільний теніс'};
+
+  /// Desired display order (excluding Спортивне орієнтування).
+  static const _sportOrder = [
+    'Футзал',
+    'Шашки',
+    'Гирьовий спорт',
+    'Шахи',
+    'Настільний теніс',
+    'Плавання',
+    'Армрестлінг',
+    'Волейбол',
+    'Стрітбол',
+    'Легка атлетика',
+    'Велоспорт',
+    'Баскетбол',
+    'Пауерліфтинг',
+    'Перетягування канату',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -27,8 +48,21 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
   Future<void> _loadTypes() async {
     final svc = ref.read(tournamentServiceProvider);
     final types = await svc.getTournamentTypes();
+
+    // Filter out Спортивне орієнтування and sort by the desired order.
+    final filtered = types
+        .where((t) => t.typeName != 'Спортивне орієнтування')
+        .toList();
+
+    filtered.sort((a, b) {
+      final idxA = _sportOrder.indexOf(a.typeName);
+      final idxB = _sportOrder.indexOf(b.typeName);
+      // Sports not in the list go to the end.
+      return (idxA == -1 ? 999 : idxA).compareTo(idxB == -1 ? 999 : idxB);
+    });
+
     setState(() {
-      _types = types;
+      _types = filtered;
       _loading = false;
     });
   }
@@ -84,9 +118,13 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
                     spacing: 24,
                     runSpacing: 24,
                     children: _types.map((t) {
+                      final enabled = _enabledSports.contains(t.typeName);
                       return _SportCard(
-                        name: t.typeName,
+                        name: enabled
+                            ? t.typeName
+                            : '${t.typeName}\n(у розробці)',
                         icon: _iconForType(t.typeName),
+                        enabled: enabled,
                         onTap: () => _selectType(t.typeId),
                       );
                     }).toList(),
@@ -102,8 +140,14 @@ class _SportCard extends StatefulWidget {
   final String name;
   final IconData icon;
   final VoidCallback onTap;
+  final bool enabled;
 
-  const _SportCard({required this.name, required this.icon, required this.onTap});
+  const _SportCard({
+    required this.name,
+    required this.icon,
+    required this.onTap,
+    this.enabled = true,
+  });
 
   @override
   State<_SportCard> createState() => _SportCardState();
@@ -114,46 +158,70 @@ class _SportCardState extends State<_SportCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final enabled = widget.enabled;
+
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      cursor: SystemMouseCursors.click,
+      onEnter: enabled ? (_) => setState(() => _hovering = true) : null,
+      onExit: enabled ? (_) => setState(() => _hovering = false) : null,
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: enabled ? widget.onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: 160,
           height: 160,
           decoration: BoxDecoration(
-            color: _hovering
-                ? Colors.indigo.shade50
-                : Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF1B2838)
-                    : Colors.white,
+            color: !enabled
+                ? (isDark ? const Color(0xFF1E1E1E) : Colors.grey.shade200)
+                : _hovering
+                    ? Colors.indigo.shade50
+                    : isDark
+                        ? const Color(0xFF1B2838)
+                        : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _hovering ? Colors.indigo : (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2A3A4E) : Colors.grey.shade300),
-              width: _hovering ? 2 : 1,
+              color: !enabled
+                  ? (isDark ? Colors.grey.shade700 : Colors.grey.shade400)
+                  : _hovering
+                      ? Colors.indigo
+                      : (isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300),
+              width: _hovering && enabled ? 2 : 1,
             ),
-            boxShadow: _hovering
+            boxShadow: _hovering && enabled
                 ? [BoxShadow(color: Colors.indigo.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 4))]
                 : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(widget.icon, size: 48, color: _hovering ? Colors.indigo : (Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade700)),
-              const SizedBox(height: 12),
-              Text(
-                widget.name,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: _hovering ? Colors.indigo : (Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade300 : Colors.black87),
+          child: Opacity(
+            opacity: enabled ? 1.0 : 0.5,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  widget.icon,
+                  size: 48,
+                  color: !enabled
+                      ? Colors.grey
+                      : _hovering
+                          ? Colors.indigo
+                          : (isDark ? Colors.grey.shade400 : Colors.grey.shade700),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  widget.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: enabled ? 16 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: !enabled
+                        ? Colors.grey
+                        : _hovering
+                            ? Colors.indigo
+                            : (isDark ? Colors.grey.shade300 : Colors.black87),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
