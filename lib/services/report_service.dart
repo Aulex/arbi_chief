@@ -411,8 +411,8 @@ class ReportService {
 
       final headerCells = <pw.Widget>[
         _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Прізвище', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('ПІБ', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < n; i++)
           _pdfCell('${i + 1}', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
@@ -421,7 +421,7 @@ class ReportService {
         if (isTT) _pdfCell('М.З.', hdrStyle, align: pw.Alignment.center),
         if (isTT) _pdfCell('М.П.', hdrStyle, align: pw.Alignment.center),
         _pdfCell('№к', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('ПІБ', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Прізвище', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
         if (!isTT) _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
@@ -450,8 +450,8 @@ class ReportService {
 
         final cells = <pw.Widget>[
           _pdfCell('${p.teamNumber ?? ''}', cellSt),
+          _pdfCell(p.player.player_surname, nameStyle, align: pw.Alignment.centerLeft),
           _pdfCell(p.teamName, cellSt, align: pw.Alignment.centerLeft),
-          _pdfCell('${p.player.player_surname} ${p.player.player_name}'.trim(), nameStyle, align: pw.Alignment.centerLeft),
           for (int j = 0; j < n; j++)
             if (i == j)
               _pdfDiagonalCell()
@@ -468,7 +468,7 @@ class ReportService {
           if (isTT) _pdfCell('${totalBalls(data, boardNum, pId).scored}', cellSt),
           if (isTT) _pdfCell('${totalBalls(data, boardNum, pId).conceded}', cellSt),
           _pdfCell('${s.teamNumber ?? ''}', cellSt),
-          _pdfCell('${s.player.player_surname} ${s.player.player_name}'.trim(), cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell(s.player.player_surname, cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
           _pdfCell(fmtPts(displayPoints(data, boardNum, sId, isTT)), cellBold),
           if (!isTT) _pdfCell(fmtPts(bergerCoefficient(data, boardNum, sId)), cellSt),
