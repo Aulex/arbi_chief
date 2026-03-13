@@ -443,16 +443,19 @@ class TournamentService {
           });
         }
 
-        // Both no-show → 0:0, otherwise no-show player=0, opponent=1
-        final opponentResult = alsoAbsentIds.contains(opponentId) ? 0.0 : 1.0;
+        // Both no-show → 0:0, otherwise no-show player loses 0:2 (sets 0:11 0:11)
+        final bothAbsent = alsoAbsentIds.contains(opponentId);
+        final opponentResult = bothAbsent ? 0.0 : 1.0;
+        final noShowDetail = bothAbsent ? null : '0:11 0:11';
+        final opponentDetail = bothAbsent ? null : '11:0 11:0';
         await txn.rawUpdate('''
-          UPDATE CMP_PLAYER_EVENT SET event_result = 0.0
+          UPDATE CMP_PLAYER_EVENT SET event_result = 0.0, event_result_detail = ?
           WHERE event_id = ? AND player_id = ?
-        ''', [eventId, playerId]);
+        ''', [noShowDetail, eventId, playerId]);
         await txn.rawUpdate('''
-          UPDATE CMP_PLAYER_EVENT SET event_result = ?
+          UPDATE CMP_PLAYER_EVENT SET event_result = ?, event_result_detail = ?
           WHERE event_id = ? AND player_id = ?
-        ''', [opponentResult, eventId, opponentId]);
+        ''', [opponentResult, opponentDetail, eventId, opponentId]);
       }
     });
   }
