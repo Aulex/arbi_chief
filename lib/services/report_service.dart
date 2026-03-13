@@ -403,9 +403,15 @@ class ReportService {
       final sorted = sortedStandings(data, boardNum, players, isTableTennis);
       final boardLabel = config.tabLabel(boardNum);
 
-      final hdrStyle = pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold);
-      final cellSt = pw.TextStyle(fontSize: 7, font: fontRegular);
-      final cellBold = pw.TextStyle(fontSize: 7, font: fontBold, fontWeight: pw.FontWeight.bold);
+      // Adaptive sizing: use A3 landscape for large tables so name columns stay visible
+      final useA3 = n > 10;
+      final pageFormat = useA3 ? PdfPageFormat.a3.landscape : PdfPageFormat.a4.landscape;
+      final fontSize = useA3 ? 7.0 : 7.0;
+      final matchCellWidth = n <= 6 ? 52.0 : n <= 10 ? 44.0 : n <= 14 ? 38.0 : 32.0;
+
+      final hdrStyle = pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold);
+      final cellSt = pw.TextStyle(fontSize: fontSize, font: fontRegular);
+      final cellBold = pw.TextStyle(fontSize: fontSize, font: fontBold, fontWeight: pw.FontWeight.bold);
 
       final isTT = isTableTennis;
 
@@ -480,20 +486,24 @@ class ReportService {
         dataTableRows.add(pw.TableRow(decoration: rowBg, children: cells));
       }
 
+      // Use fixed minimum widths for name/team columns so they never get squeezed to 0
+      final nameColWidth = useA3 ? 70.0 : 55.0;
+      final teamColWidth = useA3 ? 80.0 : 65.0;
+
       final colWidths = <int, pw.TableColumnWidth>{
         0: const pw.FixedColumnWidth(22),
-        1: const pw.FlexColumnWidth(2),
-        2: const pw.FlexColumnWidth(3),
+        1: pw.FixedColumnWidth(nameColWidth),
+        2: pw.FixedColumnWidth(teamColWidth),
         for (int i = 0; i < n; i++)
-          3 + i: pw.FixedColumnWidth(isTT ? 52 : 20),
+          3 + i: pw.FixedColumnWidth(isTT ? matchCellWidth : 20),
         3 + n: const pw.FixedColumnWidth(28),
         3 + n + 1: const pw.FixedColumnWidth(24),
       };
       if (!isTT) {
         colWidths[3 + n + 2] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 3] = const pw.FixedColumnWidth(22);
-        colWidths[3 + n + 4] = const pw.FlexColumnWidth(3);
-        colWidths[3 + n + 5] = const pw.FlexColumnWidth(2);
+        colWidths[3 + n + 4] = pw.FixedColumnWidth(nameColWidth);
+        colWidths[3 + n + 5] = pw.FixedColumnWidth(teamColWidth);
         colWidths[3 + n + 6] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 7] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 8] = const pw.FixedColumnWidth(30);
@@ -501,8 +511,8 @@ class ReportService {
         colWidths[3 + n + 2] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 3] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 4] = const pw.FixedColumnWidth(22);
-        colWidths[3 + n + 5] = const pw.FlexColumnWidth(3);
-        colWidths[3 + n + 6] = const pw.FlexColumnWidth(2);
+        colWidths[3 + n + 5] = pw.FixedColumnWidth(nameColWidth);
+        colWidths[3 + n + 6] = pw.FixedColumnWidth(teamColWidth);
         colWidths[3 + n + 7] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 8] = const pw.FixedColumnWidth(28);
         colWidths[3 + n + 9] = const pw.FixedColumnWidth(28);
@@ -511,7 +521,7 @@ class ReportService {
 
       pdf.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat.a4.landscape,
+          pageFormat: pageFormat,
           margin: const pw.EdgeInsets.all(20),
           theme: theme,
           build: (context) => pw.Column(
