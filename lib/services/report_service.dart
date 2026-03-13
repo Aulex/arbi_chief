@@ -568,33 +568,44 @@ class ReportService {
         }
       }
 
-      teamIds.sort((a, b) {
-        final pa = teamPoints[a]!;
-        final pb = teamPoints[b]!;
-        if (pa != pb) return pb.compareTo(pa);
-        final h2h = teamMatchPoints(data, a, b);
-        if (h2h.a > h2h.b) return -1;
-        if (h2h.b > h2h.a) return 1;
-        if (isTT) {
-          final setDiffA = teamDirectSetDiff(data, a, b);
-          final setDiffB = teamDirectSetDiff(data, b, a);
-          if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
-          final ballDiffA = teamDirectBallDiff(data, a, b);
-          final ballDiffB = teamDirectBallDiff(data, b, a);
-          if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
-          final tsdA = teamTotalSetDiffMap[a]!;
-          final tsdB = teamTotalSetDiffMap[b]!;
-          if (tsdA != tsdB) return tsdB.compareTo(tsdA);
-          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
-        } else {
-          final b1a = teamBoard1Pts[a]!;
-          final b1b = teamBoard1Pts[b]!;
-          if (b1a != b1b) return b1b.compareTo(b1a);
-          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
-        }
-      });
+      // Cross-table order: by team number (like the interface)
+      final teamIdsByNumber = List<int>.from(teamIds)
+        ..sort((a, b) {
+          final aNum = teamMap[a]!.teamNumber ?? 9999;
+          final bNum = teamMap[b]!.teamNumber ?? 9999;
+          if (aNum != bNum) return aNum.compareTo(bNum);
+          return teamMap[a]!.teamName.compareTo(teamMap[b]!.teamName);
+        });
 
-      final tn = teamIds.length;
+      // Standings order: by points + tiebreakers
+      final sortedTeamIds = List<int>.from(teamIds)
+        ..sort((a, b) {
+          final pa = teamPoints[a]!;
+          final pb = teamPoints[b]!;
+          if (pa != pb) return pb.compareTo(pa);
+          final h2h = teamMatchPoints(data, a, b);
+          if (h2h.a > h2h.b) return -1;
+          if (h2h.b > h2h.a) return 1;
+          if (isTT) {
+            final setDiffA = teamDirectSetDiff(data, a, b);
+            final setDiffB = teamDirectSetDiff(data, b, a);
+            if (setDiffA != setDiffB) return setDiffB.compareTo(setDiffA);
+            final ballDiffA = teamDirectBallDiff(data, a, b);
+            final ballDiffB = teamDirectBallDiff(data, b, a);
+            if (ballDiffA != ballDiffB) return ballDiffB.compareTo(ballDiffA);
+            final tsdA = teamTotalSetDiffMap[a]!;
+            final tsdB = teamTotalSetDiffMap[b]!;
+            if (tsdA != tsdB) return tsdB.compareTo(tsdA);
+            return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+          } else {
+            final b1a = teamBoard1Pts[a]!;
+            final b1b = teamBoard1Pts[b]!;
+            if (b1a != b1b) return b1b.compareTo(b1a);
+            return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+          }
+        });
+
+      final tn = teamIdsByNumber.length;
       final hdrStyle = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
       final cellSt = pw.TextStyle(fontSize: 8, font: fontRegular);
       final cellBold = pw.TextStyle(fontSize: 8, font: fontBold, fontWeight: pw.FontWeight.bold);
@@ -603,13 +614,17 @@ class ReportService {
         _pdfCell('№', hdrStyle),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < tn; i++)
-          _pdfCell('${teamMap[teamIds[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
+          _pdfCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', hdrStyle),
         _pdfCell('Очки', hdrStyle),
         if (isTT)
           _pdfCell('Сети', hdrStyle)
         else
           _pdfCell('${config.boardAbbrev}1', hdrStyle),
         _pdfCell('${config.boardAbbrev}${config.boardCount}', hdrStyle),
+        // Standings section (right side)
+        _pdfCell('№', hdrStyle),
+        _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Очки', hdrStyle),
         _pdfCell('Місце', hdrStyle),
       ];
 
@@ -621,7 +636,8 @@ class ReportService {
       ];
 
       for (int i = 0; i < tn; i++) {
-        final tid = teamIds[i];
+        final tid = teamIdsByNumber[i];
+        final sid = sortedTeamIds[i];
         final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
 
         final cells = <pw.Widget>[
@@ -631,13 +647,17 @@ class ReportService {
             if (i == j)
               _pdfDiagonalCell()
             else
-              _pdfTeamResultCell(data, tid, teamIds[j], cellSt, cellBold),
+              _pdfTeamResultCell(data, tid, teamIdsByNumber[j], cellSt, cellBold),
           _pdfCell(fmtPts(teamPoints[tid]!), cellBold),
           if (isTT)
             _pdfCell('${teamTotalSetDiffMap[tid]! >= 0 ? '+' : ''}${teamTotalSetDiffMap[tid]!}', cellSt)
           else
             _pdfCell(fmtPts(teamBoard1Pts[tid]!), cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
+          // Standings section (right side, sorted by place)
+          _pdfCell('${teamMap[sid]!.teamNumber ?? ''}', cellSt),
+          _pdfCell(teamMap[sid]!.teamName, cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell(fmtPts(teamPoints[sid]!), cellBold),
           _pdfCell('${i + 1}', cellBold),
         ];
 
@@ -652,7 +672,11 @@ class ReportService {
         2 + tn: const pw.FixedColumnWidth(36),
         2 + tn + 1: const pw.FixedColumnWidth(32),
         2 + tn + 2: const pw.FixedColumnWidth(32),
-        2 + tn + 3: const pw.FixedColumnWidth(36),
+        // Standings columns
+        2 + tn + 3: const pw.FixedColumnWidth(28),
+        2 + tn + 4: const pw.FlexColumnWidth(3),
+        2 + tn + 5: const pw.FixedColumnWidth(36),
+        2 + tn + 6: const pw.FixedColumnWidth(36),
       };
 
       pdf.addPage(
