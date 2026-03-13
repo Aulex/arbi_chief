@@ -426,7 +426,7 @@ class ReportService {
         _pdfCell('Прізвище Ім\'я', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < n; i++)
-          _pdfCell('${i + 1}', hdrStyle, align: pw.Alignment.center),
+          _pdfPlayerHeaderCell('${i + 1}', fmtPlayerName(players[i].player), hdrStyle),
         _pdfCell('Бали', hdrStyle, align: pw.Alignment.center),
         _pdfCell('Ігор', hdrStyle, align: pw.Alignment.center),
         if (!isTT) _pdfCell('К.Б.', hdrStyle, align: pw.Alignment.center),
@@ -746,6 +746,21 @@ class ReportService {
       padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
       alignment: align,
       child: pw.Text(text, style: style, textAlign: align == pw.Alignment.centerLeft ? pw.TextAlign.left : pw.TextAlign.center),
+    );
+  }
+
+  pw.Widget _pdfPlayerHeaderCell(String number, String playerName, pw.TextStyle style) {
+    final smallStyle = style.copyWith(fontSize: (style.fontSize ?? 7) - 2);
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      alignment: pw.Alignment.center,
+      child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.Text(number, style: style, textAlign: pw.TextAlign.center),
+          pw.Text(playerName, style: smallStyle, textAlign: pw.TextAlign.center, maxLines: 2),
+        ],
+      ),
     );
   }
 
