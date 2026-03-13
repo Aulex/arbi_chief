@@ -2266,7 +2266,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     return TableCell(
       verticalAlignment: TableCellVerticalAlignment.bottom,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 36),
         color: isHighlighted ? Colors.indigo.shade100 : null,
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
@@ -2274,9 +2273,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           children: [
             RotatedBox(
               quarterTurns: 3,
-              child: Text(surname, style: effectiveStyle),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  surname,
+                  style: effectiveStyle,
+                  softWrap: false,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                ),
+              ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text('$number', style: effectiveStyle),
           ],
         ),

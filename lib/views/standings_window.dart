@@ -658,17 +658,25 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
   Widget _verticalHeaderCell({required int number, required String surname, TextStyle? style}) {
     return TableCell(
       verticalAlignment: TableCellVerticalAlignment.bottom,
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 36),
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             RotatedBox(
               quarterTurns: 3,
-              child: Text(surname, style: style),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  surname,
+                  style: style,
+                  softWrap: false,
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                ),
+              ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text('$number', style: style),
           ],
         ),
