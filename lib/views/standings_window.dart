@@ -665,7 +665,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
           mainAxisSize: MainAxisSize.min,
           children: [
             RotatedBox(
-              quarterTurns: 1,
+              quarterTurns: 3,
               child: Text(surname, style: style),
             ),
             const SizedBox(height: 2),

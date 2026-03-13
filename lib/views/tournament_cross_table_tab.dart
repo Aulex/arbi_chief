@@ -2273,7 +2273,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           mainAxisSize: MainAxisSize.min,
           children: [
             RotatedBox(
-              quarterTurns: 1,
+              quarterTurns: 3,
               child: Text(surname, style: effectiveStyle),
             ),
             const SizedBox(height: 2),
