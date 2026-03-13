@@ -1,0 +1,110 @@
+================================================================================
+                        ARBI CHIEF — Tournament Manager
+                           (Менеджер турнірів)
+================================================================================
+
+Version: 1.0.0+1
+Platform: Windows / macOS / Linux / Android / iOS
+Framework: Flutter + Dart
+Database: SQLite (schema v14)
+
+--------------------------------------------------------------------------------
+PURPOSE
+--------------------------------------------------------------------------------
+
+A cross-platform tournament management application for sports arbiters and
+organizers. Handles player registration, team composition, match scheduling,
+result tracking, and PDF report generation across 14 sport types.
+
+Supported sports: Chess, Table Tennis, Checkers, Volleyball, Basketball, Futsal,
+Swimming, Powerlifting, Armwrestling, Track & Field, Tennis, Cycling,
+Rope Jumping, Orienteering, Go.
+
+--------------------------------------------------------------------------------
+KEY FEATURES
+--------------------------------------------------------------------------------
+
+  • Multi-sport tournament creation with sport-specific configurations
+  • Player and team management with search functionality
+  • Board/position assignments for team players
+  • Set-by-set scoring (table tennis)
+  • Automatic standings calculation and cross-tables
+  • PDF report generation with full statistics
+  • Live standings display on secondary monitor (desktop only)
+  • Dark / Light theme support
+  • Ukrainian localization (primary language)
+  • Database synchronization between devices
+
+--------------------------------------------------------------------------------
+ARCHITECTURE (MVVM + Riverpod)
+--------------------------------------------------------------------------------
+
+  lib/
+  ├── main.dart                  — App entry point, multi-window handling
+  ├── models/                    — Data models (tournament, player, team, game…)
+  ├── services/                  — Database operations, PDF generation, sync
+  ├── viewmodels/                — Riverpod state management providers
+  └── views/                     — UI screens and widgets
+
+  Layer          Responsibility
+  ─────────────  ──────────────────────────────────────────────
+  Models         Immutable data classes, serialization
+  Services       SQLite CRUD, complex queries, PDF, sync
+  ViewModels     AsyncNotifier / StateNotifier providers
+  Views          Flutter widgets, forms, tables, dialogs
+
+--------------------------------------------------------------------------------
+MAIN SCREENS
+--------------------------------------------------------------------------------
+
+  1. Sport Selection        — Choose tournament sport type
+  2. Tournament List        — Browse / create / edit tournaments
+  3. Tournament Details     — Tabs: Teams, Players, Game Results, Cross-Table
+  4. Player Management      — CRUD for player database
+  5. Team Management        — CRUD for teams
+  6. Reports                — Generate and export PDF reports
+  7. Settings               — Theme, auto-tab cycling, DB sync, backups
+  8. Standings Window       — Second-monitor live standings (desktop)
+
+--------------------------------------------------------------------------------
+DATABASE TABLES (SQLite)
+--------------------------------------------------------------------------------
+
+  CMP_TOURNAMENT_TYPE        Sport type definitions
+  CMP_TOURNAMENT             Tournament records
+  CMP_TOURNAMENT_STAGE       Rounds / stages
+  CMP_PLAYER                 Player database
+  CMP_TEAM                   Team database
+  CMP_PLAYER_TOURNAMENT      Tournament participation links
+  CMP_PLAYER_TEAM            Team membership links
+  CMP_EVENT                  Match / game records
+  CMP_PLAYER_EVENT           Player-specific results and scoring
+  CMP_ATTR / CMP_ATTR_VALUE  Configurable tournament attributes
+  CMP_PLAYER_BOARD_ASSIGNMENT  Board / position assignments
+
+--------------------------------------------------------------------------------
+DEPENDENCIES
+--------------------------------------------------------------------------------
+
+  flutter_riverpod  3.2.1    State management
+  sqflite           2.3.0    SQLite database
+  pdf               3.11.1   PDF generation
+  printing          5.13.3   Print preview
+  file_picker       8.0.0    File export
+  shared_preferences 2.2.0   App settings
+  desktop_multi_window 0.3.0 Multi-window (desktop)
+  material_symbols_icons 4.2815.0  Material Design 3 icons
+
+--------------------------------------------------------------------------------
+BUILD & RUN
+--------------------------------------------------------------------------------
+
+  flutter pub get
+  flutter run -d windows        # Windows desktop
+  flutter run -d macos           # macOS desktop
+  flutter run -d linux           # Linux desktop
+  flutter run                    # Connected mobile device
+
+  flutter build windows          # Release build → build/windows/x64/runner/Release/
+
+================================================================================
