@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/database_sync_service.dart';
+import '../viewmodels/font_scale_provider.dart';
 import '../viewmodels/shared_providers.dart';
 import '../viewmodels/theme_provider.dart';
 
@@ -48,6 +49,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   @override
   Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider);
+    final fontScale = ref.watch(fontScaleProvider);
 
     return SingleChildScrollView(
       child: Column(
@@ -117,6 +119,48 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                         onChanged: (val) {
                           if (val != null) _saveAutoTabSetting(val);
                         },
+                      ),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.text_fields, color: Colors.deepPurple),
+                    title: const Text('Розмір шрифту'),
+                    subtitle: Text('${(fontScale * 100).round()}%'),
+                    trailing: SizedBox(
+                      width: 200,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: fontScale > 0.7
+                                ? () => ref.read(fontScaleProvider.notifier).decrease()
+                                : null,
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: fontScale,
+                              min: 0.7,
+                              max: 1.5,
+                              divisions: 16,
+                              label: '${(fontScale * 100).round()}%',
+                              onChanged: (val) {
+                                ref.read(fontScaleProvider.notifier).setScale(val);
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: fontScale < 1.5
+                                ? () => ref.read(fontScaleProvider.notifier).increase()
+                                : null,
+                          ),
+                        ],
                       ),
                     ),
                     shape: RoundedRectangleBorder(

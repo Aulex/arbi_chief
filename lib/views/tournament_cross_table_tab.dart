@@ -583,6 +583,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       row: FocusNode(),
       col: FocusNode(),
     ));
+    final saveFocusNode = FocusNode();
+    final cancelFocusNode = FocusNode();
 
     showDialog(
       context: dialogContext,
@@ -688,11 +690,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                 focusNode: focusNodes[i].row,
                                 enabled: !(i == 2 && thirdSetDisabled),
                                 keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.next,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                 decoration: InputDecoration(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none), filled: true, fillColor: Colors.grey.shade100, hintText: '0', hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal)),
                                 onChanged: (_) => setST(() {}),
+                                onSubmitted: (_) => focusNodes[i].col.requestFocus(),
                               )),
                               Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(':', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: (i == 2 && thirdSetDisabled) ? Colors.grey.shade300 : Colors.black54))),
                               Expanded(child: TextField(
@@ -700,11 +704,19 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                 focusNode: focusNodes[i].col,
                                 enabled: !(i == 2 && thirdSetDisabled),
                                 keyboardType: TextInputType.number,
+                                textInputAction: (i == 2 || (i == 1 && thirdSetDisabled)) ? TextInputAction.done : TextInputAction.next,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                 decoration: InputDecoration(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none), filled: true, fillColor: Colors.grey.shade100, hintText: '0', hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal)),
                                 onChanged: (_) => setST(() {}),
+                                onSubmitted: (_) {
+                                  if (i == 2 || (i == 1 && thirdSetDisabled)) {
+                                    saveFocusNode.requestFocus();
+                                  } else {
+                                    focusNodes[i + 1].row.requestFocus();
+                                  }
+                                },
                               )),
                             ],
                           ),
@@ -729,9 +741,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                         label: Text('Очистити', style: TextStyle(color: Colors.red.shade400)),
                       ),
                     const Spacer(),
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+                    TextButton(focusNode: cancelFocusNode, onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
                     const SizedBox(width: 4),
                     FilledButton.icon(
+                      focusNode: saveFocusNode,
                       icon: const Icon(Icons.check, size: 18),
                       onPressed: () {
                         Navigator.pop(ctx);
@@ -757,6 +770,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         f.row.dispose();
         f.col.dispose();
       }
+      saveFocusNode.dispose();
+      cancelFocusNode.dispose();
     });
   }
 
@@ -871,6 +886,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       row: FocusNode(),
       col: FocusNode(),
     ));
+    final saveFocusNode = FocusNode();
+    final cancelFocusNode = FocusNode();
 
     showDialog(
       context: context,
@@ -1035,6 +1052,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                   focusNode: focusNodes[i].row,
                                   enabled: !(i == 2 && thirdSetDisabled),
                                   keyboardType: TextInputType.number,
+                                  textInputAction: TextInputAction.next,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1048,6 +1066,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                     hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal),
                                   ),
                                   onChanged: (_) => setST(() {}),
+                                  onSubmitted: (_) => focusNodes[i].col.requestFocus(),
                                 ),
                               ),
                               Padding(
@@ -1060,6 +1079,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                   focusNode: focusNodes[i].col,
                                   enabled: !(i == 2 && thirdSetDisabled),
                                   keyboardType: TextInputType.number,
+                                  textInputAction: (i == 2 || (i == 1 && thirdSetDisabled)) ? TextInputAction.done : TextInputAction.next,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -1073,6 +1093,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                                     hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal),
                                   ),
                                   onChanged: (_) => setST(() {}),
+                                  onSubmitted: (_) {
+                                    if (i == 2 || (i == 1 && thirdSetDisabled)) {
+                                      saveFocusNode.requestFocus();
+                                    } else {
+                                      focusNodes[i + 1].row.requestFocus();
+                                    }
+                                  },
                                 ),
                               ),
                             ],
@@ -1097,11 +1124,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                       ),
                     const Spacer(),
                     TextButton(
+                      focusNode: cancelFocusNode,
                       onPressed: () => Navigator.pop(ctx),
                       child: const Text('Скасувати'),
                     ),
                     const SizedBox(width: 4),
                     FilledButton.icon(
+                      focusNode: saveFocusNode,
                       icon: const Icon(Icons.check, size: 18),
                       onPressed: () {
                         Navigator.pop(ctx);
@@ -1125,6 +1154,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         f.row.dispose();
         f.col.dispose();
       }
+      saveFocusNode.dispose();
+      cancelFocusNode.dispose();
     });
   }
 
@@ -1808,12 +1839,15 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final matchPts = _teamMatchPoints(teamAId, teamBId);
     final boardScore = _teamMatchScore(teamAId, teamBId);
     final pts = matchPts.a;
-    final label = '${pts.toInt()}';
+    // Check if any boards have been played between these teams
+    final hasPlayed = boardScore.a > 0 || boardScore.b > 0;
+    final label = hasPlayed ? '${pts.toInt()}' : '—';
 
     final isHighlighted = _hoveredTeamRow == rowIdx || _hoveredTeamCol == colIdx;
     Color? bgColor;
-    if (pts == 2.0) bgColor = Colors.green.shade50;
-    else if (pts == 0.0 && (boardScore.a > 0 || boardScore.b > 0)) bgColor = Colors.red.shade50;
+    if (!hasPlayed) bgColor = isHighlighted ? Colors.indigo.shade50 : null;
+    else if (pts == 2.0) bgColor = Colors.green.shade50;
+    else if (pts == 0.0) bgColor = Colors.red.shade50;
     else if (pts == 1.0) bgColor = Colors.amber.shade50;
     else if (isHighlighted) bgColor = Colors.indigo.shade50;
 
@@ -1834,7 +1868,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: pts == 2.0 ? Colors.green.shade700
+              color: !hasPlayed ? Colors.grey.shade400
+                  : pts == 2.0 ? Colors.green.shade700
                   : pts == 0.0 ? Colors.red.shade700
                   : Colors.amber.shade800,
             ),
@@ -2040,7 +2075,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         else if (aResult < bResult) scoreColor = Colors.red.shade700;
         else scoreColor = Colors.grey.shade500;
       } else {
-        scoreText = '0 : 0';
+        scoreText = '';
         scoreColor = Colors.grey.shade500;
       }
     } else if (playerA != null && playerB != null) {
