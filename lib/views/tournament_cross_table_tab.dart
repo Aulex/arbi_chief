@@ -369,9 +369,12 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       for (int j = 0; j < teamIdsByNumOrder.length; j++) {
         if (i == j) continue;
         final other = teamIdsByNumOrder[j];
-        final pts = _teamMatchPoints(tid, other);
-        matchPtsMap[j] = pts.a;
         final score = _teamMatchScore(tid, other);
+        final hasPlayed = score.a > 0 || score.b > 0;
+        if (hasPlayed) {
+          final pts = _teamMatchPoints(tid, other);
+          matchPtsMap[j] = pts.a;
+        }
         scoreDetailsMap[j] = '${_formatPoints(score.a)}:${_formatPoints(score.b)}';
       }
       teamCrossTableData.add(CrossTableTeamRow(

@@ -506,7 +506,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
                 if (i == j)
                   _diagonalCell()
                 else
-                  _teamMatchCell(crossTable[i].matchPoints[j] ?? 0),
+                  _teamMatchCell(crossTable[i].matchPoints[j]),
               _tableCell(
                 _formatPts(crossTable[i].totalPoints),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -588,7 +588,16 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     );
   }
 
-  Widget _teamMatchCell(double pts) {
+  Widget _teamMatchCell(double? pts) {
+    if (pts == null) {
+      return Container(
+        constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Text('—', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+      );
+    }
+
     Color? bgColor;
     if (pts == 2.0) bgColor = Colors.green.shade50;
     else if (pts == 0.0) bgColor = Colors.red.shade50;
