@@ -2084,16 +2084,16 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             );
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             alignment: Alignment.center,
             color: Colors.transparent,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(displayText, textAlign: TextAlign.center, style: cellStyle.copyWith(fontWeight: FontWeight.bold, color: displayColor)),
-                const SizedBox(width: 4),
-                Icon(Icons.edit_outlined, size: 12, color: Colors.grey.shade400),
+                Text(displayText, textAlign: TextAlign.center, style: cellStyle.copyWith(fontWeight: FontWeight.bold, fontSize: 14, color: displayColor)),
+                const SizedBox(width: 6),
+                Icon(Icons.edit_outlined, size: 16, color: Colors.grey.shade400),
               ],
             ),
           ),
