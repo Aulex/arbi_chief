@@ -144,7 +144,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                           ),
                           Expanded(
                             child: Slider(
-                              value: fontScale,
+                              value: fontScale.clamp(0.7, 1.5),
                               min: 0.7,
                               max: 1.5,
                               divisions: 16,

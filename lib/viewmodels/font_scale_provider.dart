@@ -26,13 +26,13 @@ class FontScaleNotifier extends Notifier<double> {
 
   Future<void> increase() async {
     if (state < 1.5) {
-      await setScale((state + 0.05));
+      await setScale(((state + 0.05) * 100).roundToDouble() / 100);
     }
   }
 
   Future<void> decrease() async {
     if (state > 0.7) {
-      await setScale((state - 0.05));
+      await setScale(((state - 0.05) * 100).roundToDouble() / 100);
     }
   }
 }
