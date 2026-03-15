@@ -346,7 +346,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    final borderColor = Colors.grey.shade700;
+    final borderColor = Colors.black;
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
@@ -462,7 +462,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    final borderColor = Colors.grey.shade700;
+    final borderColor = Colors.black;
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
