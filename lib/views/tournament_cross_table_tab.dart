@@ -584,7 +584,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       col: FocusNode(),
     ));
     final saveFocusNode = FocusNode();
-    final cancelFocusNode = FocusNode();
+    final cancelFocusNode = FocusNode(skipTraversal: true);
 
     showDialog(
       context: dialogContext,
@@ -887,7 +887,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       col: FocusNode(),
     ));
     final saveFocusNode = FocusNode();
-    final cancelFocusNode = FocusNode();
+    final cancelFocusNode = FocusNode(skipTraversal: true);
 
     showDialog(
       context: context,
