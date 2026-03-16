@@ -217,7 +217,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         final balls = _isTableTennis ? _totalBalls(boardNum, pid) : null;
         return StandingsPlayerRow(
           place: i + 1,
-          playerName: '${p.player.player_surname} ${p.player.player_name}',
+          playerName: _shortName(p.player.player_surname, p.player.player_name),
           teamName: p.teamName,
           teamNumber: p.teamNumber,
           points: _totalPoints(boardNum, pid),
@@ -337,7 +337,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           }
         }
         return CrossTablePlayerRow(
-          playerName: '${p.player.player_surname} ${p.player.player_name}',
+          playerName: _shortName(p.player.player_surname, p.player.player_name),
           teamName: p.teamName,
           teamNumber: p.teamNumber,
           results: results,
@@ -1527,11 +1527,12 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           child: Scrollbar(
             thumbVisibility: true,
             controller: _getBoardVerticalController(boardNum),
-            child: SingleChildScrollView(
-              controller: _getBoardVerticalController(boardNum),
-              child: Scrollbar(
-                thumbVisibility: true,
-                controller: _getBoardHorizontalController(boardNum),
+            child: Scrollbar(
+              thumbVisibility: true,
+              controller: _getBoardHorizontalController(boardNum),
+              notificationPredicate: (notification) => notification.depth == 1,
+              child: SingleChildScrollView(
+                controller: _getBoardVerticalController(boardNum),
                 child: SingleChildScrollView(
                   controller: _getBoardHorizontalController(boardNum),
                   scrollDirection: Axis.horizontal,
@@ -1753,20 +1754,29 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
     final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
     final oddRowBg = isDark ? const Color(0xFF152238) : Colors.grey.shade50;
+    final boldColor = isDark ? Colors.grey.shade500 : Colors.black;
 
     return Scrollbar(
       thumbVisibility: true,
       controller: _teamsVerticalController,
-      child: SingleChildScrollView(
-        controller: _teamsVerticalController,
-        child: Scrollbar(
-          thumbVisibility: true,
-          controller: _teamsHorizontalController,
+      child: Scrollbar(
+        thumbVisibility: true,
+        controller: _teamsHorizontalController,
+        notificationPredicate: (notification) => notification.depth == 1,
+        child: SingleChildScrollView(
+          controller: _teamsVerticalController,
           child: SingleChildScrollView(
             controller: _teamsHorizontalController,
             scrollDirection: Axis.horizontal,
             child: Table(
-              border: TableBorder.all(color: borderColor, width: 1),
+              border: TableBorder(
+                top: BorderSide(color: boldColor, width: 2),
+                bottom: BorderSide(color: boldColor, width: 2),
+                left: BorderSide(color: boldColor, width: 2),
+                right: BorderSide(color: boldColor, width: 2),
+                horizontalInside: BorderSide(color: borderColor, width: 1),
+                verticalInside: BorderSide(color: borderColor, width: 1),
+              ),
               defaultColumnWidth: const IntrinsicColumnWidth(),
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -1777,14 +1787,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 _tableCell('№', style: headerStyle),
                 _tableCell('Команда', style: headerStyle, minWidth: 140),
                 for (int i = 0; i < n; i++)
-                  _boldBorderCell(
-                    _verticalHeaderCell(
-                      number: teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1),
-                      surname: teamMap[teamIdsByNumber[i]]!.teamName,
-                      isHighlighted: _hoveredTeamCol == i,
-                      style: headerStyle,
-                    ),
-                    left: i == 0, right: i == n - 1, top: true,
+                  _verticalHeaderCell(
+                    number: teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1),
+                    surname: teamMap[teamIdsByNumber[i]]!.teamName,
+                    isHighlighted: _hoveredTeamCol == i,
+                    style: headerStyle,
                   ),
                 _tableCell('Очки', style: headerStyle),
                 if (isTT)
@@ -1807,12 +1814,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                   _tableCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
                   _highlightableNameCell(teamMap[teamIdsByNumber[i]]!.teamName, isHighlighted: _hoveredTeamRow == i, style: cellStyle, minWidth: 140),
                   for (int j = 0; j < n; j++)
-                    _boldBorderCell(
-                      (i == j)
-                        ? _diagonalCell()
-                        : _teamResultCell(teamIdsByNumber[i], teamIdsByNumber[j], teamMap, rowIdx: i, colIdx: j),
-                      left: j == 0, right: j == n - 1, bottom: i == n - 1,
-                    ),
+                    (i == j)
+                      ? _diagonalCell()
+                      : _teamResultCell(teamIdsByNumber[i], teamIdsByNumber[j], teamMap, rowIdx: i, colIdx: j),
                   _tableCell(
                     _formatPoints(teamPoints[teamIdsByNumber[i]]!),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -2158,6 +2162,12 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
   // --- Cross-table ---
 
+  /// Format player name as "Surname N." for compact display in cross tables.
+  String _shortName(String surname, String name) {
+    if (name.isEmpty) return surname;
+    return '$surname ${name[0]}.';
+  }
+
   Widget _buildCombinedTable(
     int boardNum,
     List<({int teamId, String teamName, int? teamNumber, Player player})> rawPlayers,
@@ -2179,9 +2189,17 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final oddRowBg = isDark ? const Color(0xFF152238) : Colors.grey.shade50;
 
     final isTT = _isTableTennis;
+    final boldColor = isDark ? Colors.grey.shade500 : Colors.black;
 
     return Table(
-      border: TableBorder.all(color: borderColor, width: 1),
+      border: TableBorder(
+        top: BorderSide(color: boldColor, width: 2),
+        bottom: BorderSide(color: boldColor, width: 2),
+        left: BorderSide(color: boldColor, width: 2),
+        right: BorderSide(color: boldColor, width: 2),
+        horizontalInside: BorderSide(color: borderColor, width: 1),
+        verticalInside: BorderSide(color: borderColor, width: 1),
+      ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
@@ -2194,14 +2212,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             _tableCell('Команда', style: headerStyle, minWidth: 70),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
-              _boldBorderCell(
-                _verticalHeaderCell(
-                  number: players[i].teamNumber ?? (i + 1),
-                  surname: '${players[i].player.player_surname} ${players[i].player.player_name}',
-                  isHighlighted: _hoveredCol == i,
-                  style: headerStyle,
-                ),
-                left: i == 0, right: i == n - 1, top: true,
+              _verticalHeaderCell(
+                number: players[i].teamNumber ?? (i + 1),
+                surname: _shortName(players[i].player.player_surname, players[i].player.player_name),
+                isHighlighted: _hoveredCol == i,
+                style: headerStyle,
               ),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
@@ -2232,13 +2247,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               if (_absentPlayerIds.contains(players[i].player.player_id) && players[i].player.player_id! < 0)
                 _tableCell(
-                  '${players[i].player.player_surname} ${players[i].player.player_name}',
+                  _shortName(players[i].player.player_surname, players[i].player.player_name),
                   style: cellStyle.copyWith(color: Colors.red.shade400, fontStyle: FontStyle.italic),
                   minWidth: 130, leftAlign: true,
                 )
               else if (_absentPlayerIds.contains(players[i].player.player_id))
                 _tappableNameCell(
-                  '${players[i].player.player_surname} ${players[i].player.player_name}',
+                  _shortName(players[i].player.player_surname, players[i].player.player_name),
                   isHighlighted: _hoveredRow == i,
                   style: cellStyle.copyWith(color: Colors.red.shade700, fontStyle: FontStyle.italic),
                   minWidth: 130,
@@ -2246,21 +2261,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 )
               else
                 _tappableNameCell(
-                  '${players[i].player.player_surname} ${players[i].player.player_name}',
+                  _shortName(players[i].player.player_surname, players[i].player.player_name),
                   isHighlighted: _hoveredRow == i,
                   style: cellStyle,
                   minWidth: 130,
                   onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
                 ),
               for (int j = 0; j < n; j++)
-                _boldBorderCell(
-                  (i == j)
-                    ? _diagonalCell()
-                    : (_absentPlayerIds.contains(players[i].player.player_id) || _absentPlayerIds.contains(players[j].player.player_id))
-                      ? _staticResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j)
-                      : _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j),
-                  left: j == 0, right: j == n - 1, bottom: i == n - 1,
-                ),
+                (i == j)
+                  ? _diagonalCell()
+                  : (_absentPlayerIds.contains(players[i].player.player_id) || _absentPlayerIds.contains(players[j].player.player_id))
+                    ? _staticResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j)
+                    : _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j),
               _tableCell(
                 _formatPoints(_displayPoints(boardNum, players[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -2281,7 +2293,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
               ),
               _tableCell(
-                '${sorted[i].player.player_surname} ${sorted[i].player.player_name}',
+                _shortName(sorted[i].player.player_surname, sorted[i].player.player_name),
                 style: cellStyle, minWidth: 130, leftAlign: true,
               ),
               _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),

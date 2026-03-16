@@ -321,14 +321,27 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: constraints.maxWidth,
+        final verticalController = ScrollController();
+        final horizontalController = ScrollController();
+        return Scrollbar(
+          thumbVisibility: true,
+          controller: verticalController,
+          child: Scrollbar(
+            thumbVisibility: true,
+            controller: horizontalController,
+            notificationPredicate: (notification) => notification.depth == 1,
+            child: SingleChildScrollView(
+              controller: verticalController,
+              child: SingleChildScrollView(
+                controller: horizontalController,
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: _buildCombinedBoardTable(crossTable, standings, isTT),
+                ),
               ),
-              child: _buildCombinedBoardTable(crossTable, standings, isTT),
             ),
           ),
         );
@@ -363,7 +376,6 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    const borderSide = BorderSide(color: Color(0xFF000000), width: 1.5);
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
@@ -377,7 +389,14 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     columnWidths[n + 6] = const FlexColumnWidth(1); // Команда (standings)
 
     return Table(
-      border: TableBorder.all(color: const Color(0xFF000000), width: 1.5),
+      border: const TableBorder(
+        top: BorderSide(color: Colors.black, width: 2),
+        bottom: BorderSide(color: Colors.black, width: 2),
+        left: BorderSide(color: Colors.black, width: 2),
+        right: BorderSide(color: Colors.black, width: 2),
+        horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
+        verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
+      ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: columnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -390,10 +409,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
             _tableCell('Команда', style: headerStyle, minWidth: 70),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
-              _boldBorderCell(
-                _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
-                left: i == 0, right: i == n - 1, top: true,
-              ),
+              _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
             // Standings headers
@@ -412,12 +428,9 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               _tableCell(crossTable[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
               for (int j = 0; j < n; j++)
-                _boldBorderCell(
-                  (i == j)
-                    ? _diagonalCell()
-                    : _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
-                  left: j == 0, right: j == n - 1, bottom: i == n - 1,
-                ),
+                (i == j)
+                  ? _diagonalCell()
+                  : _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
               _tableCell(
                 _formatPts(crossTable[i].points),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -459,14 +472,27 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: constraints.maxWidth,
+        final verticalController = ScrollController();
+        final horizontalController = ScrollController();
+        return Scrollbar(
+          thumbVisibility: true,
+          controller: verticalController,
+          child: Scrollbar(
+            thumbVisibility: true,
+            controller: horizontalController,
+            notificationPredicate: (notification) => notification.depth == 1,
+            child: SingleChildScrollView(
+              controller: verticalController,
+              child: SingleChildScrollView(
+                controller: horizontalController,
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: constraints.maxWidth,
+                  ),
+                  child: _buildTeamCrossTable(crossTable, standings, isTT),
+                ),
               ),
-              child: _buildTeamCrossTable(crossTable, standings, isTT),
             ),
           ),
         );
@@ -494,7 +520,14 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     teamColumnWidths[n + 3] = const FlexColumnWidth(2); // Команда (standings)
 
     return Table(
-      border: TableBorder.all(color: const Color(0xFF000000), width: 1.5),
+      border: const TableBorder(
+        top: BorderSide(color: Colors.black, width: 2),
+        bottom: BorderSide(color: Colors.black, width: 2),
+        left: BorderSide(color: Colors.black, width: 2),
+        right: BorderSide(color: Colors.black, width: 2),
+        horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
+        verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
+      ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: teamColumnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -505,13 +538,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
             _tableCell('№', style: headerStyle),
             _tableCell('Команда', style: headerStyle, minWidth: 140),
             for (int i = 0; i < n; i++)
-              _boldBorderCell(
-                _verticalHeaderCell(
-                  number: crossTable[i].teamNumber ?? (i + 1),
-                  surname: crossTable[i].teamName,
-                  style: headerStyle,
-                ),
-                left: i == 0, right: i == n - 1, top: true,
+              _verticalHeaderCell(
+                number: crossTable[i].teamNumber ?? (i + 1),
+                surname: crossTable[i].teamName,
+                style: headerStyle,
               ),
             _tableCell('Очки', style: headerStyle),
             // Standings
@@ -527,12 +557,9 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               _tableCell('${crossTable[i].teamNumber ?? (i + 1)}', style: cellStyle),
               _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
               for (int j = 0; j < n; j++)
-                _boldBorderCell(
-                  (i == j)
-                    ? _diagonalCell()
-                    : _teamMatchCell(crossTable[i].matchPoints[j]),
-                  left: j == 0, right: j == n - 1, bottom: i == n - 1,
-                ),
+                (i == j)
+                  ? _diagonalCell()
+                  : _teamMatchCell(crossTable[i].matchPoints[j]),
               _tableCell(
                 _formatPts(crossTable[i].totalPoints),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
