@@ -644,7 +644,6 @@ class ReportService {
         _pdfCell('${config.boardAbbrev}${config.boardCount}', hdrStyle),
         // Standings section (right side) – bold left borders for separation
         _pdfBoldLeftCell(_pdfCell('№', hdrStyle)),
-        _pdfBoldLeftCell(_pdfCell('Команда', hdrStyle, align: pw.Alignment.center)),
         _pdfBoldLeftCell(_pdfCell('Очки', hdrStyle)),
         _pdfBoldLeftCell(_pdfCell('Місце', hdrStyle)),
       ];
@@ -680,8 +679,11 @@ class ReportService {
             _pdfCell(fmtPts(teamBoard1Pts[tid]!), cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
           // Standings section (right side, sorted by place) – bold left borders
-          _pdfBoldLeftCell(_pdfCell('${teamMap[sid]!.teamNumber ?? ''}', cellSt)),
-          _pdfBoldLeftCell(_pdfCell(teamMap[sid]!.teamName, cellSt, align: pw.Alignment.centerLeft)),
+          _pdfBoldLeftCell(_pdfTeamHeaderCell(
+            '${teamMap[sid]!.teamNumber ?? (i + 1)}',
+            teamMap[sid]!.teamName,
+            cellSt,
+          )),
           _pdfBoldLeftCell(_pdfCell(fmtPts(teamPoints[sid]!), cellBold)),
           _pdfBoldLeftCell(_pdfCell('${i + 1}', cellBold)),
         ];
@@ -698,10 +700,9 @@ class ReportService {
         2 + tn + 1: const pw.FixedColumnWidth(32),
         2 + tn + 2: const pw.FixedColumnWidth(32),
         // Standings columns
-        2 + tn + 3: const pw.FixedColumnWidth(28),
-        2 + tn + 4: const pw.FlexColumnWidth(3),
+        2 + tn + 3: const pw.FixedColumnWidth(38),
+        2 + tn + 4: const pw.FixedColumnWidth(36),
         2 + tn + 5: const pw.FixedColumnWidth(36),
-        2 + tn + 6: const pw.FixedColumnWidth(36),
       };
 
       pdf.addPage(
