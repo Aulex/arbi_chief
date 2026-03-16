@@ -642,11 +642,11 @@ class ReportService {
         else
           _pdfCell('${config.boardAbbrev}1', hdrStyle),
         _pdfCell('${config.boardAbbrev}${config.boardCount}', hdrStyle),
-        // Standings section (right side)
-        _pdfCell('№', hdrStyle),
-        _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
-        _pdfCell('Очки', hdrStyle),
-        _pdfCell('Місце', hdrStyle),
+        // Standings section (right side) – bold left borders for separation
+        _pdfBoldLeftCell(_pdfCell('№', hdrStyle)),
+        _pdfBoldLeftCell(_pdfCell('Команда', hdrStyle, align: pw.Alignment.center)),
+        _pdfBoldLeftCell(_pdfCell('Очки', hdrStyle)),
+        _pdfBoldLeftCell(_pdfCell('Місце', hdrStyle)),
       ];
 
       final teamTableRows = <pw.TableRow>[
@@ -679,11 +679,11 @@ class ReportService {
           else
             _pdfCell(fmtPts(teamBoard1Pts[tid]!), cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
-          // Standings section (right side, sorted by place)
-          _pdfCell('${teamMap[sid]!.teamNumber ?? ''}', cellSt),
-          _pdfCell(teamMap[sid]!.teamName, cellSt, align: pw.Alignment.centerLeft),
-          _pdfCell(fmtPts(teamPoints[sid]!), cellBold),
-          _pdfCell('${i + 1}', cellBold),
+          // Standings section (right side, sorted by place) – bold left borders
+          _pdfBoldLeftCell(_pdfCell('${teamMap[sid]!.teamNumber ?? ''}', cellSt)),
+          _pdfBoldLeftCell(_pdfCell(teamMap[sid]!.teamName, cellSt, align: pw.Alignment.centerLeft)),
+          _pdfBoldLeftCell(_pdfCell(fmtPts(teamPoints[sid]!), cellBold)),
+          _pdfBoldLeftCell(_pdfCell('${i + 1}', cellBold)),
         ];
 
         teamTableRows.add(pw.TableRow(decoration: rowBg, children: cells));
@@ -787,6 +787,18 @@ class ReportService {
       color: PdfColors.grey600,
       alignment: pw.Alignment.center,
       child: pw.Text(''),
+    );
+  }
+
+  /// Wraps [child] in a Container that adds a bold left border for visual separation.
+  pw.Widget _pdfBoldLeftCell(pw.Widget child) {
+    return pw.Container(
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          left: pw.BorderSide(color: PdfColors.black, width: 2),
+        ),
+      ),
+      child: child,
     );
   }
 
