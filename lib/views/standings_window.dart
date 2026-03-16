@@ -336,6 +336,23 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     );
   }
 
+  /// Wraps a cell widget with bold border on specified sides to highlight the result grid perimeter.
+  Widget _boldBorderCell(Widget child, {bool left = false, bool right = false, bool top = false, bool bottom = false}) {
+    const boldWidth = 2.0;
+    const boldColor = Colors.black;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          left: left ? const BorderSide(color: boldColor, width: boldWidth) : BorderSide.none,
+          right: right ? const BorderSide(color: boldColor, width: boldWidth) : BorderSide.none,
+          top: top ? const BorderSide(color: boldColor, width: boldWidth) : BorderSide.none,
+          bottom: bottom ? const BorderSide(color: boldColor, width: boldWidth) : BorderSide.none,
+        ),
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildCombinedBoardTable(
     List<CrossTablePlayerRow> crossTable,
     List<StandingsPlayerRow> standings,
@@ -346,7 +363,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    final borderColor = Colors.black;
+    const borderSide = BorderSide(color: Color(0xFF000000), width: 1.5);
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
@@ -360,7 +377,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     columnWidths[n + 6] = const FlexColumnWidth(1); // Команда (standings)
 
     return Table(
-      border: TableBorder.all(color: borderColor, width: 1),
+      border: TableBorder.all(color: const Color(0xFF000000), width: 1.5),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: columnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -373,7 +390,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
             _tableCell('Команда', style: headerStyle, minWidth: 70),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
-              _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
+              _boldBorderCell(
+                _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
+                left: i == 0, right: i == n - 1, top: true,
+              ),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
             // Standings headers
@@ -392,10 +412,12 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               _tableCell(crossTable[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
               for (int j = 0; j < n; j++)
-                if (i == j)
-                  _diagonalCell()
-                else
-                  _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
+                _boldBorderCell(
+                  (i == j)
+                    ? _diagonalCell()
+                    : _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
+                  left: j == 0, right: j == n - 1, bottom: i == n - 1,
+                ),
               _tableCell(
                 _formatPts(crossTable[i].points),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -462,7 +484,6 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
     final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    final borderColor = Colors.black;
     final headerBg = Colors.grey.shade100;
     final oddRowBg = Colors.grey.shade50;
 
@@ -473,7 +494,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     teamColumnWidths[n + 3] = const FlexColumnWidth(2); // Команда (standings)
 
     return Table(
-      border: TableBorder.all(color: borderColor, width: 1),
+      border: TableBorder.all(color: const Color(0xFF000000), width: 1.5),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: teamColumnWidths,
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
@@ -484,10 +505,13 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
             _tableCell('№', style: headerStyle),
             _tableCell('Команда', style: headerStyle, minWidth: 140),
             for (int i = 0; i < n; i++)
-              _verticalHeaderCell(
-                number: crossTable[i].teamNumber ?? (i + 1),
-                surname: crossTable[i].teamName,
-                style: headerStyle,
+              _boldBorderCell(
+                _verticalHeaderCell(
+                  number: crossTable[i].teamNumber ?? (i + 1),
+                  surname: crossTable[i].teamName,
+                  style: headerStyle,
+                ),
+                left: i == 0, right: i == n - 1, top: true,
               ),
             _tableCell('Очки', style: headerStyle),
             // Standings
@@ -503,10 +527,12 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               _tableCell('${crossTable[i].teamNumber ?? (i + 1)}', style: cellStyle),
               _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
               for (int j = 0; j < n; j++)
-                if (i == j)
-                  _diagonalCell()
-                else
-                  _teamMatchCell(crossTable[i].matchPoints[j]),
+                _boldBorderCell(
+                  (i == j)
+                    ? _diagonalCell()
+                    : _teamMatchCell(crossTable[i].matchPoints[j]),
+                  left: j == 0, right: j == n - 1, bottom: i == n - 1,
+                ),
               _tableCell(
                 _formatPts(crossTable[i].totalPoints),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
@@ -564,10 +590,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     else if (result == 0.5) bgColor = Colors.amber.shade50;
 
     return Container(
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       color: bgColor ?? Colors.transparent,
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
       child: text.isEmpty
           ? const SizedBox.shrink()
           : Text(
@@ -591,9 +617,9 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
   Widget _teamMatchCell(double? pts) {
     if (pts == null) {
       return Container(
-        constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+        constraints: const BoxConstraints(minWidth: 40, minHeight: 28),
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
         child: Text('—', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
       );
     }
@@ -604,10 +630,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     else if (pts == 1.0) bgColor = Colors.amber.shade50;
 
     return Container(
-      constraints: const BoxConstraints(minWidth: 50, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 28),
       color: bgColor ?? Colors.transparent,
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
       child: Text(
         '${pts.toInt()}',
         textAlign: TextAlign.center,
@@ -640,10 +666,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     }
 
     return Container(
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       color: bgColor ?? Colors.transparent,
       alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       child: Text(
         '$place',
         style: cellStyle.copyWith(
@@ -658,7 +684,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
   Widget _tableCell(String text, {TextStyle? style, double? minWidth, bool leftAlign = false}) {
     return Container(
       constraints: minWidth != null ? BoxConstraints(minWidth: minWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
       child: Text(text, textAlign: leftAlign ? TextAlign.left : TextAlign.center, style: style),
     );
@@ -695,7 +721,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
   Widget _diagonalCell() {
     return Container(
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       color: Colors.grey.shade800,
     );
   }
