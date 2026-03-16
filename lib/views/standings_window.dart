@@ -373,7 +373,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
             _tableCell('Команда', style: headerStyle, minWidth: 70),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
-              _verticalHeaderCell(number: i + 1, surname: crossTable[i].playerName, style: headerStyle),
+              _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
             // Standings headers

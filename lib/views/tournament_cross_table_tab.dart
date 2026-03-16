@@ -2190,7 +2190,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             for (int i = 0; i < n; i++)
               _verticalHeaderCell(
-                number: i + 1,
+                number: players[i].teamNumber ?? (i + 1),
                 surname: '${players[i].player.player_surname} ${players[i].player.player_name}',
                 isHighlighted: _hoveredCol == i,
                 style: headerStyle,
