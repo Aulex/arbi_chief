@@ -389,13 +389,13 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     columnWidths[n + 6] = const FlexColumnWidth(1); // Команда (standings)
 
     return Table(
-      border: const TableBorder(
-        top: BorderSide(color: Colors.black, width: 2),
-        bottom: BorderSide(color: Colors.black, width: 2),
-        left: BorderSide(color: Colors.black, width: 2),
-        right: BorderSide(color: Colors.black, width: 2),
-        horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
-        verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
+      border: TableBorder(
+        top: BorderSide(color: Colors.grey.shade300, width: 1),
+        bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+        left: BorderSide(color: Colors.grey.shade300, width: 1),
+        right: BorderSide(color: Colors.grey.shade300, width: 1),
+        horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+        verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
       ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: columnWidths,
@@ -413,10 +413,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
             // Standings headers
-            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
-            _tableCell('Команда', style: headerStyle, minWidth: 90),
-            _tableCell('Бали', style: headerStyle),
-            _tableCell('Місце', style: headerStyle),
+            _boldBorderCell(_tableCell('ПІБ', style: headerStyle, minWidth: 130), left: true, top: true),
+            _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 90), top: true),
+            _boldBorderCell(_tableCell('Бали', style: headerStyle), top: true),
+            _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
           ],
         ),
         // Data rows
@@ -438,18 +438,21 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               _tableCell('${crossTable[i].gamesPlayed}', style: cellStyle),
               // Standings cells (sorted by place)
               if (i < standings.length) ...[
-                _tableCell(standings[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
-                _tableCell(standings[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
-                _tableCell(
-                  _formatPts(standings[i].displayPoints),
-                  style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                _boldBorderCell(_tableCell(standings[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true), left: true, bottom: i == n - 1),
+                _boldBorderCell(_tableCell(standings[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true), bottom: i == n - 1),
+                _boldBorderCell(
+                  _tableCell(
+                    _formatPts(standings[i].displayPoints),
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  bottom: i == n - 1,
                 ),
-                _placeCell(standings[i].place, cellStyle),
+                _boldBorderCell(_placeCell(standings[i].place, cellStyle), right: true, bottom: i == n - 1),
               ] else ...[
-                _tableCell('', style: cellStyle, minWidth: 130),
-                _tableCell('', style: cellStyle, minWidth: 90),
-                _tableCell('', style: cellStyle),
-                _tableCell('', style: cellStyle),
+                _boldBorderCell(_tableCell('', style: cellStyle, minWidth: 130), left: true, bottom: i == n - 1),
+                _boldBorderCell(_tableCell('', style: cellStyle, minWidth: 90), bottom: i == n - 1),
+                _boldBorderCell(_tableCell('', style: cellStyle), bottom: i == n - 1),
+                _boldBorderCell(_tableCell('', style: cellStyle), right: true, bottom: i == n - 1),
               ],
             ],
           ),
@@ -520,13 +523,13 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     teamColumnWidths[n + 3] = const FlexColumnWidth(2); // Команда (standings)
 
     return Table(
-      border: const TableBorder(
-        top: BorderSide(color: Colors.black, width: 2),
-        bottom: BorderSide(color: Colors.black, width: 2),
-        left: BorderSide(color: Colors.black, width: 2),
-        right: BorderSide(color: Colors.black, width: 2),
-        horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
-        verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
+      border: TableBorder(
+        top: BorderSide(color: Colors.grey.shade300, width: 1),
+        bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+        left: BorderSide(color: Colors.grey.shade300, width: 1),
+        right: BorderSide(color: Colors.grey.shade300, width: 1),
+        horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+        verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
       ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: teamColumnWidths,
@@ -545,9 +548,9 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               ),
             _tableCell('Очки', style: headerStyle),
             // Standings
-            _tableCell('Команда', style: headerStyle, minWidth: 140),
-            _tableCell('Очки', style: headerStyle),
-            _tableCell('Місце', style: headerStyle),
+            _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 140), left: true, top: true),
+            _boldBorderCell(_tableCell('Очки', style: headerStyle), top: true),
+            _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
           ],
         ),
         for (int i = 0; i < n; i++)
@@ -566,16 +569,19 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               ),
               // Standings
               if (i < standings.length) ...[
-                _tableCell(standings[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
-                _tableCell(
-                  _formatPts(standings[i].points),
-                  style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                _boldBorderCell(_tableCell(standings[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true), left: true, bottom: i == n - 1),
+                _boldBorderCell(
+                  _tableCell(
+                    _formatPts(standings[i].points),
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  bottom: i == n - 1,
                 ),
-                _placeCell(standings[i].place, cellStyle),
+                _boldBorderCell(_placeCell(standings[i].place, cellStyle), right: true, bottom: i == n - 1),
               ] else ...[
-                _tableCell('', style: cellStyle, minWidth: 140),
-                _tableCell('', style: cellStyle),
-                _tableCell('', style: cellStyle),
+                _boldBorderCell(_tableCell('', style: cellStyle, minWidth: 140), left: true, bottom: i == n - 1),
+                _boldBorderCell(_tableCell('', style: cellStyle), bottom: i == n - 1),
+                _boldBorderCell(_tableCell('', style: cellStyle), right: true, bottom: i == n - 1),
               ],
             ],
           ),
