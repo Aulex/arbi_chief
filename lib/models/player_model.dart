@@ -34,6 +34,29 @@ class Player {
     return "${parts[2]}-${parts[1]}-${parts[0]}";
   }
 
+  // --- Gender Detection ---
+
+  /// Detect gender from Ukrainian patronymic (по батькові) or name.
+  /// Returns 0 for male, 1 for female.
+  static int detectGender(String name, String lastname) {
+    final lc = lastname.toLowerCase().trim();
+    // Patronymic is the most reliable indicator
+    if (lc.isNotEmpty) {
+      if (lc.endsWith('ович') || lc.endsWith('ич') || lc.endsWith('йович')) return 0;
+      if (lc.endsWith('івна') || lc.endsWith('ївна') || lc.endsWith('інна')) return 1;
+    }
+    // Fallback: detect by first name
+    final nc = name.toLowerCase().trim();
+    if (nc.isNotEmpty) {
+      // Common female endings
+      if (nc.endsWith('а') || nc.endsWith('я') || nc.endsWith('і')) return 1;
+      // Exceptions: male names ending in -а (Микола, Ілля, Кузьма)
+      const maleExceptions = ['микола', 'ілля', 'кузьма', 'хома', 'сава', 'лука', 'нікіта', 'данила'];
+      if (maleExceptions.contains(nc)) return 0;
+    }
+    return 0; // default male
+  }
+
   // --- Logic Helpers ---
 
   String get fullName =>

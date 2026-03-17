@@ -248,9 +248,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedPlayer>[];
       for (final line in lines) {
-        // Split by tab (Excel), semicolon, or 2+ spaces
+        // Split by tab (Excel), semicolon, or spaces
         final parts = line
-            .split(RegExp(r'\t|;|\s{2,}'))
+            .split(RegExp(r'\t|;|\s+'))
             .map((s) => s.trim())
             .where((s) => s.isNotEmpty)
             .toList();
@@ -328,10 +328,11 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           itemCount: parsed.length,
                           itemBuilder: (_, i) {
                             final p = parsed[i];
+                            final genderLabel = Player.detectGender(p.name, p.lastname) == 0 ? 'Ч' : 'Ж';
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 1),
                               child: Text(
-                                '${i + 1}. ${p.surname} ${p.name} ${p.lastname}',
+                                '${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($genderLabel)',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: p.surname.isEmpty ? Colors.red : Colors.black87,
@@ -368,7 +369,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                         surname: p.surname,
                                         name: p.name,
                                         lastname: p.lastname,
-                                        gender: 0,
+                                        gender: Player.detectGender(p.name, p.lastname),
                                         dob: '',
                                       )).toList(),
                                     );
