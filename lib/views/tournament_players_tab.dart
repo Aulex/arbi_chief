@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
+import '../models/team_model.dart';
 import '../viewmodels/player_viewmodel.dart';
+import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 
 /// Players tab — single list of tournament players with search, add, and create new.
@@ -416,6 +418,255 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     );
   }
 
+  void _showBulkImportTeamsDialog() {
+    final textC = TextEditingController();
+    List<_ParsedTeamPlayer> parsed = [];
+    bool importing = false;
+    String? error;
+
+    List<_ParsedTeamPlayer> _parseText(String text) {
+      final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final result = <_ParsedTeamPlayer>[];
+      for (final line in lines) {
+        // Split by tab (Excel) or semicolon
+        final parts = line
+            .split(RegExp(r'\t|;'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (parts.length < 2) continue; // need at least team + surname
+        final teamName = parts[0];
+        // Remaining parts: surname name lastname (may be space-separated within a single cell)
+        final playerParts = parts.length == 2
+            ? parts[1].split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList()
+            : parts.sublist(1);
+        result.add(_ParsedTeamPlayer(
+          teamName: teamName,
+          surname: playerParts.isNotEmpty ? playerParts[0] : '',
+          name: playerParts.length > 1 ? playerParts[1] : '',
+          lastname: playerParts.length > 2 ? playerParts[2] : '',
+        ));
+      }
+      return result;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          // Group by team for preview
+          final teamGroups = <String, List<_ParsedTeamPlayer>>{};
+          for (final p in parsed) {
+            teamGroups.putIfAbsent(p.teamName, () => []).add(p);
+          }
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 700, maxHeight: 650),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.group_add, color: Colors.indigo),
+                        SizedBox(width: 12),
+                        Text(
+                          'Імпорт гравців/команд',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Вставте дані з Excel (Ctrl+V). Кожен рядок — один гравець.\n'
+                      'Формат: Команда\tПрізвище\tІм\'я\tПо батькові (розділені табуляцією або ;)',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: TextField(
+                        controller: textC,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        decoration: InputDecoration(
+                          hintText: 'Динамо\tІваненко\tІван\tІванович\nДинамо\tПетренко\tПетро\tПетрович\nШахтар\tСидоренко\tСидір\tСидорович',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                        onChanged: (v) {
+                          setST(() {
+                            parsed = _parseText(v);
+                            error = null;
+                          });
+                        },
+                      ),
+                    ),
+                    if (teamGroups.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Розпізнано: ${teamGroups.length} команд, ${parsed.length} гравців',
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo),
+                      ),
+                      const SizedBox(height: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 150),
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            for (final entry in teamGroups.entries) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  '${entry.key} (${entry.value.length})',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                              for (var i = 0; i < entry.value.length; i++)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 16),
+                                  child: Text(
+                                    '${i + 1}. ${entry.value[i].surname} ${entry.value[i].name} ${entry.value[i].lastname} '
+                                    '(${Player.detectGender(entry.value[i].name, entry.value[i].lastname) == 0 ? 'Ч' : 'Ж'})',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: entry.value[i].surname.isEmpty ? Colors.red : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: importing ? null : () => Navigator.pop(dialogContext),
+                          child: const Text('Скасувати'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: importing || parsed.isEmpty
+                              ? null
+                              : () async {
+                                  setST(() => importing = true);
+                                  try {
+                                    final teamSvc = ref.read(teamServiceProvider);
+                                    final playerNotifier = ref.read(playerProvider.notifier);
+                                    final tournamentSvc = ref.read(tournamentServiceProvider);
+                                    final tType = widget.tType;
+
+                                    // Group by team
+                                    final groups = <String, List<_ParsedTeamPlayer>>{};
+                                    for (final p in parsed) {
+                                      if (p.surname.isEmpty) continue;
+                                      groups.putIfAbsent(p.teamName, () => []).add(p);
+                                    }
+
+                                    int totalPlayers = 0;
+                                    int totalTeams = 0;
+
+                                    for (final entry in groups.entries) {
+                                      final teamName = entry.key;
+                                      final players = entry.value;
+
+                                      // Create or find team
+                                      final allTeams = await teamSvc.getAllTeams(tType: tType);
+                                      var team = allTeams.cast<Team?>().firstWhere(
+                                        (t) => t!.team_name.toLowerCase() == teamName.toLowerCase(),
+                                        orElse: () => null,
+                                      );
+                                      if (team == null) {
+                                        team = await teamSvc.saveTeam(Team(
+                                          team_name: teamName,
+                                          t_type: tType,
+                                        ));
+                                        totalTeams++;
+                                      }
+
+                                      // Bulk-create players
+                                      final playerIds = await playerNotifier.bulkAddPlayers(
+                                        players.map((p) => (
+                                          surname: p.surname,
+                                          name: p.name,
+                                          lastname: p.lastname,
+                                          gender: Player.detectGender(p.name, p.lastname),
+                                          dob: '',
+                                        )).toList(),
+                                      );
+
+                                      // Add players to tournament
+                                      await tournamentSvc.bulkAddParticipants(widget.tId, playerIds);
+
+                                      // Assign players to team in tournament
+                                      // Get existing team number or assign next
+                                      final existingTeams = await teamSvc.getTeamsForTournament(widget.tId);
+                                      final maxNum = existingTeams.fold<int>(0, (m, t) => t.teamNumber != null && t.teamNumber! > m ? t.teamNumber! : m);
+                                      final isAlreadyRegistered = existingTeams.any((t) => t.team.team_id == team!.team_id);
+
+                                      if (!isAlreadyRegistered) {
+                                        await teamSvc.registerTeamInTournament(team.team_id!, widget.tId, maxNum + 1);
+                                      }
+
+                                      // Get current board members and add new players as reserves
+                                      final currentBoards = await teamSvc.getBoardMembers(team.team_id!, widget.tId);
+                                      final currentReserves = await teamSvc.getTeamMemberIds(team.team_id!, widget.tId);
+                                      final allReserves = [...currentReserves, ...playerIds];
+                                      await teamSvc.saveAssignments(team.team_id!, widget.tId, currentBoards, allReserves);
+
+                                      totalPlayers += playerIds.length;
+                                    }
+
+                                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                    _loadData();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Імпортовано: $totalPlayers гравців у $totalTeams нових команд')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setST(() {
+                                      importing = false;
+                                      error = 'Помилка: $e';
+                                    });
+                                  }
+                                },
+                          icon: importing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.download_done),
+                          label: Text(importing ? 'Імпорт...' : 'Імпортувати (${parsed.length})'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showAddPlayerDialog() {
     final nameC = TextEditingController();
     final surnameC = TextEditingController();
@@ -750,7 +1001,19 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                 OutlinedButton.icon(
                   onPressed: _showBulkImportDialog,
                   icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Імпорт'),
+                  label: const Text('Імпорт гравців'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.indigo,
+                    side: const BorderSide(color: Colors.indigo),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _showBulkImportTeamsDialog,
+                  icon: const Icon(Icons.group_add, size: 18),
+                  label: const Text('Імпорт гравців/команд'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.indigo,
                     side: const BorderSide(color: Colors.indigo),
@@ -830,4 +1093,12 @@ class _ParsedPlayer {
   final String name;
   final String lastname;
   const _ParsedPlayer({required this.surname, required this.name, required this.lastname});
+}
+
+class _ParsedTeamPlayer {
+  final String teamName;
+  final String surname;
+  final String name;
+  final String lastname;
+  const _ParsedTeamPlayer({required this.teamName, required this.surname, required this.name, required this.lastname});
 }
