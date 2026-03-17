@@ -94,6 +94,28 @@ class TournamentService {
     });
   }
 
+  /// Bulk-add participants in a single transaction, skipping duplicates.
+  Future<void> bulkAddParticipants(int tId, List<int> playerIds) async {
+    final db = await _dbService.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      for (final playerId in playerIds) {
+        final existing = await txn.query(
+          'CMP_PLAYER_TOURNAMENT',
+          where: 't_id = ? AND player_id = ?',
+          whereArgs: [tId, playerId],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) continue;
+        await txn.insert('CMP_PLAYER_TOURNAMENT', {
+          't_id': tId,
+          'player_id': playerId,
+          'asgn_date': now,
+        });
+      }
+    });
+  }
+
   Future<void> removeParticipant(int tId, int playerId) async {
     final db = await _dbService.database;
     await db.delete(

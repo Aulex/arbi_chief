@@ -362,33 +362,20 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                   setST(() => importing = true);
                                   try {
                                     final validPlayers = parsed.where((p) => p.surname.isNotEmpty).toList();
-                                    for (final p in validPlayers) {
-                                      await ref.read(playerProvider.notifier).addPlayer(
+                                    // Bulk-insert all players in a single transaction
+                                    final playerIds = await ref.read(playerProvider.notifier).bulkAddPlayers(
+                                      validPlayers.map((p) => (
                                         surname: p.surname,
                                         name: p.name,
                                         lastname: p.lastname,
                                         gender: 0,
                                         dob: '',
-                                      );
-                                    }
-                                    // Add all newly created players to tournament
-                                    final allPlayers = await ref.read(playerProvider.future);
-                                    final participantIds = _participants.map((pl) => pl.player_id).toSet();
-                                    for (final p in validPlayers) {
-                                      final match = allPlayers
-                                          .where((pl) =>
-                                              pl.player_surname == p.surname &&
-                                              pl.player_name == p.name &&
-                                              pl.player_lastname == p.lastname &&
-                                              !participantIds.contains(pl.player_id))
-                                          .lastOrNull;
-                                      if (match != null && match.player_id != null) {
-                                        await ref.read(tournamentServiceProvider)
-                                            .addParticipant(widget.tId, match.player_id!);
-                                        participantIds.add(match.player_id);
-                                        importedCount++;
-                                      }
-                                    }
+                                      )).toList(),
+                                    );
+                                    // Bulk-add all new players to tournament in a single transaction
+                                    await ref.read(tournamentServiceProvider)
+                                        .bulkAddParticipants(widget.tId, playerIds);
+                                    importedCount = playerIds.length;
                                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                                     _loadData();
                                     if (mounted) {

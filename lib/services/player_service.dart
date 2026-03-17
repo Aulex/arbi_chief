@@ -40,6 +40,20 @@ class PlayerService {
     }
   }
 
+  /// Bulk-insert new players in a single transaction. Returns the list of
+  /// generated player IDs in the same order as [players].
+  Future<List<int>> bulkSavePlayers(List<Player> players) async {
+    final db = await _dbService.database;
+    final ids = <int>[];
+    await db.transaction((txn) async {
+      for (final player in players) {
+        final id = await txn.insert('CMP_PLAYER', player.toJson());
+        ids.add(id);
+      }
+    });
+    return ids;
+  }
+
   // Remove a player from the database 🗑️
   Future<void> deletePlayer(int id) async {
     final db = await _dbService.database;
