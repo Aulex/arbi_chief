@@ -628,8 +628,7 @@ class ReportService {
       final cellBold = pw.TextStyle(fontSize: 8, font: fontBold, fontWeight: pw.FontWeight.bold);
 
       final teamHdrCells = <pw.Widget>[
-        _pdfCell('№', hdrStyle),
-        _pdfCell('Команда', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Ком.', hdrStyle, align: pw.Alignment.center),
         for (int i = 0; i < tn; i++)
           _pdfTeamHeaderCell(
             '${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}',
@@ -642,10 +641,10 @@ class ReportService {
         else
           _pdfCell('${config.boardAbbrev}1', hdrStyle),
         _pdfCell('${config.boardAbbrev}${config.boardCount}', hdrStyle),
-        // Standings section (right side) – bold left borders for separation
-        _pdfBoldLeftCell(_pdfCell('№', hdrStyle)),
-        _pdfBoldLeftCell(_pdfCell('Очки', hdrStyle)),
-        _pdfBoldLeftCell(_pdfCell('Місце', hdrStyle)),
+        // Standings section (right side)
+        _pdfCell('Ком.', hdrStyle, align: pw.Alignment.center),
+        _pdfCell('Очки', hdrStyle),
+        _pdfCell('Місце', hdrStyle),
       ];
 
       final teamTableRows = <pw.TableRow>[
@@ -661,12 +660,7 @@ class ReportService {
         final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
 
         final cells = <pw.Widget>[
-          _pdfTeamHeaderCell(
-            '${teamMap[tid]!.teamNumber ?? (i + 1)}',
-            teamMap[tid]!.teamName,
-            cellSt,
-          ),
-          _pdfCell(teamMap[tid]!.teamName, cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell('${teamMap[tid]!.teamNumber ?? (i + 1)}. ${teamMap[tid]!.teamName}', cellSt, align: pw.Alignment.centerLeft),
           for (int j = 0; j < tn; j++)
             if (i == j)
               _pdfDiagonalCell()
@@ -678,31 +672,32 @@ class ReportService {
           else
             _pdfCell(fmtPts(teamBoard1Pts[tid]!), cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
-          // Standings section (right side, sorted by place) – bold left borders
-          _pdfBoldLeftCell(_pdfTeamHeaderCell(
-            '${teamMap[sid]!.teamNumber ?? (i + 1)}',
-            teamMap[sid]!.teamName,
-            cellSt,
-          )),
-          _pdfBoldLeftCell(_pdfCell(fmtPts(teamPoints[sid]!), cellBold)),
-          _pdfBoldLeftCell(_pdfCell('${i + 1}', cellBold)),
+          // Standings section (right side, sorted by place)
+          _pdfCell('${teamMap[sid]!.teamNumber ?? ''}. ${teamMap[sid]!.teamName}', cellSt, align: pw.Alignment.centerLeft),
+          _pdfCell(fmtPts(teamPoints[sid]!), cellBold),
+          _pdfCell('${i + 1}', cellBold),
         ];
 
         teamTableRows.add(pw.TableRow(decoration: rowBg, children: cells));
       }
 
+      // Calculate available width for Ком. columns
+      const pageWidth = 841.89; // A4 landscape
+      const margins = 40.0; // 20 each side
+      final fixedTotal = tn * 38.0 + 36 + 32 + 32 + 36 + 36; // team cols + stats
+      final komWidth = ((pageWidth - margins - fixedTotal) / 2).clamp(40.0, 120.0);
+
       final teamColWidths = <int, pw.TableColumnWidth>{
-        0: const pw.FixedColumnWidth(38),
-        1: const pw.FlexColumnWidth(3),
+        0: pw.FixedColumnWidth(komWidth),
         for (int i = 0; i < tn; i++)
-          2 + i: const pw.FixedColumnWidth(38),
-        2 + tn: const pw.FixedColumnWidth(36),
-        2 + tn + 1: const pw.FixedColumnWidth(32),
-        2 + tn + 2: const pw.FixedColumnWidth(32),
+          1 + i: const pw.FixedColumnWidth(38),
+        1 + tn: const pw.FixedColumnWidth(36),
+        1 + tn + 1: const pw.FixedColumnWidth(32),
+        1 + tn + 2: const pw.FixedColumnWidth(32),
         // Standings columns
-        2 + tn + 3: const pw.FixedColumnWidth(38),
-        2 + tn + 4: const pw.FixedColumnWidth(36),
-        2 + tn + 5: const pw.FixedColumnWidth(36),
+        1 + tn + 3: pw.FixedColumnWidth(komWidth),
+        1 + tn + 4: const pw.FixedColumnWidth(36),
+        1 + tn + 5: const pw.FixedColumnWidth(36),
       };
 
       pdf.addPage(
@@ -788,18 +783,6 @@ class ReportService {
       color: PdfColors.grey600,
       alignment: pw.Alignment.center,
       child: pw.Text(''),
-    );
-  }
-
-  /// Wraps [child] in a Container that adds a bold left border for visual separation.
-  pw.Widget _pdfBoldLeftCell(pw.Widget child) {
-    return pw.Container(
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(
-          left: pw.BorderSide(color: PdfColors.black, width: 2),
-        ),
-      ),
-      child: child,
     );
   }
 
