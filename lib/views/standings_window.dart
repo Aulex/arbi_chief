@@ -390,10 +390,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     return Table(
       border: const TableBorder(
-        top: BorderSide(color: Colors.black, width: 2),
-        bottom: BorderSide(color: Colors.black, width: 2),
-        left: BorderSide(color: Colors.black, width: 2),
-        right: BorderSide(color: Colors.black, width: 2),
+        top: BorderSide(color: Color(0xFF000000), width: 1),
+        bottom: BorderSide(color: Color(0xFF000000), width: 1),
+        left: BorderSide(color: Color(0xFF000000), width: 1),
+        right: BorderSide(color: Color(0xFF000000), width: 1),
         horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
         verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
       ),
@@ -521,10 +521,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     return Table(
       border: const TableBorder(
-        top: BorderSide(color: Colors.black, width: 2),
-        bottom: BorderSide(color: Colors.black, width: 2),
-        left: BorderSide(color: Colors.black, width: 2),
-        right: BorderSide(color: Colors.black, width: 2),
+        top: BorderSide(color: Color(0xFF000000), width: 1),
+        bottom: BorderSide(color: Color(0xFF000000), width: 1),
+        left: BorderSide(color: Color(0xFF000000), width: 1),
+        right: BorderSide(color: Color(0xFF000000), width: 1),
         horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
         verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
       ),

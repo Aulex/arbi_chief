@@ -1754,7 +1754,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
     final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
     final oddRowBg = isDark ? const Color(0xFF152238) : Colors.grey.shade50;
-    final boldColor = isDark ? Colors.grey.shade500 : Colors.black;
 
     return Scrollbar(
       thumbVisibility: true,
@@ -1770,10 +1769,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             scrollDirection: Axis.horizontal,
             child: Table(
               border: TableBorder(
-                top: BorderSide(color: boldColor, width: 2),
-                bottom: BorderSide(color: boldColor, width: 2),
-                left: BorderSide(color: boldColor, width: 2),
-                right: BorderSide(color: boldColor, width: 2),
+                top: BorderSide(color: borderColor, width: 1),
+                bottom: BorderSide(color: borderColor, width: 1),
+                left: BorderSide(color: borderColor, width: 1),
+                right: BorderSide(color: borderColor, width: 1),
                 horizontalInside: BorderSide(color: borderColor, width: 1),
                 verticalInside: BorderSide(color: borderColor, width: 1),
               ),
@@ -2189,14 +2188,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final oddRowBg = isDark ? const Color(0xFF152238) : Colors.grey.shade50;
 
     final isTT = _isTableTennis;
-    final boldColor = isDark ? Colors.grey.shade500 : Colors.black;
 
     return Table(
       border: TableBorder(
-        top: BorderSide(color: boldColor, width: 2),
-        bottom: BorderSide(color: boldColor, width: 2),
-        left: BorderSide(color: boldColor, width: 2),
-        right: BorderSide(color: boldColor, width: 2),
+        top: BorderSide(color: borderColor, width: 1),
+        bottom: BorderSide(color: borderColor, width: 1),
+        left: BorderSide(color: borderColor, width: 1),
+        right: BorderSide(color: borderColor, width: 1),
         horizontalInside: BorderSide(color: borderColor, width: 1),
         verticalInside: BorderSide(color: borderColor, width: 1),
       ),
