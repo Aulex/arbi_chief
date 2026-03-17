@@ -23,6 +23,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
   bool _loading = true;
   List<({Team team, int? teamNumber, Map<int, int> boards})> _teamData = [];
   Map<int, Player> _playerMap = {};
+  Map<int, List<int>> _teamMembers = {}; // team_id → list of member player IDs (for swimming)
   int? _selectedTeamId;
   String _teamSearch = '';
   String _playerSearch = '';
@@ -52,9 +53,19 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
         if (p.player_id != null) p.player_id!: p
     };
 
+    // For swimming (no boards), load team members (reserves)
+    final membersMap = <int, List<int>>{};
+    if (widget.config.boardCount == 0) {
+      for (final d in data) {
+        final members = await teamSvc.getTeamMemberIds(d.team.team_id!, tId);
+        membersMap[d.team.team_id!] = members;
+      }
+    }
+
     if (mounted) {
       setState(() {
         _teamData = data;
+        _teamMembers = membersMap;
         _playerMap = pMap;
         _loading = false;
         // Keep selection if still valid
@@ -559,8 +570,19 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
       // Add to tournament
       await tournamentSvc.addParticipant(widget.tournament.t_id!, playerId);
 
-      // Assign to board if selected
-      if (selectedBoard != null) {
+      // Assign to team
+      if (widget.config.boardCount == 0) {
+        // Swimming: add as team member (reserve)
+        final service = ref.read(teamServiceProvider);
+        final assignments = await service.getTeamAssignments(teamData.team.team_id!, widget.tournament.t_id!);
+        final existingReserves = assignments
+            .where((a) => a.player_state == 1 && a.player_id != null)
+            .map((a) => a.player_id!)
+            .toList();
+        existingReserves.add(playerId);
+        await service.saveAssignments(teamData.team.team_id!, widget.tournament.t_id!, teamData.boards, existingReserves);
+      } else if (selectedBoard != null) {
+        // Board-based sports: assign to board
         final service = ref.read(teamServiceProvider);
         final assignments = await service.getTeamAssignments(teamData.team.team_id!, widget.tournament.t_id!);
         final existingReserves = assignments
@@ -729,23 +751,25 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<int?>(
-                        value: selectedBoard,
-                        decoration: InputDecoration(
-                          labelText: 'Призначити на ${widget.config.boardLabel.toLowerCase()}у',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      if (widget.config.boardCount > 0) ...[
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<int?>(
+                          value: selectedBoard,
+                          decoration: InputDecoration(
+                            labelText: 'Призначити на ${widget.config.boardLabel.toLowerCase()}у',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          items: [
+                            const DropdownMenuItem<int?>(value: null, child: Text('— Не призначати —')),
+                            for (int i = 1; i <= widget.config.boardCount; i++)
+                              DropdownMenuItem<int?>(
+                                value: i,
+                                child: Text(widget.config.shortTabLabel(i)),
+                              ),
+                          ],
+                          onChanged: (v) => setST(() => selectedBoard = v),
                         ),
-                        items: [
-                          const DropdownMenuItem<int?>(value: null, child: Text('— Не призначати —')),
-                          for (int i = 1; i <= widget.config.boardCount; i++)
-                            DropdownMenuItem<int?>(
-                              value: i,
-                              child: Text(widget.config.shortTabLabel(i)),
-                            ),
-                        ],
-                        onChanged: (v) => setST(() => selectedBoard = v),
-                      ),
+                      ],
                       const SizedBox(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
@@ -959,7 +983,9 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'для призначення гравців на позиції.',
+                            widget.config.boardCount == 0
+                                ? 'для додавання гравців.'
+                                : 'для призначення гравців на позиції.',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                           ),
                         ],
@@ -980,7 +1006,9 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Призначте гравців на позиції.',
+                                    widget.config.boardCount == 0
+                                        ? 'Додайте гравців до команди.'
+                                        : 'Призначте гравців на позиції.',
                                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                                   ),
                                 ],
@@ -1011,13 +1039,17 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                           Builder(
                             builder: (context) {
                               final assignedInThisTeam = selectedData.boards.values.toSet();
+                              // Also exclude team members (reserves) for swimming
+                              final membersInThisTeam = _teamMembers[selectedData.team.team_id] ?? [];
                               final assignedInOtherTeams = <int>{};
                               for (final td in _teamData) {
                                 if (td.team.team_id == selectedData.team.team_id) continue;
                                 assignedInOtherTeams.addAll(td.boards.values);
+                                assignedInOtherTeams.addAll(_teamMembers[td.team.team_id] ?? []);
                               }
                               final results = _playerMap.values.where((p) {
                                 if (assignedInThisTeam.contains(p.player_id)) return false;
+                                if (membersInThisTeam.contains(p.player_id)) return false;
                                 if (assignedInOtherTeams.contains(p.player_id)) return false;
                                 return p.fullName.toLowerCase().contains(_playerSearch.toLowerCase());
                               }).toList()
@@ -1030,14 +1062,19 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                   child: Text('Нічого не знайдено', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                                 );
                               }
-                              // Find first empty board
+                              // Find first empty board (for board-based sports)
+                              final bool isNoBoardSport = widget.config.boardCount == 0;
                               int? firstEmptyBoard;
-                              for (int i = 1; i <= widget.config.boardCount; i++) {
-                                if (!selectedData.boards.containsKey(i)) {
-                                  firstEmptyBoard = i;
-                                  break;
+                              if (!isNoBoardSport) {
+                                for (int i = 1; i <= widget.config.boardCount; i++) {
+                                  if (!selectedData.boards.containsKey(i)) {
+                                    firstEmptyBoard = i;
+                                    break;
+                                  }
                                 }
                               }
+
+                              final bool canAdd = isNoBoardSport || firstEmptyBoard != null;
 
                               return ConstrainedBox(
                                 constraints: const BoxConstraints(maxHeight: 200),
@@ -1055,10 +1092,12 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                           : null,
                                       trailing: IconButton(
                                         icon: const Icon(Icons.add_circle, color: Colors.green, size: 24),
-                                        tooltip: firstEmptyBoard != null
-                                            ? 'Додати на ${widget.config.shortTabLabel(firstEmptyBoard)}'
+                                        tooltip: canAdd
+                                            ? (isNoBoardSport
+                                                ? 'Додати до команди'
+                                                : 'Додати на ${widget.config.shortTabLabel(firstEmptyBoard!)}')
                                             : 'Немає вільних позицій',
-                                        onPressed: firstEmptyBoard == null
+                                        onPressed: !canAdd
                                             ? null
                                             : () async {
                                                 final svc = ref.read(teamServiceProvider);
@@ -1068,10 +1107,18 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                                     .where((a) => a.player_state == 1 && a.player_id != null)
                                                     .map((a) => a.player_id!)
                                                     .toList();
-                                                final newBoards = Map<int, int>.from(selectedData.boards);
-                                                newBoards[firstEmptyBoard!] = player.player_id!;
-                                                await svc.saveAssignments(
-                                                  selectedData.team.team_id!, widget.tournament.t_id!, newBoards, existingReserves);
+                                                if (isNoBoardSport) {
+                                                  // For swimming: add as team member (reserve)
+                                                  existingReserves.add(player.player_id!);
+                                                  await svc.saveAssignments(
+                                                    selectedData.team.team_id!, widget.tournament.t_id!, selectedData.boards, existingReserves);
+                                                } else {
+                                                  // For board-based sports: assign to first empty board
+                                                  final newBoards = Map<int, int>.from(selectedData.boards);
+                                                  newBoards[firstEmptyBoard!] = player.player_id!;
+                                                  await svc.saveAssignments(
+                                                    selectedData.team.team_id!, widget.tournament.t_id!, newBoards, existingReserves);
+                                                }
                                                 // Also add to tournament participants
                                                 final tournamentSvc = ref.read(tournamentServiceProvider);
                                                 await tournamentSvc.addParticipant(widget.tournament.t_id!, player.player_id!);
@@ -1088,33 +1135,92 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                         ],
                         const Divider(height: 24),
                         Expanded(
-                          child: ListView.separated(
-                            itemCount: widget.config.boardCount,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final boardNum = index + 1;
-                              final playerId = selectedData.boards[boardNum];
-                              final label = _playerLabel(playerId);
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: playerId != null ? Colors.green.shade100 : Colors.grey.shade200,
-                                  child: Text(
-                                    '$boardNum',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: playerId != null ? Colors.green.shade800 : Colors.grey.shade600,
-                                    ),
-                                  ),
+                          child: widget.config.boardCount == 0
+                              // Swimming: show team members list
+                              ? Builder(
+                                  builder: (context) {
+                                    final members = _teamMembers[selectedData.team.team_id] ?? [];
+                                    if (members.isEmpty) {
+                                      return Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.person_outline, size: 40, color: Colors.grey.shade400),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Гравців поки немає',
+                                              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Знайдіть гравця через пошук вище.',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }
+                                    return ListView.separated(
+                                      itemCount: members.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 1),
+                                      itemBuilder: (context, index) {
+                                        final playerId = members[index];
+                                        final label = _playerLabel(playerId);
+                                        return ListTile(
+                                          leading: CircleAvatar(
+                                            radius: 16,
+                                            backgroundColor: Colors.green.shade100,
+                                            child: Text(
+                                              '${index + 1}',
+                                              style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                                            ),
+                                          ),
+                                          title: Text(label, style: const TextStyle(fontSize: 13)),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                          trailing: IconButton(
+                                            icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade300, size: 20),
+                                            tooltip: 'Видалити з команди',
+                                            onPressed: () async {
+                                              final svc = ref.read(teamServiceProvider);
+                                              final updatedMembers = List<int>.from(members)..removeAt(index);
+                                              await svc.saveAssignments(
+                                                selectedData.team.team_id!, widget.tournament.t_id!, selectedData.boards, updatedMembers);
+                                              _reloadData();
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                )
+                              // Board-based sports: show board positions
+                              : ListView.separated(
+                                  itemCount: widget.config.boardCount,
+                                  separatorBuilder: (_, __) => const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final boardNum = index + 1;
+                                    final playerId = selectedData.boards[boardNum];
+                                    final label = _playerLabel(playerId);
+                                    return ListTile(
+                                      leading: CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: playerId != null ? Colors.green.shade100 : Colors.grey.shade200,
+                                        child: Text(
+                                          '$boardNum',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: playerId != null ? Colors.green.shade800 : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ),
+                                      title: Text(widget.config.shortTabLabel(boardNum)),
+                                      subtitle: Text(label, style: const TextStyle(fontSize: 13)),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                      trailing: Icon(Icons.person_search, size: 20, color: Colors.grey.shade500),
+                                      onTap: () => _showBoardPlayerPicker(boardNum, selectedData),
+                                    );
+                                  },
                                 ),
-                                title: Text(widget.config.shortTabLabel(boardNum)),
-                                subtitle: Text(label, style: const TextStyle(fontSize: 13)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                trailing: Icon(Icons.person_search, size: 20, color: Colors.grey.shade500),
-                                onTap: () => _showBoardPlayerPicker(boardNum, selectedData),
-                              );
-                            },
-                          ),
                         ),
                       ],
                     ),

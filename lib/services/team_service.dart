@@ -279,6 +279,18 @@ class TeamService {
     return { for (final r in rows) r['board_number'] as int: r['player_id'] as int };
   }
 
+  /// Returns player IDs that are team members (reserves, player_state=1) for a team in a tournament.
+  Future<List<int>> getTeamMemberIds(int teamId, int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['player_id'],
+      where: 'team_id = ? AND t_id = ? AND player_state = 1 AND player_id IS NOT NULL',
+      whereArgs: [teamId, tId],
+    );
+    return rows.map((r) => r['player_id'] as int).toList();
+  }
+
   /// Returns player IDs assigned to any team OTHER than [excludeTeamId] in this tournament.
   Future<Set<int>> getPlayersInOtherTeams(int excludeTeamId, int tId) async {
     final db = await _dbService.database;
