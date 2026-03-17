@@ -25,6 +25,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
   Map<int, Player> _playerMap = {};
   int? _selectedTeamId;
   String _teamSearch = '';
+  String _playerSearch = '';
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -985,9 +986,106 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                 ],
                               ),
                             ),
-                            const SizedBox.shrink(),
+                            TextButton.icon(
+                              onPressed: () => _showAddPlayerToTournamentAndBoard(selectedData),
+                              icon: const Icon(Icons.person_add, size: 18),
+                              label: const Text('Новий гравець'),
+                            ),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        // Player search bar
+                        TextField(
+                          decoration: InputDecoration(
+                            hintText: 'Пошук гравця для додавання...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            isDense: true,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onChanged: (v) => setState(() => _playerSearch = v),
+                        ),
+                        // Search results
+                        if (_playerSearch.length >= 2) ...[
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final assignedInThisTeam = selectedData.boards.values.toSet();
+                              final assignedInOtherTeams = <int>{};
+                              for (final td in _teamData) {
+                                if (td.team.team_id == selectedData.team.team_id) continue;
+                                assignedInOtherTeams.addAll(td.boards.values);
+                              }
+                              final results = _playerMap.values.where((p) {
+                                if (assignedInThisTeam.contains(p.player_id)) return false;
+                                if (assignedInOtherTeams.contains(p.player_id)) return false;
+                                return p.fullName.toLowerCase().contains(_playerSearch.toLowerCase());
+                              }).toList()
+                                ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
+                              final display = results.take(5).toList();
+
+                              if (display.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Text('Нічого не знайдено', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                                );
+                              }
+                              // Find first empty board
+                              int? firstEmptyBoard;
+                              for (int i = 1; i <= widget.config.boardCount; i++) {
+                                if (!selectedData.boards.containsKey(i)) {
+                                  firstEmptyBoard = i;
+                                  break;
+                                }
+                              }
+
+                              return ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 200),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: display.length,
+                                  itemBuilder: (context, index) {
+                                    final player = display[index];
+                                    return ListTile(
+                                      dense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                                      title: Text(player.fullName, style: const TextStyle(fontSize: 13)),
+                                      subtitle: player.birthDateForUI.isNotEmpty
+                                          ? Text(player.birthDateForUI, style: const TextStyle(fontSize: 11))
+                                          : null,
+                                      trailing: IconButton(
+                                        icon: const Icon(Icons.add_circle, color: Colors.green, size: 24),
+                                        tooltip: firstEmptyBoard != null
+                                            ? 'Додати на ${widget.config.shortTabLabel(firstEmptyBoard)}'
+                                            : 'Немає вільних позицій',
+                                        onPressed: firstEmptyBoard == null
+                                            ? null
+                                            : () async {
+                                                final svc = ref.read(teamServiceProvider);
+                                                final assignments = await svc.getTeamAssignments(
+                                                  selectedData.team.team_id!, widget.tournament.t_id!);
+                                                final existingReserves = assignments
+                                                    .where((a) => a.player_state == 1 && a.player_id != null)
+                                                    .map((a) => a.player_id!)
+                                                    .toList();
+                                                final newBoards = Map<int, int>.from(selectedData.boards);
+                                                newBoards[firstEmptyBoard!] = player.player_id!;
+                                                await svc.saveAssignments(
+                                                  selectedData.team.team_id!, widget.tournament.t_id!, newBoards, existingReserves);
+                                                // Also add to tournament participants
+                                                final tournamentSvc = ref.read(tournamentServiceProvider);
+                                                await tournamentSvc.addParticipant(widget.tournament.t_id!, player.player_id!);
+                                                setState(() => _playerSearch = '');
+                                                _reloadData();
+                                              },
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                         const Divider(height: 24),
                         Expanded(
                           child: ListView.separated(
