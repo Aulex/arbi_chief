@@ -1768,91 +1768,108 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           child: SingleChildScrollView(
             controller: _teamsHorizontalController,
             scrollDirection: Axis.horizontal,
-            child: Table(
-              border: TableBorder(
-                top: BorderSide(color: borderColor, width: 1),
-                bottom: BorderSide(color: borderColor, width: 1),
-                left: BorderSide(color: borderColor, width: 1),
-                right: BorderSide(color: borderColor, width: 1),
-                horizontalInside: BorderSide(color: borderColor, width: 1),
-                verticalInside: BorderSide(color: borderColor, width: 1),
-              ),
-              defaultColumnWidth: const IntrinsicColumnWidth(),
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-          children: [
-            TableRow(
-              decoration: BoxDecoration(color: headerBg),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Cross table headers
-                _tableCell('№', style: headerStyle),
-                _tableCell('Команда', style: headerStyle, minWidth: 140),
-                for (int i = 0; i < n; i++)
-                  _verticalHeaderCell(
-                    number: teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1),
-                    surname: teamMap[teamIdsByNumber[i]]!.teamName,
-                    isHighlighted: _hoveredTeamCol == i,
-                    style: headerStyle,
+                Table(
+                  border: TableBorder(
+                    top: BorderSide(color: borderColor, width: 1),
+                    bottom: BorderSide(color: borderColor, width: 1),
+                    left: BorderSide(color: borderColor, width: 1),
+                    right: BorderSide(color: borderColor, width: 1),
+                    horizontalInside: BorderSide(color: borderColor, width: 1),
+                    verticalInside: BorderSide(color: borderColor, width: 1),
                   ),
-                _tableCell('Очки', style: headerStyle),
-                if (isTT)
-                  _tableCell('Сети', style: headerStyle)
-                else
-                  _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
-                _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
-                // Standings headers
-                _boldBorderCell(_tableCell('№', style: headerStyle), left: true, top: true),
-                _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 140), top: true),
-                _boldBorderCell(_tableCell('Очки', style: headerStyle), top: true),
-                _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
+                  defaultColumnWidth: const IntrinsicColumnWidth(),
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
+                    TableRow(
+                      decoration: BoxDecoration(color: headerBg),
+                      children: [
+                        _tableCell('№', style: headerStyle),
+                        _tableCell('Команда', style: headerStyle, minWidth: 140),
+                        for (int i = 0; i < n; i++)
+                          _verticalHeaderCell(
+                            number: teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1),
+                            surname: teamMap[teamIdsByNumber[i]]!.teamName,
+                            isHighlighted: _hoveredTeamCol == i,
+                            style: headerStyle,
+                          ),
+                        _tableCell('Очки', style: headerStyle),
+                        if (isTT)
+                          _tableCell('Сети', style: headerStyle)
+                        else
+                          _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
+                        _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
+                      ],
+                    ),
+                    for (int i = 0; i < n; i++)
+                      TableRow(
+                        decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                        children: [
+                          _tableCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
+                          _highlightableNameCell(teamMap[teamIdsByNumber[i]]!.teamName, isHighlighted: _hoveredTeamRow == i, style: cellStyle, minWidth: 140),
+                          for (int j = 0; j < n; j++)
+                            (i == j)
+                              ? _diagonalCell()
+                              : _teamResultCell(teamIdsByNumber[i], teamIdsByNumber[j], teamMap, rowIdx: i, colIdx: j),
+                          _tableCell(
+                            _formatPoints(teamPoints[teamIdsByNumber[i]]!),
+                            style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          if (isTT)
+                            _tableCell('${teamTotalSetDiff[teamIdsByNumber[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIdsByNumber[i]]!}', style: cellStyle)
+                          else
+                            _tableCell(_formatPoints(teamBoard1Pts[teamIdsByNumber[i]]!), style: cellStyle),
+                          _tableCell(_formatPoints(teamBoard3Pts[teamIdsByNumber[i]]!), style: cellStyle),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: boldColor, width: 2),
+                  ),
+                  child: Table(
+                    border: TableBorder(
+                      horizontalInside: BorderSide(color: borderColor, width: 1),
+                      verticalInside: BorderSide(color: borderColor, width: 1),
+                    ),
+                    defaultColumnWidth: const IntrinsicColumnWidth(),
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                    children: [
+                      TableRow(
+                        decoration: BoxDecoration(color: headerBg),
+                        children: [
+                          _tableCell('№', style: headerStyle),
+                          _tableCell('Команда', style: headerStyle, minWidth: 140),
+                          _tableCell('Очки', style: headerStyle),
+                          _tableCell('Місце', style: headerStyle),
+                        ],
+                      ),
+                      for (int i = 0; i < n; i++)
+                        TableRow(
+                          decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                          children: [
+                            _tableCell(
+                              '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
+                              style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
+                            ),
+                            _tableCell(teamMap[sortedTeamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                            _tableCell(
+                              _formatPoints(teamPoints[sortedTeamIds[i]]!),
+                              style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
-            for (int i = 0; i < n; i++)
-              TableRow(
-                decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
-                children: [
-                  // Cross table cells
-                  _tableCell('${teamMap[teamIdsByNumber[i]]!.teamNumber ?? (i + 1)}', style: cellStyle),
-                  _highlightableNameCell(teamMap[teamIdsByNumber[i]]!.teamName, isHighlighted: _hoveredTeamRow == i, style: cellStyle, minWidth: 140),
-                  for (int j = 0; j < n; j++)
-                    (i == j)
-                      ? _diagonalCell()
-                      : _teamResultCell(teamIdsByNumber[i], teamIdsByNumber[j], teamMap, rowIdx: i, colIdx: j),
-                  _tableCell(
-                    _formatPoints(teamPoints[teamIdsByNumber[i]]!),
-                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  if (isTT)
-                    _tableCell('${teamTotalSetDiff[teamIdsByNumber[i]]! >= 0 ? '+' : ''}${teamTotalSetDiff[teamIdsByNumber[i]]!}', style: cellStyle)
-                  else
-                    _tableCell(_formatPoints(teamBoard1Pts[teamIdsByNumber[i]]!), style: cellStyle),
-                  _tableCell(_formatPoints(teamBoard3Pts[teamIdsByNumber[i]]!), style: cellStyle),
-                  // Standings cells (sorted by place)
-                  _boldBorderCell(
-                    _tableCell(
-                      '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
-                      style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
-                    ),
-                    left: true, bottom: i == n - 1,
-                  ),
-                  _boldBorderCell(
-                    _tableCell(teamMap[sortedTeamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
-                    bottom: i == n - 1,
-                  ),
-                  _boldBorderCell(
-                    _tableCell(
-                      _formatPoints(teamPoints[sortedTeamIds[i]]!),
-                      style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    bottom: i == n - 1,
-                  ),
-                  _boldBorderCell(
-                    _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
-                    right: true, bottom: i == n - 1,
-                  ),
-                ],
-              ),
-          ],
-        ),
       ),
       ),
       ),
@@ -2203,152 +2220,157 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final isTT = _isTableTennis;
     final boldColor = isDark ? Colors.grey.shade500 : Colors.black;
 
-    return Table(
-      border: TableBorder(
-        top: BorderSide(color: borderColor, width: 1),
-        bottom: BorderSide(color: borderColor, width: 1),
-        left: BorderSide(color: borderColor, width: 1),
-        right: BorderSide(color: borderColor, width: 1),
-        horizontalInside: BorderSide(color: borderColor, width: 1),
-        verticalInside: BorderSide(color: borderColor, width: 1),
-      ),
-      defaultColumnWidth: const IntrinsicColumnWidth(),
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Header row
-        TableRow(
-          decoration: BoxDecoration(color: headerBg),
+        Table(
+          border: TableBorder(
+            top: BorderSide(color: borderColor, width: 1),
+            bottom: BorderSide(color: borderColor, width: 1),
+            left: BorderSide(color: borderColor, width: 1),
+            right: BorderSide(color: borderColor, width: 1),
+            horizontalInside: BorderSide(color: borderColor, width: 1),
+            verticalInside: BorderSide(color: borderColor, width: 1),
+          ),
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
-            // Cross table headers
-            _tableCell('№к', style: headerStyle),
-            _tableCell('Команда', style: headerStyle, minWidth: 70),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            // Header row
+            TableRow(
+              decoration: BoxDecoration(color: headerBg),
+              children: [
+                _tableCell('№к', style: headerStyle),
+                _tableCell('Команда', style: headerStyle, minWidth: 70),
+                _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+                for (int i = 0; i < n; i++)
+                  _verticalHeaderCell(
+                    number: players[i].teamNumber ?? (i + 1),
+                    surname: _shortName(players[i].player.player_surname, players[i].player.player_name),
+                    isHighlighted: _hoveredCol == i,
+                    style: headerStyle,
+                  ),
+                _tableCell('Бали', style: headerStyle),
+                _tableCell('Ігор', style: headerStyle),
+                if (!isTT) _tableCell('К.Б.', style: headerStyle),
+                if (isTT) _tableCell('М.З.', style: headerStyle),
+                if (isTT) _tableCell('М.П.', style: headerStyle),
+              ],
+            ),
+            // Data rows
             for (int i = 0; i < n; i++)
-              _verticalHeaderCell(
-                number: players[i].teamNumber ?? (i + 1),
-                surname: _shortName(players[i].player.player_surname, players[i].player.player_name),
-                isHighlighted: _hoveredCol == i,
-                style: headerStyle,
+              TableRow(
+                decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                children: [
+                  _tableCell(
+                    '${players[i].teamNumber ?? ''}',
+                    style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
+                  ),
+                  _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
+                  if (_absentPlayerIds.contains(players[i].player.player_id) && players[i].player.player_id! < 0)
+                    _tableCell(
+                      _shortName(players[i].player.player_surname, players[i].player.player_name),
+                      style: cellStyle.copyWith(color: Colors.red.shade400, fontStyle: FontStyle.italic),
+                      minWidth: 130, leftAlign: true,
+                    )
+                  else if (_absentPlayerIds.contains(players[i].player.player_id))
+                    _tappableNameCell(
+                      _shortName(players[i].player.player_surname, players[i].player.player_name),
+                      isHighlighted: _hoveredRow == i,
+                      style: cellStyle.copyWith(color: Colors.red.shade700, fontStyle: FontStyle.italic),
+                      minWidth: 130,
+                      onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
+                    )
+                  else
+                    _tappableNameCell(
+                      _shortName(players[i].player.player_surname, players[i].player.player_name),
+                      isHighlighted: _hoveredRow == i,
+                      style: cellStyle,
+                      minWidth: 130,
+                      onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
+                    ),
+                  for (int j = 0; j < n; j++)
+                    (i == j)
+                      ? _diagonalCell()
+                      : (_absentPlayerIds.contains(players[i].player.player_id) || _absentPlayerIds.contains(players[j].player.player_id))
+                        ? _staticResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j)
+                        : _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j),
+                  _tableCell(
+                    _formatPoints(_displayPoints(boardNum, players[i].player.player_id!)),
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  _tableCell('${_gamesPlayed(boardNum, players[i].player.player_id!)}', style: cellStyle),
+                  if (!isTT)
+                    _tableCell(
+                      _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
+                      style: cellStyle,
+                    ),
+                  if (isTT)
+                    _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).scored}', style: cellStyle),
+                  if (isTT)
+                    _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).conceded}', style: cellStyle),
+                ],
               ),
-            _tableCell('Бали', style: headerStyle),
-            _tableCell('Ігор', style: headerStyle),
-            if (!isTT) _tableCell('К.Б.', style: headerStyle),
-            if (isTT) _tableCell('М.З.', style: headerStyle),
-            if (isTT) _tableCell('М.П.', style: headerStyle),
-            // Standings headers
-            _boldBorderCell(_tableCell('№к', style: headerStyle), left: true, top: true),
-            _boldBorderCell(_tableCell('ПІБ', style: headerStyle, minWidth: 130), top: true),
-            _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 90), top: true),
-            _boldBorderCell(_tableCell('Бали', style: headerStyle), top: true),
-            if (!isTT) _boldBorderCell(_tableCell('К.Б.', style: headerStyle), top: true),
-            if (isTT) _boldBorderCell(_tableCell('М.З.', style: headerStyle), top: true),
-            if (isTT) _boldBorderCell(_tableCell('М.П.', style: headerStyle), top: true),
-            _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
           ],
         ),
-        // Data rows
-        for (int i = 0; i < n; i++)
-          TableRow(
-            decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+        const SizedBox(width: 4),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: boldColor, width: 2),
+          ),
+          child: Table(
+            border: TableBorder(
+              horizontalInside: BorderSide(color: borderColor, width: 1),
+              verticalInside: BorderSide(color: borderColor, width: 1),
+            ),
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
-              // Cross table cells
-              _tableCell(
-                '${players[i].teamNumber ?? ''}',
-                style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
+              TableRow(
+                decoration: BoxDecoration(color: headerBg),
+                children: [
+                  _tableCell('№к', style: headerStyle),
+                  _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+                  _tableCell('Команда', style: headerStyle, minWidth: 90),
+                  _tableCell('Бали', style: headerStyle),
+                  if (!isTT) _tableCell('К.Б.', style: headerStyle),
+                  if (isTT) _tableCell('М.З.', style: headerStyle),
+                  if (isTT) _tableCell('М.П.', style: headerStyle),
+                  _tableCell('Місце', style: headerStyle),
+                ],
               ),
-              _tableCell(players[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
-              if (_absentPlayerIds.contains(players[i].player.player_id) && players[i].player.player_id! < 0)
-                _tableCell(
-                  _shortName(players[i].player.player_surname, players[i].player.player_name),
-                  style: cellStyle.copyWith(color: Colors.red.shade400, fontStyle: FontStyle.italic),
-                  minWidth: 130, leftAlign: true,
-                )
-              else if (_absentPlayerIds.contains(players[i].player.player_id))
-                _tappableNameCell(
-                  _shortName(players[i].player.player_surname, players[i].player.player_name),
-                  isHighlighted: _hoveredRow == i,
-                  style: cellStyle.copyWith(color: Colors.red.shade700, fontStyle: FontStyle.italic),
-                  minWidth: 130,
-                  onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
-                )
-              else
-                _tappableNameCell(
-                  _shortName(players[i].player.player_surname, players[i].player.player_name),
-                  isHighlighted: _hoveredRow == i,
-                  style: cellStyle,
-                  minWidth: 130,
-                  onTap: () => _showPlayerOptions(context, boardNum, players[i], players),
+              for (int i = 0; i < n; i++)
+                TableRow(
+                  decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                  children: [
+                    _tableCell(
+                      '${sorted[i].teamNumber ?? ''}',
+                      style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
+                    ),
+                    _tableCell(
+                      _shortName(sorted[i].player.player_surname, sorted[i].player.player_name),
+                      style: cellStyle, minWidth: 130, leftAlign: true,
+                    ),
+                    _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
+                    _tableCell(
+                      _formatPoints(_displayPoints(boardNum, sorted[i].player.player_id!)),
+                      style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    if (!isTT)
+                      _tableCell(
+                        _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
+                        style: cellStyle,
+                      ),
+                    if (isTT)
+                      _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).scored}', style: cellStyle),
+                    if (isTT)
+                      _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).conceded}', style: cellStyle),
+                    _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
+                  ],
                 ),
-              for (int j = 0; j < n; j++)
-                (i == j)
-                  ? _diagonalCell()
-                  : (_absentPlayerIds.contains(players[i].player.player_id) || _absentPlayerIds.contains(players[j].player.player_id))
-                    ? _staticResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j)
-                    : _tappableResultCell(boardNum: boardNum, rowPlayer: players[i], colPlayer: players[j], rowIdx: i, colIdx: j),
-              _tableCell(
-                _formatPoints(_displayPoints(boardNum, players[i].player.player_id!)),
-                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-              ),
-              _tableCell('${_gamesPlayed(boardNum, players[i].player.player_id!)}', style: cellStyle),
-              if (!isTT)
-                _tableCell(
-                  _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
-                  style: cellStyle,
-                ),
-              if (isTT)
-                _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).scored}', style: cellStyle),
-              if (isTT)
-                _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).conceded}', style: cellStyle),
-              // Standings cells (sorted order)
-              _boldBorderCell(
-                _tableCell(
-                  '${sorted[i].teamNumber ?? ''}',
-                  style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
-                ),
-                left: true, bottom: i == n - 1,
-              ),
-              _boldBorderCell(
-                _tableCell(
-                  _shortName(sorted[i].player.player_surname, sorted[i].player.player_name),
-                  style: cellStyle, minWidth: 130, leftAlign: true,
-                ),
-                bottom: i == n - 1,
-              ),
-              _boldBorderCell(
-                _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
-                bottom: i == n - 1,
-              ),
-              _boldBorderCell(
-                _tableCell(
-                  _formatPoints(_displayPoints(boardNum, sorted[i].player.player_id!)),
-                  style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-                ),
-                bottom: i == n - 1,
-              ),
-              if (!isTT)
-                _boldBorderCell(
-                  _tableCell(
-                    _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
-                    style: cellStyle,
-                  ),
-                  bottom: i == n - 1,
-                ),
-              if (isTT)
-                _boldBorderCell(
-                  _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).scored}', style: cellStyle),
-                  bottom: i == n - 1,
-                ),
-              if (isTT)
-                _boldBorderCell(
-                  _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).conceded}', style: cellStyle),
-                  bottom: i == n - 1,
-                ),
-              _boldBorderCell(
-                _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
-                right: true, bottom: i == n - 1,
-              ),
             ],
           ),
+        ),
       ],
     );
   }

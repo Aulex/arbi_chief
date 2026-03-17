@@ -388,74 +388,109 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     columnWidths[n + 5] = const FlexColumnWidth(2); // ПІБ (standings)
     columnWidths[n + 6] = const FlexColumnWidth(1); // Команда (standings)
 
-    return Table(
-      border: TableBorder(
-        top: BorderSide(color: Colors.grey.shade300, width: 1),
-        bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-        left: BorderSide(color: Colors.grey.shade300, width: 1),
-        right: BorderSide(color: Colors.grey.shade300, width: 1),
-        horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
-        verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
-      ),
-      defaultColumnWidth: const IntrinsicColumnWidth(),
-      columnWidths: columnWidths,
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Header row
-        TableRow(
-          decoration: BoxDecoration(color: headerBg),
+        Table(
+          border: TableBorder(
+            top: BorderSide(color: Colors.grey.shade300, width: 1),
+            bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+            left: BorderSide(color: Colors.grey.shade300, width: 1),
+            right: BorderSide(color: Colors.grey.shade300, width: 1),
+            horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+            verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+          ),
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          columnWidths: {
+            1: const FlexColumnWidth(1), // Команда (cross)
+            2: const FlexColumnWidth(2), // ПІБ (cross)
+          },
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
-            _tableCell('№к', style: headerStyle),
-            _tableCell('Команда', style: headerStyle, minWidth: 70),
-            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            // Header row
+            TableRow(
+              decoration: BoxDecoration(color: headerBg),
+              children: [
+                _tableCell('№к', style: headerStyle),
+                _tableCell('Команда', style: headerStyle, minWidth: 70),
+                _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+                for (int i = 0; i < n; i++)
+                  _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
+                _tableCell('Бали', style: headerStyle),
+                _tableCell('Ігор', style: headerStyle),
+              ],
+            ),
+            // Data rows
             for (int i = 0; i < n; i++)
-              _verticalHeaderCell(number: crossTable[i].teamNumber ?? (i + 1), surname: crossTable[i].playerName, style: headerStyle),
-            _tableCell('Бали', style: headerStyle),
-            _tableCell('Ігор', style: headerStyle),
-            // Standings headers
-            _boldBorderCell(_tableCell('ПІБ', style: headerStyle, minWidth: 130), left: true, top: true),
-            _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 90), top: true),
-            _boldBorderCell(_tableCell('Бали', style: headerStyle), top: true),
-            _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
-          ],
-        ),
-        // Data rows
-        for (int i = 0; i < n; i++)
-          TableRow(
-            decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
-            children: [
-              _tableCell('${crossTable[i].teamNumber ?? ''}', style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11)),
-              _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
-              _tableCell(crossTable[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
-              for (int j = 0; j < n; j++)
-                (i == j)
-                  ? _diagonalCell()
-                  : _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
-              _tableCell(
-                _formatPts(crossTable[i].points),
-                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-              ),
-              _tableCell('${crossTable[i].gamesPlayed}', style: cellStyle),
-              // Standings cells (sorted by place)
-              if (i < standings.length) ...[
-                _boldBorderCell(_tableCell(standings[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true), left: true, bottom: i == n - 1),
-                _boldBorderCell(_tableCell(standings[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true), bottom: i == n - 1),
-                _boldBorderCell(
+              TableRow(
+                decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                children: [
+                  _tableCell('${crossTable[i].teamNumber ?? ''}', style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11)),
+                  _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
+                  _tableCell(crossTable[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
+                  for (int j = 0; j < n; j++)
+                    (i == j)
+                      ? _diagonalCell()
+                      : _resultCell(crossTable[i].results[j], crossTable[i].details[j], isTT),
                   _tableCell(
-                    _formatPts(standings[i].displayPoints),
+                    _formatPts(crossTable[i].points),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  bottom: i == n - 1,
+                  _tableCell('${crossTable[i].gamesPlayed}', style: cellStyle),
+                ],
+              ),
+          ],
+        ),
+        const SizedBox(width: 4),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.black, width: 2),
+          ),
+          child: Table(
+            border: TableBorder(
+              horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+              verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+            ),
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            columnWidths: {
+              0: const FlexColumnWidth(2), // ПІБ (standings)
+              1: const FlexColumnWidth(1), // Команда (standings)
+            },
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: headerBg),
+                children: [
+                  _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+                  _tableCell('Команда', style: headerStyle, minWidth: 90),
+                  _tableCell('Бали', style: headerStyle),
+                  _tableCell('Місце', style: headerStyle),
+                ],
+              ),
+              for (int i = 0; i < n; i++)
+                TableRow(
+                  decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                  children: [
+                    if (i < standings.length) ...[
+                      _tableCell(standings[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
+                      _tableCell(standings[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
+                      _tableCell(
+                        _formatPts(standings[i].displayPoints),
+                        style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      _placeCell(standings[i].place, cellStyle),
+                    ] else ...[
+                      _tableCell('', style: cellStyle, minWidth: 130),
+                      _tableCell('', style: cellStyle, minWidth: 90),
+                      _tableCell('', style: cellStyle),
+                      _tableCell('', style: cellStyle),
+                    ],
+                  ],
                 ),
-                _boldBorderCell(_placeCell(standings[i].place, cellStyle), right: true, bottom: i == n - 1),
-              ] else ...[
-                _boldBorderCell(_tableCell('', style: cellStyle, minWidth: 130), left: true, bottom: i == n - 1),
-                _boldBorderCell(_tableCell('', style: cellStyle, minWidth: 90), bottom: i == n - 1),
-                _boldBorderCell(_tableCell('', style: cellStyle), bottom: i == n - 1),
-                _boldBorderCell(_tableCell('', style: cellStyle), right: true, bottom: i == n - 1),
-              ],
             ],
           ),
+        ),
       ],
     );
   }
@@ -522,69 +557,98 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     teamColumnWidths[1] = const FlexColumnWidth(2); // Команда (cross)
     teamColumnWidths[n + 3] = const FlexColumnWidth(2); // Команда (standings)
 
-    return Table(
-      border: TableBorder(
-        top: BorderSide(color: Colors.grey.shade300, width: 1),
-        bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-        left: BorderSide(color: Colors.grey.shade300, width: 1),
-        right: BorderSide(color: Colors.grey.shade300, width: 1),
-        horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
-        verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
-      ),
-      defaultColumnWidth: const IntrinsicColumnWidth(),
-      columnWidths: teamColumnWidths,
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        TableRow(
-          decoration: BoxDecoration(color: headerBg),
+        Table(
+          border: TableBorder(
+            top: BorderSide(color: Colors.grey.shade300, width: 1),
+            bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+            left: BorderSide(color: Colors.grey.shade300, width: 1),
+            right: BorderSide(color: Colors.grey.shade300, width: 1),
+            horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+            verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+          ),
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          columnWidths: {1: const FlexColumnWidth(2)}, // Команда (cross)
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
-            _tableCell('№', style: headerStyle),
-            _tableCell('Команда', style: headerStyle, minWidth: 140),
+            TableRow(
+              decoration: BoxDecoration(color: headerBg),
+              children: [
+                _tableCell('№', style: headerStyle),
+                _tableCell('Команда', style: headerStyle, minWidth: 140),
+                for (int i = 0; i < n; i++)
+                  _verticalHeaderCell(
+                    number: crossTable[i].teamNumber ?? (i + 1),
+                    surname: crossTable[i].teamName,
+                    style: headerStyle,
+                  ),
+                _tableCell('Очки', style: headerStyle),
+              ],
+            ),
             for (int i = 0; i < n; i++)
-              _verticalHeaderCell(
-                number: crossTable[i].teamNumber ?? (i + 1),
-                surname: crossTable[i].teamName,
-                style: headerStyle,
-              ),
-            _tableCell('Очки', style: headerStyle),
-            // Standings
-            _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 140), left: true, top: true),
-            _boldBorderCell(_tableCell('Очки', style: headerStyle), top: true),
-            _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
-          ],
-        ),
-        for (int i = 0; i < n; i++)
-          TableRow(
-            decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
-            children: [
-              _tableCell('${crossTable[i].teamNumber ?? (i + 1)}', style: cellStyle),
-              _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
-              for (int j = 0; j < n; j++)
-                (i == j)
-                  ? _diagonalCell()
-                  : _teamMatchCell(crossTable[i].matchPoints[j]),
-              _tableCell(
-                _formatPts(crossTable[i].totalPoints),
-                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-              ),
-              // Standings
-              if (i < standings.length) ...[
-                _boldBorderCell(_tableCell(standings[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true), left: true, bottom: i == n - 1),
-                _boldBorderCell(
+              TableRow(
+                decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                children: [
+                  _tableCell('${crossTable[i].teamNumber ?? (i + 1)}', style: cellStyle),
+                  _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                  for (int j = 0; j < n; j++)
+                    (i == j)
+                      ? _diagonalCell()
+                      : _teamMatchCell(crossTable[i].matchPoints[j]),
                   _tableCell(
-                    _formatPts(standings[i].points),
+                    _formatPts(crossTable[i].totalPoints),
                     style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  bottom: i == n - 1,
+                ],
+              ),
+          ],
+        ),
+        const SizedBox(width: 4),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.black, width: 2),
+          ),
+          child: Table(
+            border: TableBorder(
+              horizontalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+              verticalInside: const BorderSide(color: Color(0xFF000000), width: 1),
+            ),
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            columnWidths: {0: const FlexColumnWidth(2)}, // Команда (standings)
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            children: [
+              TableRow(
+                decoration: BoxDecoration(color: headerBg),
+                children: [
+                  _tableCell('Команда', style: headerStyle, minWidth: 140),
+                  _tableCell('Очки', style: headerStyle),
+                  _tableCell('Місце', style: headerStyle),
+                ],
+              ),
+              for (int i = 0; i < n; i++)
+                TableRow(
+                  decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
+                  children: [
+                    if (i < standings.length) ...[
+                      _tableCell(standings[i].teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                      _tableCell(
+                        _formatPts(standings[i].points),
+                        style: cellStyle.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      _placeCell(standings[i].place, cellStyle),
+                    ] else ...[
+                      _tableCell('', style: cellStyle, minWidth: 140),
+                      _tableCell('', style: cellStyle),
+                      _tableCell('', style: cellStyle),
+                    ],
+                  ],
                 ),
-                _boldBorderCell(_placeCell(standings[i].place, cellStyle), right: true, bottom: i == n - 1),
-              ] else ...[
-                _boldBorderCell(_tableCell('', style: cellStyle, minWidth: 140), left: true, bottom: i == n - 1),
-                _boldBorderCell(_tableCell('', style: cellStyle), bottom: i == n - 1),
-                _boldBorderCell(_tableCell('', style: cellStyle), right: true, bottom: i == n - 1),
-              ],
             ],
           ),
+        ),
       ],
     );
   }
