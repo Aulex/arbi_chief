@@ -394,13 +394,20 @@ class PlayerView extends ConsumerWidget {
 
   void _showBulkImportDialog(BuildContext context, WidgetRef ref) {
     final textC = TextEditingController();
-    List<_ImportRow> parsed = [];
     bool isImporting = false;
+
+    // Use controller listener to catch ALL text changes (typing, paste, programmatic)
+    late void Function(void Function()) _setST;
+    textC.addListener(() {
+      _setST(() {});
+    });
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
+          _setST = setST;
+          final parsed = _parseImportText(textC.text);
           final teamNames = parsed.map((r) => r.teamName).toSet();
 
           return Dialog(
@@ -449,10 +456,8 @@ class PlayerView extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onChanged: (text) {
-                          setST(() {
-                            parsed = _parseImportText(text);
-                          });
+                        onChanged: (_) {
+                          setST(() {});
                         },
                       ),
                     ),

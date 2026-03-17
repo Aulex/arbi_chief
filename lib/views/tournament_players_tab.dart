@@ -241,7 +241,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
   void _showBulkImportDialog() {
     final textC = TextEditingController();
-    List<_ParsedPlayer> parsed = [];
     bool importing = false;
     String? error;
     int importedCount = 0;
@@ -266,10 +265,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       return result;
     }
 
+    // Use controller listener to catch ALL text changes (typing, paste, programmatic)
+    late void Function(void Function()) _setST;
+    textC.addListener(() {
+      _setST(() {});
+    });
+
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
+          _setST = setST;
+          final parsed = _parseText(textC.text);
           return Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: ConstrainedBox(
@@ -308,11 +315,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.all(12),
                         ),
-                        onChanged: (v) {
-                          setST(() {
-                            parsed = _parseText(v);
-                            error = null;
-                          });
+                        onChanged: (_) {
+                          setST(() => error = null);
                         },
                       ),
                     ),
@@ -420,7 +424,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
   void _showBulkImportTeamsDialog() {
     final textC = TextEditingController();
-    List<_ParsedTeamPlayer> parsed = [];
     bool importing = false;
     String? error;
 
@@ -440,11 +443,12 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           parts = line.trim().split(RegExp(r'\s+'));
         }
         // Format: Прізвище Ім'я По батькові Команда
-        if (parts.length < 4) continue; // need at least surname + name + lastname + team
+        if (parts.length < 3) continue; // need at least surname + name + lastname (team optional)
         final surname = parts[0];
         final name = parts[1];
         final lastname = parts[2];
-        final teamName = parts.sublist(3).join(' ');
+        final teamName = parts.length >= 4 ? parts.sublist(3).join(' ') : '';
+        if (teamName.isEmpty) continue; // team is required for this import
         result.add(_ParsedTeamPlayer(
           teamName: teamName,
           surname: surname,
@@ -455,10 +459,19 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       return result;
     }
 
+    // Use controller listener to catch ALL text changes (typing, paste, programmatic)
+    late void Function(void Function()) _setST;
+    textC.addListener(() {
+      _setST(() {});
+    });
+
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
+          _setST = setST;
+          // Parse fresh from controller on every build
+          final parsed = _parseText(textC.text);
           // Group by team for preview
           final teamGroups = <String, List<_ParsedTeamPlayer>>{};
           for (final p in parsed) {
@@ -503,11 +516,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.all(12),
                         ),
-                        onChanged: (v) {
-                          setST(() {
-                            parsed = _parseText(v);
-                            error = null;
-                          });
+                        onChanged: (_) {
+                          setST(() => error = null);
                         },
                       ),
                     ),
