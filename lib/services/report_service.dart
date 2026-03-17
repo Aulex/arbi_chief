@@ -660,7 +660,7 @@ class ReportService {
         final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
 
         final cells = <pw.Widget>[
-          _pdfCell('${teamMap[tid]!.teamNumber ?? (i + 1)}. ${teamMap[tid]!.teamName}', cellSt, align: pw.Alignment.centerLeft),
+          _pdfTeamKomCell('${teamMap[tid]!.teamNumber ?? (i + 1)}', teamMap[tid]!.teamName, cellSt),
           for (int j = 0; j < tn; j++)
             if (i == j)
               _pdfDiagonalCell()
@@ -673,7 +673,7 @@ class ReportService {
             _pdfCell(fmtPts(teamBoard1Pts[tid]!), cellSt),
           _pdfCell(fmtPts(teamBoard3Pts[tid]!), cellSt),
           // Standings section (right side, sorted by place)
-          _pdfCell('${teamMap[sid]!.teamNumber ?? ''}. ${teamMap[sid]!.teamName}', cellSt, align: pw.Alignment.centerLeft),
+          _pdfTeamKomCell('${teamMap[sid]!.teamNumber ?? ''}', teamMap[sid]!.teamName, cellSt),
           _pdfCell(fmtPts(teamPoints[sid]!), cellBold),
           _pdfCell('${i + 1}', cellBold),
         ];
@@ -777,6 +777,21 @@ class ReportService {
     );
   }
 
+  pw.Widget _pdfTeamKomCell(String number, String teamName, pw.TextStyle style) {
+    final smallStyle = style.copyWith(fontSize: (style.fontSize ?? 8) - 2);
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      alignment: pw.Alignment.center,
+      child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [
+          pw.Text(number, style: style, textAlign: pw.TextAlign.center),
+          pw.Text(teamName, style: smallStyle, textAlign: pw.TextAlign.center, maxLines: 2),
+        ],
+      ),
+    );
+  }
+
   pw.Widget _pdfDiagonalCell() {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
@@ -788,25 +803,13 @@ class ReportService {
 
   pw.Widget _pdfTeamResultCell(ReportData data, int teamAId, int teamBId, pw.TextStyle cellSt, pw.TextStyle cellBold) {
     final matchPts = teamMatchPoints(data, teamAId, teamBId);
-    final boardScore = teamMatchScore(data, teamAId, teamBId);
     final pts = matchPts.a;
     final label = '${pts.toInt()}';
 
-    PdfColor? bgColor;
-    if (pts == 2.0) bgColor = PdfColors.green50;
-    else if (pts == 0.0 && (boardScore.a > 0 || boardScore.b > 0)) bgColor = PdfColors.red50;
-    else if (pts == 1.0) bgColor = PdfColors.amber50;
-
-    PdfColor textColor = PdfColors.black;
-    if (pts == 2.0) textColor = PdfColors.green800;
-    else if (pts == 0.0) textColor = PdfColors.red800;
-    else if (pts == 1.0) textColor = PdfColors.amber800;
-
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-      color: bgColor,
       alignment: pw.Alignment.center,
-      child: pw.Text(label, style: cellBold.copyWith(color: textColor), textAlign: pw.TextAlign.center),
+      child: pw.Text(label, style: cellBold, textAlign: pw.TextAlign.center),
     );
   }
 }
