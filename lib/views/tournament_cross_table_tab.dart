@@ -1770,10 +1770,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             scrollDirection: Axis.horizontal,
             child: Table(
               border: TableBorder(
-                top: BorderSide(color: borderColor, width: 1),
-                bottom: BorderSide(color: borderColor, width: 1),
-                left: BorderSide(color: borderColor, width: 1),
-                right: BorderSide(color: borderColor, width: 1),
+                top: BorderSide(color: boldColor, width: 2),
+                bottom: BorderSide(color: boldColor, width: 2),
+                left: BorderSide(color: boldColor, width: 2),
+                right: BorderSide(color: boldColor, width: 2),
                 horizontalInside: BorderSide(color: borderColor, width: 1),
                 verticalInside: BorderSide(color: borderColor, width: 1),
               ),
@@ -1800,10 +1800,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                   _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
                 _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
                 // Standings headers
-                _boldBorderCell(_tableCell('№', style: headerStyle), left: true, top: true),
-                _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 140), top: true),
-                _boldBorderCell(_tableCell('Очки', style: headerStyle), top: true),
-                _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
+                _tableCell('№', style: headerStyle),
+                _tableCell('Команда', style: headerStyle, minWidth: 140),
+                _tableCell('Очки', style: headerStyle),
+                _tableCell('Місце', style: headerStyle),
               ],
             ),
             for (int i = 0; i < n; i++)
@@ -1827,28 +1827,16 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     _tableCell(_formatPoints(teamBoard1Pts[teamIdsByNumber[i]]!), style: cellStyle),
                   _tableCell(_formatPoints(teamBoard3Pts[teamIdsByNumber[i]]!), style: cellStyle),
                   // Standings cells (sorted by place)
-                  _boldBorderCell(
-                    _tableCell(
-                      '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
-                      style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
-                    ),
-                    left: true, bottom: i == n - 1,
+                  _tableCell(
+                    '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
+                    style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
                   ),
-                  _boldBorderCell(
-                    _tableCell(teamMap[sortedTeamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
-                    bottom: i == n - 1,
+                  _tableCell(teamMap[sortedTeamIds[i]]!.teamName, style: cellStyle, minWidth: 140, leftAlign: true),
+                  _tableCell(
+                    _formatPoints(teamPoints[sortedTeamIds[i]]!),
+                    style: cellStyle.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  _boldBorderCell(
-                    _tableCell(
-                      _formatPoints(teamPoints[sortedTeamIds[i]]!),
-                      style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    bottom: i == n - 1,
-                  ),
-                  _boldBorderCell(
-                    _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
-                    right: true, bottom: i == n - 1,
-                  ),
+                  _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
                 ],
               ),
           ],
@@ -2205,10 +2193,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     return Table(
       border: TableBorder(
-        top: BorderSide(color: borderColor, width: 1),
-        bottom: BorderSide(color: borderColor, width: 1),
-        left: BorderSide(color: borderColor, width: 1),
-        right: BorderSide(color: borderColor, width: 1),
+        top: BorderSide(color: boldColor, width: 2),
+        bottom: BorderSide(color: boldColor, width: 2),
+        left: BorderSide(color: boldColor, width: 2),
+        right: BorderSide(color: boldColor, width: 2),
         horizontalInside: BorderSide(color: borderColor, width: 1),
         verticalInside: BorderSide(color: borderColor, width: 1),
       ),
@@ -2236,14 +2224,14 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             if (isTT) _tableCell('М.З.', style: headerStyle),
             if (isTT) _tableCell('М.П.', style: headerStyle),
             // Standings headers
-            _boldBorderCell(_tableCell('№к', style: headerStyle), left: true, top: true),
-            _boldBorderCell(_tableCell('ПІБ', style: headerStyle, minWidth: 130), top: true),
-            _boldBorderCell(_tableCell('Команда', style: headerStyle, minWidth: 90), top: true),
-            _boldBorderCell(_tableCell('Бали', style: headerStyle), top: true),
-            if (!isTT) _boldBorderCell(_tableCell('К.Б.', style: headerStyle), top: true),
-            if (isTT) _boldBorderCell(_tableCell('М.З.', style: headerStyle), top: true),
-            if (isTT) _boldBorderCell(_tableCell('М.П.', style: headerStyle), top: true),
-            _boldBorderCell(_tableCell('Місце', style: headerStyle), right: true, top: true),
+            _tableCell('№к', style: headerStyle),
+            _tableCell('ПІБ', style: headerStyle, minWidth: 130),
+            _tableCell('Команда', style: headerStyle, minWidth: 90),
+            _tableCell('Бали', style: headerStyle),
+            if (!isTT) _tableCell('К.Б.', style: headerStyle),
+            if (isTT) _tableCell('М.З.', style: headerStyle),
+            if (isTT) _tableCell('М.П.', style: headerStyle),
+            _tableCell('Місце', style: headerStyle),
           ],
         ),
         // Data rows
@@ -2300,53 +2288,29 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               if (isTT)
                 _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).conceded}', style: cellStyle),
               // Standings cells (sorted order)
-              _boldBorderCell(
-                _tableCell(
-                  '${sorted[i].teamNumber ?? ''}',
-                  style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
-                ),
-                left: true, bottom: i == n - 1,
+              _tableCell(
+                '${sorted[i].teamNumber ?? ''}',
+                style: cellStyle.copyWith(color: isDark ? Colors.grey.shade500 : Colors.grey.shade600, fontSize: 11),
               ),
-              _boldBorderCell(
-                _tableCell(
-                  _shortName(sorted[i].player.player_surname, sorted[i].player.player_name),
-                  style: cellStyle, minWidth: 130, leftAlign: true,
-                ),
-                bottom: i == n - 1,
+              _tableCell(
+                _shortName(sorted[i].player.player_surname, sorted[i].player.player_name),
+                style: cellStyle, minWidth: 130, leftAlign: true,
               ),
-              _boldBorderCell(
-                _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
-                bottom: i == n - 1,
-              ),
-              _boldBorderCell(
-                _tableCell(
-                  _formatPoints(_displayPoints(boardNum, sorted[i].player.player_id!)),
-                  style: cellStyle.copyWith(fontWeight: FontWeight.bold),
-                ),
-                bottom: i == n - 1,
+              _tableCell(sorted[i].teamName, style: cellStyle, minWidth: 90, leftAlign: true),
+              _tableCell(
+                _formatPoints(_displayPoints(boardNum, sorted[i].player.player_id!)),
+                style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
               if (!isTT)
-                _boldBorderCell(
-                  _tableCell(
-                    _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
-                    style: cellStyle,
-                  ),
-                  bottom: i == n - 1,
+                _tableCell(
+                  _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
+                  style: cellStyle,
                 ),
               if (isTT)
-                _boldBorderCell(
-                  _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).scored}', style: cellStyle),
-                  bottom: i == n - 1,
-                ),
+                _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).scored}', style: cellStyle),
               if (isTT)
-                _boldBorderCell(
-                  _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).conceded}', style: cellStyle),
-                  bottom: i == n - 1,
-                ),
-              _boldBorderCell(
-                _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
-                right: true, bottom: i == n - 1,
-              ),
+                _tableCell('${_totalBalls(boardNum, sorted[i].player.player_id!).conceded}', style: cellStyle),
+              _tableCell('${i + 1}', style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
             ],
           ),
       ],
