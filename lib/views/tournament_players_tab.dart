@@ -428,23 +428,28 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedTeamPlayer>[];
       for (final line in lines) {
-        // Split by tab (Excel) or semicolon
-        final parts = line
-            .split(RegExp(r'\t|;'))
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
-        if (parts.length < 2) continue; // need at least team + surname
-        final teamName = parts[0];
-        // Remaining parts: surname name lastname (may be space-separated within a single cell)
-        final playerParts = parts.length == 2
-            ? parts[1].split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList()
-            : parts.sublist(1);
+        List<String> parts;
+        if (line.contains('\t')) {
+          // Tab-separated (Excel paste)
+          parts = line.split('\t').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        } else if (line.contains(';')) {
+          // Semicolon-separated
+          parts = line.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        } else {
+          // Space-separated
+          parts = line.trim().split(RegExp(r'\s+'));
+        }
+        // Format: Прізвище Ім'я По батькові Команда
+        if (parts.length < 4) continue; // need at least surname + name + lastname + team
+        final surname = parts[0];
+        final name = parts[1];
+        final lastname = parts[2];
+        final teamName = parts.sublist(3).join(' ');
         result.add(_ParsedTeamPlayer(
           teamName: teamName,
-          surname: playerParts.isNotEmpty ? playerParts[0] : '',
-          name: playerParts.length > 1 ? playerParts[1] : '',
-          lastname: playerParts.length > 2 ? playerParts[2] : '',
+          surname: surname,
+          name: name,
+          lastname: lastname,
         ));
       }
       return result;
@@ -483,7 +488,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     const SizedBox(height: 8),
                     const Text(
                       'Вставте дані з Excel (Ctrl+V). Кожен рядок — один гравець.\n'
-                      'Формат: Команда\tПрізвище\tІм\'я\tПо батькові (розділені табуляцією або ;)',
+                      'Формат: Прізвище\tІм\'я\tПо батькові\tКоманда',
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     const SizedBox(height: 12),
@@ -494,7 +499,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
                         decoration: InputDecoration(
-                          hintText: 'Динамо\tІваненко\tІван\tІванович\nДинамо\tПетренко\tПетро\tПетрович\nШахтар\tСидоренко\tСидір\tСидорович',
+                          hintText: 'Іваненко\tІван\tІванович\tДинамо\nПетренко\tПетро\tПетрович\tДинамо\nСидоренко\tСидір\tСидорович\tШахтар',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.all(12),
                         ),
