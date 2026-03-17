@@ -237,6 +237,197 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     ref.read(tournamentServiceProvider).removeParticipant(widget.tId, player.player_id!);
   }
 
+  void _showBulkImportDialog() {
+    final textC = TextEditingController();
+    List<_ParsedPlayer> parsed = [];
+    bool importing = false;
+    String? error;
+    int importedCount = 0;
+
+    List<_ParsedPlayer> _parseText(String text) {
+      final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final result = <_ParsedPlayer>[];
+      for (final line in lines) {
+        // Split by tab (Excel), semicolon, or 2+ spaces
+        final parts = line
+            .split(RegExp(r'\t|;|\s{2,}'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (parts.isEmpty) continue;
+        result.add(_ParsedPlayer(
+          surname: parts.isNotEmpty ? parts[0] : '',
+          name: parts.length > 1 ? parts[1] : '',
+          lastname: parts.length > 2 ? parts[2] : '',
+        ));
+      }
+      return result;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.upload_file, color: Colors.indigo),
+                        SizedBox(width: 12),
+                        Text(
+                          'Швидкий імпорт гравців',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Вставте дані з Excel (Ctrl+V). Кожен рядок — один гравець.\n'
+                      'Формат: Прізвище  Ім\'я  По батькові (розділені табуляцією або ;)',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: TextField(
+                        controller: textC,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        decoration: InputDecoration(
+                          hintText: 'Іваненко\tІван\tІванович\nПетренко\tПетро\tПетрович',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                        onChanged: (v) {
+                          setST(() {
+                            parsed = _parseText(v);
+                            error = null;
+                          });
+                        },
+                      ),
+                    ),
+                    if (parsed.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Розпізнано гравців: ${parsed.length}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo),
+                      ),
+                      const SizedBox(height: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 120),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: parsed.length,
+                          itemBuilder: (_, i) {
+                            final p = parsed[i];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 1),
+                              child: Text(
+                                '${i + 1}. ${p.surname} ${p.name} ${p.lastname}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: p.surname.isEmpty ? Colors.red : Colors.black87,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    ],
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          onPressed: importing ? null : () => Navigator.pop(dialogContext),
+                          child: const Text('Скасувати'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: importing || parsed.isEmpty
+                              ? null
+                              : () async {
+                                  setST(() => importing = true);
+                                  try {
+                                    final validPlayers = parsed.where((p) => p.surname.isNotEmpty).toList();
+                                    for (final p in validPlayers) {
+                                      await ref.read(playerProvider.notifier).addPlayer(
+                                        surname: p.surname,
+                                        name: p.name,
+                                        lastname: p.lastname,
+                                        gender: 0,
+                                        dob: '',
+                                      );
+                                    }
+                                    // Add all newly created players to tournament
+                                    final allPlayers = await ref.read(playerProvider.future);
+                                    final participantIds = _participants.map((pl) => pl.player_id).toSet();
+                                    for (final p in validPlayers) {
+                                      final match = allPlayers
+                                          .where((pl) =>
+                                              pl.player_surname == p.surname &&
+                                              pl.player_name == p.name &&
+                                              pl.player_lastname == p.lastname &&
+                                              !participantIds.contains(pl.player_id))
+                                          .lastOrNull;
+                                      if (match != null && match.player_id != null) {
+                                        await ref.read(tournamentServiceProvider)
+                                            .addParticipant(widget.tId, match.player_id!);
+                                        participantIds.add(match.player_id);
+                                        importedCount++;
+                                      }
+                                    }
+                                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                    _loadData();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Імпортовано гравців: $importedCount')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setST(() {
+                                      importing = false;
+                                      error = 'Помилка: $e';
+                                    });
+                                  }
+                                },
+                          icon: importing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.download_done),
+                          label: Text(importing ? 'Імпорт...' : 'Імпортувати (${parsed.length})'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showAddPlayerDialog() {
     final nameC = TextEditingController();
     final surnameC = TextEditingController();
@@ -529,6 +720,13 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
             _showAddPlayerDialog();
             return KeyEventResult.handled;
           }
+          // Ctrl+I for bulk import
+          if (event.logicalKey == LogicalKeyboardKey.keyI &&
+              (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+               HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
+            _showBulkImportDialog();
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
@@ -561,6 +759,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     ],
                   ),
                 ),
+                OutlinedButton.icon(
+                  onPressed: _showBulkImportDialog,
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text('Імпорт'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.indigo,
+                    side: const BorderSide(color: Colors.indigo),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: _showAddPlayerDialog,
                   icon: const Icon(Icons.person_add_alt_1, size: 18),
@@ -625,4 +835,11 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       ),
     );
   }
+}
+
+class _ParsedPlayer {
+  final String surname;
+  final String name;
+  final String lastname;
+  const _ParsedPlayer({required this.surname, required this.name, required this.lastname});
 }
