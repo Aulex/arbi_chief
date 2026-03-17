@@ -6,6 +6,8 @@ import 'tournament_add_screen.dart';
 import 'tournament_players_tab.dart';
 import 'tournament_teams_tab.dart';
 import 'tournament_cross_table_tab.dart';
+import 'swimming_results_tab.dart';
+import 'swimming_team_standings_tab.dart';
 import '../models/tournament_model.dart';
 import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
@@ -25,6 +27,7 @@ class TournamentEditScreen extends ConsumerStatefulWidget {
 
 class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   SportTypeConfig get _sportConfig => getConfigForType(widget.tournament.t_type);
+  bool get _isSwimming => isSwimming(widget.tournament.t_type);
 
   Future<void> _openStandingsWindow() async {
     // If already open, bring it to focus
@@ -57,8 +60,39 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tabCount = _isSwimming ? 5 : 4;
+    final tabs = _isSwimming
+        ? const [
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+          ]
+        : const [
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+          ];
+
+    final tabViews = _isSwimming
+        ? [
+            SwimmingResultsTab(tId: widget.tournament.t_id!),
+            SwimmingTeamStandingsTab(tId: widget.tournament.t_id!),
+            TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+            TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+            TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+          ]
+        : [
+            CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig, tType: widget.tournament.t_type),
+            TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+            TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+            TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+          ];
+
     return DefaultTabController(
-      length: 4,
+      length: tabCount,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 24.0),
         child: Column(
@@ -97,29 +131,26 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                           indicatorColor: Colors.indigo,
                           indicatorWeight: 2,
                           tabAlignment: TabAlignment.start,
-                          tabs: const [
-                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
-                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
-                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
-                            Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
-                          ],
+                          tabs: tabs,
                         ),
                       ),
-                      SizedBox(
-                        height: 32,
-                        child: VerticalDivider(
-                          thickness: 1,
-                          width: 24,
-                          color: Colors.grey.shade300,
+                      if (!_isSwimming) ...[
+                        SizedBox(
+                          height: 32,
+                          child: VerticalDivider(
+                            thickness: 1,
+                            width: 24,
+                            color: Colors.grey.shade300,
+                          ),
                         ),
-                      ),
-                      Tooltip(
-                        message: 'Відкрити таблицю на другому моніторі',
-                        child: IconButton(
-                          icon: const Icon(Icons.open_in_new, size: 20),
-                          onPressed: _openStandingsWindow,
+                        Tooltip(
+                          message: 'Відкрити таблицю на другому моніторі',
+                          child: IconButton(
+                            icon: const Icon(Icons.open_in_new, size: 20),
+                            onPressed: _openStandingsWindow,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -128,15 +159,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
               // Tab Bar View
               Expanded(
                 child: TabBarView(
-                  children: [
-                    CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig, tType: widget.tournament.t_type),
-                    TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
-                    TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
-                    TournamentAddScreen(
-                      tournament: widget.tournament,
-                      isEditMode: true,
-                    ),
-                  ],
+                  children: tabViews,
                 ),
               ),
             ],

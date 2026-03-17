@@ -76,10 +76,25 @@ const checkersConfig = SportTypeConfig(
   boardAbbrev: 'Д',
 );
 
+/// Config for swimming (no boards, time-based).
+const swimmingConfig = SportTypeConfig(
+  boardLabel: 'Категорія',
+  boardCount: 0,
+  lastBoardWomenOnly: false,
+  hasTeamCrossTable: false,
+  hasBoardCrossTables: false,
+  boardLabelPlural: 'категоріях',
+  boardAbbrev: 'К',
+);
+
+/// Returns true if the sport type is swimming (Плавання).
+bool isSwimming(int? typeId) => typeId == 6;
+
 /// Map type_id → config. Falls back to chess config for unknown types.
 SportTypeConfig getConfigForType(int? typeId) {
   switch (typeId) {
     case 1: return chessConfig;       // Шахи
+    case 6: return swimmingConfig;    // Плавання
     case 7: return checkersConfig;    // Шашки
     case 11: return tableTennisConfig; // Настільний теніс
     default: return chessConfig;

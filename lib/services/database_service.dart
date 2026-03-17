@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -122,6 +122,26 @@ class DatabaseService {
               }
             }
           }
+        }
+        if (oldVersion < 6) {
+          // Swimming results table
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS CMP_SWIMMING_RESULT (
+              sr_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              t_id INTEGER,
+              player_id INTEGER,
+              team_id INTEGER,
+              category TEXT NOT NULL,
+              time_min INTEGER NOT NULL DEFAULT 0,
+              time_sec INTEGER NOT NULL DEFAULT 0,
+              time_dsec INTEGER NOT NULL DEFAULT 0,
+              time_total INTEGER NOT NULL DEFAULT 0,
+              sync_uid TEXT,
+              FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
+              FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
+              FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id)
+            )
+          ''');
         }
       },
       onCreate: (db, version) async {
@@ -334,6 +354,25 @@ class DatabaseService {
             sync_uid TEXT,
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
+          )
+        ''');
+
+        // 16. CMP_SWIMMING_RESULT
+        await db.execute('''
+          CREATE TABLE CMP_SWIMMING_RESULT (
+            sr_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            t_id INTEGER,
+            player_id INTEGER,
+            team_id INTEGER,
+            category TEXT NOT NULL,
+            time_min INTEGER NOT NULL DEFAULT 0,
+            time_sec INTEGER NOT NULL DEFAULT 0,
+            time_dsec INTEGER NOT NULL DEFAULT 0,
+            time_total INTEGER NOT NULL DEFAULT 0,
+            sync_uid TEXT,
+            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
+            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
+            FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id)
           )
         ''');
 
