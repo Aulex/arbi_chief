@@ -240,6 +240,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   }
 
   void _showBulkImportDialog() {
+    _focusNode.unfocus();
     final textC = TextEditingController();
     bool importing = false;
     String? error;
@@ -424,6 +425,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   }
 
   void _showBulkImportTeamsDialog() {
+    _focusNode.unfocus();
     final textC = TextEditingController();
     bool importing = false;
     String? error;
