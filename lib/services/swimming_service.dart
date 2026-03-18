@@ -260,7 +260,7 @@ class SwimmingService {
              p.player_lastname, p.player_date_birth, p.player_gender
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_PLAYER p ON pt.player_id = p.player_id
-      WHERE pt.t_id = ? AND pt.team_id = ? AND pt.player_state = 0
+      WHERE pt.t_id = ? AND pt.team_id = ? AND pt.player_state IN (0, 1)
       ORDER BY p.player_surname, p.player_name
     ''', [tId, teamId]);
     return rows.map((r) {
