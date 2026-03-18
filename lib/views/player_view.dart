@@ -573,6 +573,8 @@ class PlayerView extends ConsumerWidget {
   }
 
   List<_ImportRow> _parseImportText(String text) {
+    // Replace non-breaking spaces (U+00A0, from Excel) with regular spaces
+    text = text.replaceAll('\u00A0', ' ');
     final lines = text.split('\n').where((l) => l.trim().isNotEmpty);
     final result = <_ImportRow>[];
     for (final line in lines) {

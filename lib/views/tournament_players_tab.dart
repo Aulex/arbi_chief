@@ -247,6 +247,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     int importedCount = 0;
 
     List<_ParsedPlayer> _parseText(String text) {
+      // Replace non-breaking spaces (U+00A0, from Excel) with regular spaces
+      text = text.replaceAll('\u00A0', ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedPlayer>[];
       for (final line in lines) {
@@ -431,6 +433,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     String? error;
 
     List<_ParsedTeamPlayer> _parseText(String text) {
+      // Replace non-breaking spaces (U+00A0, from Excel) with regular spaces
+      text = text.replaceAll('\u00A0', ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedTeamPlayer>[];
       for (final line in lines) {
