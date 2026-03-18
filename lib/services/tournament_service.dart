@@ -590,6 +590,55 @@ class TournamentService {
     });
   }
 
+  /// Generate all round-robin games for each board in a tournament.
+  /// Skips pairs that already have a game. Returns the number of new games created.
+  Future<int> generateAllBoardGames(int tId, Map<int, List<int>> boardPlayerIds) async {
+    final db = await _dbService.database;
+    final tsId = await getOrCreateDefaultStage(tId);
+    final today = DateTime.now().toIso8601String().split('T').first;
+    int created = 0;
+
+    await db.transaction((txn) async {
+      for (final entry in boardPlayerIds.entries) {
+        final playerIds = entry.value;
+        for (int i = 0; i < playerIds.length; i++) {
+          for (int j = i + 1; j < playerIds.length; j++) {
+            // Check if game already exists
+            final existing = await txn.rawQuery('''
+              SELECT e.event_id
+              FROM CMP_EVENT e
+              JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
+              JOIN CMP_PLAYER_EVENT pe1 ON pe1.event_id = e.event_id AND pe1.player_id = ?
+              JOIN CMP_PLAYER_EVENT pe2 ON pe2.event_id = e.event_id AND pe2.player_id = ?
+              WHERE ts.t_id = ?
+              LIMIT 1
+            ''', [playerIds[i], playerIds[j], tId]);
+
+            if (existing.isNotEmpty) continue;
+
+            final eventId = await txn.insert('CMP_EVENT', {
+              'ts_id': tsId,
+              'event_date_begin': today,
+            });
+            await txn.insert('CMP_PLAYER_EVENT', {
+              'event_id': eventId,
+              'player_id': playerIds[i],
+              'asgn_date': today,
+            });
+            await txn.insert('CMP_PLAYER_EVENT', {
+              'event_id': eventId,
+              'player_id': playerIds[j],
+              'asgn_date': today,
+            });
+            created++;
+          }
+        }
+      }
+    });
+
+    return created;
+  }
+
   /// Get set score details for a specific player in a game.
   Future<String?> getResultDetail(int eventId, int playerId) async {
     final db = await _dbService.database;

@@ -1437,6 +1437,16 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 ],
               ),
             ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _generateAllGames,
+              icon: const Icon(Icons.auto_fix_high, size: 18),
+              label: const Text('Згенерувати ігри'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -1452,6 +1462,40 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         ),
       ],
     );
+  }
+
+  Future<void> _generateAllGames() async {
+    // Collect real (non-phantom) player IDs per board
+    final boardPlayerIds = <int, List<int>>{};
+    for (final entry in _boardPlayers.entries) {
+      final boardNum = entry.key;
+      final realPlayerIds = entry.value
+          .where((p) => p.player.player_id! > 0 && !_absentPlayerIds.contains(p.player.player_id))
+          .map((p) => p.player.player_id!)
+          .toList();
+      if (realPlayerIds.length >= 2) {
+        boardPlayerIds[boardNum] = realPlayerIds;
+      }
+    }
+
+    if (boardPlayerIds.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Потрібно мінімум 2 гравці на дошці')),
+        );
+      }
+      return;
+    }
+
+    final svc = ref.read(tournamentServiceProvider);
+    final created = await svc.generateAllBoardGames(widget.tId, boardPlayerIds);
+    await _loadData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(created > 0 ? 'Створено $created ігор' : 'Усі ігри вже існують')),
+      );
+    }
   }
 
   Future<void> _clearBoardResults(int boardNum) async {
