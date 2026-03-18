@@ -247,16 +247,27 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
     );
   }
 
-  void _showEditTeamDialog(Team team) {
+  void _showEditTeamDialog(Team team, {int? currentTeamNumber}) {
     final nameC = TextEditingController(text: team.team_name);
+    final numberC = TextEditingController(text: currentTeamNumber?.toString() ?? '');
 
     Future<void> saveEdit(BuildContext ctx) async {
       final name = nameC.text.trim();
-      if (name.isEmpty || name == team.team_name) {
+      final numberText = numberC.text.trim();
+      final newNumber = numberText.isEmpty ? null : int.tryParse(numberText);
+      final nameChanged = name.isNotEmpty && name != team.team_name;
+      final numberChanged = newNumber != currentTeamNumber;
+      if (!nameChanged && !numberChanged) {
         Navigator.pop(ctx);
         return;
       }
-      await ref.read(teamProvider.notifier).updateTeam(team.copyWith(team_name: name));
+      if (nameChanged) {
+        await ref.read(teamProvider.notifier).updateTeam(team.copyWith(team_name: name));
+      }
+      if (numberChanged && newNumber != null) {
+        final service = ref.read(teamServiceProvider);
+        await service.setTeamNumber(team.team_id, widget.tournament.t_id, newNumber);
+      }
       if (ctx.mounted) Navigator.pop(ctx);
       _reloadData();
     }
@@ -277,13 +288,29 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
         },
         child: AlertDialog(
           title: const Text('Редагувати команду'),
-          content: TextField(
-            controller: nameC,
-            decoration: const InputDecoration(
-              labelText: 'Назва команди',
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameC,
+                decoration: const InputDecoration(
+                  labelText: 'Назва команди',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: numberC,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'Номер команди',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -936,7 +963,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                     IconButton(
                                       icon: Icon(Icons.edit, color: Colors.grey.shade600, size: 18),
                                       tooltip: 'Редагувати назву',
-                                      onPressed: () => _showEditTeamDialog(d.team),
+                                      onPressed: () => _showEditTeamDialog(d.team, currentTeamNumber: d.teamNumber),
                                     ),
                                     IconButton(
                                       icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade300, size: 20),
