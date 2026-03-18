@@ -264,7 +264,6 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
     showDialog(
       context: context,
       builder: (ctx) => Focus(
-        autofocus: true,
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.enter &&
@@ -279,6 +278,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
           title: const Text('Редагувати команду'),
           content: TextField(
             controller: nameC,
+            autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Назва команди',
               isDense: true,
@@ -337,7 +337,6 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
           final registeredTeamIds = _teamData.map((d) => d.team.team_id).toSet();
 
           return Focus(
-            autofocus: true,
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.enter &&
@@ -417,6 +416,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: nameC,
+                        autofocus: true,
                         decoration: InputDecoration(
                           labelText: 'Назва команди',
                           isDense: true,
@@ -609,7 +609,6 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
           }
 
           return Focus(
-            autofocus: true,
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.enter &&
@@ -698,6 +697,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                           Expanded(
                             child: TextField(
                               controller: surnameC,
+                              autofocus: true,
                               decoration: InputDecoration(
                                 labelText: 'Прізвище',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
