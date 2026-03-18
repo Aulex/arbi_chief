@@ -307,6 +307,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     Flexible(
                       child: TextField(
                         controller: textC,
+                        autofocus: true,
                         maxLines: null,
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
@@ -508,6 +509,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     Flexible(
                       child: TextField(
                         controller: textC,
+                        autofocus: true,
                         maxLines: null,
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
