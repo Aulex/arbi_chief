@@ -264,9 +264,9 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
       if (nameChanged) {
         await ref.read(teamProvider.notifier).updateTeam(team.copyWith(team_name: name));
       }
-      if (numberChanged && newNumber != null) {
+      if (numberChanged && newNumber != null && team.team_id != null && widget.tournament.t_id != null) {
         final service = ref.read(teamServiceProvider);
-        await service.setTeamNumber(team.team_id, widget.tournament.t_id, newNumber);
+        await service.setTeamNumber(team.team_id!, widget.tournament.t_id!, newNumber);
       }
       if (ctx.mounted) Navigator.pop(ctx);
       _reloadData();
