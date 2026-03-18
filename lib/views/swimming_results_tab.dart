@@ -453,8 +453,9 @@ class _SwimmingResultDialogState extends ConsumerState<_SwimmingResultDialog> {
                     ),
                     if (!_isRelay) ...[
                       const SizedBox(height: 12),
-                      // Player dropdown
+                      // Player dropdown – key forces rebuild when team changes
                       DropdownButtonFormField<int>(
+                        key: ValueKey('player_$_selectedTeamId'),
                         value: _selectedPlayerId,
                         decoration: const InputDecoration(
                           labelText: 'Учасник',
