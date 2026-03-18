@@ -99,6 +99,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
           return Focus(
+            autofocus: true,
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.enter &&
@@ -137,7 +138,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         Expanded(
                           child: TextField(
                             controller: surnameC,
-                            autofocus: true,
                             decoration: InputDecoration(
                               labelText: 'Прізвище',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -765,6 +765,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
               : <Player>[];
 
           return Focus(
+            autofocus: true,
             onKeyEvent: (node, event) {
               if (event is KeyDownEvent &&
                   event.logicalKey == LogicalKeyboardKey.enter &&
