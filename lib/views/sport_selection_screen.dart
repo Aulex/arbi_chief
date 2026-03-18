@@ -19,7 +19,7 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
   bool _loading = true;
 
   /// Sports that are fully implemented and clickable.
-  static const _enabledSports = {'Шахи', 'Шашки', 'Настільний теніс', 'Плавання'};
+  static const _enabledSports = {'Шахи', 'Шашки', 'Настільний теніс', 'Плавання', 'Волейбол'};
 
   /// Desired display order (excluding Спортивне орієнтування).
   static const _sportOrder = [

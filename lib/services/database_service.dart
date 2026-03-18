@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -140,6 +140,32 @@ class DatabaseService {
               FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
               FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
               FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id)
+            )
+          ''');
+        }
+        if (oldVersion < 7) {
+          // Volleyball match results table
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS CMP_VOLLEYBALL_MATCH (
+              vm_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              t_id INTEGER,
+              group_name TEXT,
+              stage TEXT NOT NULL DEFAULT 'group',
+              home_team_id INTEGER NOT NULL,
+              away_team_id INTEGER NOT NULL,
+              home_sets INTEGER NOT NULL DEFAULT 0,
+              away_sets INTEGER NOT NULL DEFAULT 0,
+              set1_home INTEGER,
+              set1_away INTEGER,
+              set2_home INTEGER,
+              set2_away INTEGER,
+              set3_home INTEGER,
+              set3_away INTEGER,
+              is_forfeit INTEGER NOT NULL DEFAULT 0,
+              sync_uid TEXT,
+              FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
+              FOREIGN KEY (home_team_id) REFERENCES CMP_TEAM (team_id),
+              FOREIGN KEY (away_team_id) REFERENCES CMP_TEAM (team_id)
             )
           ''');
         }
@@ -373,6 +399,31 @@ class DatabaseService {
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
             FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id)
+          )
+        ''');
+
+        // 17. CMP_VOLLEYBALL_MATCH
+        await db.execute('''
+          CREATE TABLE CMP_VOLLEYBALL_MATCH (
+            vm_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            t_id INTEGER,
+            group_name TEXT,
+            stage TEXT NOT NULL DEFAULT 'group',
+            home_team_id INTEGER NOT NULL,
+            away_team_id INTEGER NOT NULL,
+            home_sets INTEGER NOT NULL DEFAULT 0,
+            away_sets INTEGER NOT NULL DEFAULT 0,
+            set1_home INTEGER,
+            set1_away INTEGER,
+            set2_home INTEGER,
+            set2_away INTEGER,
+            set3_home INTEGER,
+            set3_away INTEGER,
+            is_forfeit INTEGER NOT NULL DEFAULT 0,
+            sync_uid TEXT,
+            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
+            FOREIGN KEY (home_team_id) REFERENCES CMP_TEAM (team_id),
+            FOREIGN KEY (away_team_id) REFERENCES CMP_TEAM (team_id)
           )
         ''');
 
