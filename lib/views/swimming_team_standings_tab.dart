@@ -80,7 +80,7 @@ class _SwimmingTeamStandingsTabState
         ),
         const SizedBox(height: 4),
         Text(
-          'Очки = сума місць (2×Ч35 + 2×Ч49 + 1×Ч50 + 1×Ж35 + 1×Ж49 + Естафета). Менше очок = краще.',
+          'Очки = сума місць (2×Ч35 + 2×Ч49 + 1×Ч50 + 1×Жін. + Естафета). Менше очок = краще.',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 12),

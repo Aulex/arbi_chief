@@ -159,10 +159,11 @@ class SwimmingService {
       // 1 best from M50
       final m50Places = bestPlacesForTeam(m50Standings, teamId, 1);
 
-      // 1 from F35 and 1 from F49
+      // 1 best woman from EITHER f35 or f49 (best single result)
       final f35Places = bestPlacesForTeam(f35Standings, teamId, 1);
       final f49Places = bestPlacesForTeam(f49Standings, teamId, 1);
-      final womanPlaces = [...f35Places, ...f49Places];
+      final bestWomanPlace = [f35Places.first, f49Places.first]..sort();
+      final womanPlaces = [bestWomanPlace.first];
 
       // 1 relay
       final relayPlaces = bestPlacesForTeam(relayStandings, teamId, 1);
