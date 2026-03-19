@@ -225,16 +225,20 @@ class TeamService {
 
     // Delete games and results for these players in this tournament
     for (final playerId in playerIds) {
+      final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+      if (pRows.isEmpty) continue;
+      final entId = pRows.first['entity_id'] as int?;
+      if (entId == null) continue;
       final eventRows = await db.rawQuery('''
         SELECT DISTINCT e.event_id
         FROM CMP_EVENT e
         JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
-        JOIN CMP_PLAYER_EVENT pe ON pe.event_id = e.event_id
-        WHERE ts.t_id = ? AND pe.player_id = ?
-      ''', [tId, playerId]);
+        JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
+        WHERE ts.t_id = ? AND se.entity_id = ?
+      ''', [tId, entId]);
       for (final er in eventRows) {
         final eventId = er['event_id'] as int;
-        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+        await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
         await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
       }
     }

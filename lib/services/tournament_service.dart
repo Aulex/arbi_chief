@@ -48,13 +48,13 @@ class TournamentService {
 
   Future<void> deleteTournament(int id) async {
     final db = await _dbService.database;
-    // Delete player events and events for all stages of this tournament
+    // Delete subevents and events for all stages of this tournament
     final stages = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [id]);
     for (final s in stages) {
       final tsId = s['ts_id'] as int;
       final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 'ts_id = ?', whereArgs: [tsId]);
       for (final e in events) {
-        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [e['event_id']]);
+        await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
       }
       await db.delete('CMP_EVENT', where: 'ts_id = ?', whereArgs: [tsId]);
     }
@@ -238,7 +238,7 @@ class TournamentService {
     }
   }
 
-  // --- Games (CMP_EVENT + CMP_PLAYER_EVENT) ---
+  // --- Games (CMP_EVENT + CMP_SUBEVENT) ---
 
   /// Ensure a default stage exists for the tournament, return its ts_id.
   Future<int> getOrCreateDefaultStage(int tId) async {
@@ -368,7 +368,7 @@ class TournamentService {
       for (final eventId in eventIds) {
         await txn.update(
           'CMP_SUBEVENT',
-          {'se_result': null, 'se_note': null},
+          {'se_result': null},
           where: 'ev_id = ?',
           whereArgs: [eventId],
         );
@@ -440,26 +440,45 @@ class TournamentService {
         player_date_birth: r['b_dob'] as String? ?? '',
       );
 
-      // Reconstruct detail strings from subevents
-      // For Chess: just the one score. For Table Tennis: "11:7 11:4"
-      // We need to know which subevent belongs to whom.
-      final wEntId = subEvents.firstWhere((s) => s['entity_id'] == subEvents[0]['entity_id'])['entity_id'];
-      
+      // Determine which entity is "white" (p1 from the SQL = lower entity_id)
+      // The SQL joins: se1.entity_id < se2.entity_id, so p1 = lower entity_id
+      final wPlayer = white;
+      final bPlayer = black;
+      final wPlayerEntId = (await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [wPlayer.player_id])).first['entity_id'] as int;
+
       // Filter subevents per player
-      final wSubs = subEvents.where((s) => s['entity_id'] == wEntId).toList();
-      final bSubs = subEvents.where((s) => s['entity_id'] != wEntId).toList();
-      
+      final wSubs = subEvents.where((s) => s['entity_id'] == wPlayerEntId).toList();
+      final bSubs = subEvents.where((s) => s['entity_id'] != wPlayerEntId).toList();
+
       double? wRes, bRes;
       String? wDet, bDet;
-      
+
       if (wSubs.length == 1) {
+        // Single-result game (chess)
         wRes = wSubs[0]['se_result'] as double?;
         bRes = bSubs.isNotEmpty ? bSubs[0]['se_result'] as double? : null;
       } else if (wSubs.length > 1) {
-        // Table Tennis logic
-        wDet = wSubs.map((s) => '${(s['se_result'] as num).toInt()}').join(' '); // Need opposite scores... 
-        // Actually, UI expects "11:7 11:4"
-        // I'll skip complex reconstruction for now and follow the legacy detail if possible
+        // Multi-set game (table tennis): reconstruct "score:opponentScore" per set
+        final wSets = <String>[];
+        final bSets = <String>[];
+        for (int i = 0; i < wSubs.length; i++) {
+          final wScore = (wSubs[i]['se_result'] as num?)?.toInt() ?? 0;
+          final bScore = i < bSubs.length ? (bSubs[i]['se_result'] as num?)?.toInt() ?? 0 : 0;
+          wSets.add('$wScore:$bScore');
+          bSets.add('$bScore:$wScore');
+        }
+        wDet = wSets.join(' ');
+        bDet = bSets.join(' ');
+        // Count sets won (score > opponent score) to determine overall win/loss
+        int wSetsWon = 0, bSetsWon = 0;
+        for (int i = 0; i < wSubs.length && i < bSubs.length; i++) {
+          final ws = (wSubs[i]['se_result'] as num?)?.toInt() ?? 0;
+          final bs = (bSubs[i]['se_result'] as num?)?.toInt() ?? 0;
+          if (ws > bs) wSetsWon++;
+          else if (bs > ws) bSetsWon++;
+        }
+        wRes = wSetsWon > bSetsWon ? 1.0 : (wSetsWon < bSetsWon ? 0.0 : null);
+        bRes = wRes != null ? 1.0 - wRes! : null;
       }
 
       result.putIfAbsent(boardNum, () => []).add((
@@ -569,15 +588,23 @@ class TournamentService {
   /// Find a game between two players in a tournament, return eventId if found.
   Future<int?> findGameBetweenPlayers(int tId, int player1Id, int player2Id) async {
     final db = await _dbService.database;
+    // Get entity IDs for both players
+    final p1Rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [player1Id]);
+    final p2Rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [player2Id]);
+    if (p1Rows.isEmpty || p2Rows.isEmpty) return null;
+    final ent1 = p1Rows.first['entity_id'] as int?;
+    final ent2 = p2Rows.first['entity_id'] as int?;
+    if (ent1 == null || ent2 == null) return null;
+
     final rows = await db.rawQuery('''
       SELECT e.event_id
       FROM CMP_EVENT e
       JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
-      JOIN CMP_PLAYER_EVENT pe1 ON pe1.event_id = e.event_id AND pe1.player_id = ?
-      JOIN CMP_PLAYER_EVENT pe2 ON pe2.event_id = e.event_id AND pe2.player_id = ?
+      JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id AND se1.entity_id = ?
+      JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id = ?
       WHERE ts.t_id = ?
       LIMIT 1
-    ''', [player1Id, player2Id, tId]);
+    ''', [ent1, ent2, tId]);
     if (rows.isEmpty) return null;
     return rows.first['event_id'] as int;
   }
@@ -692,41 +719,66 @@ class TournamentService {
   }
 
   /// Get set score details for a specific player in a game.
+  /// For multi-set games (table tennis), reconstructs "11:7 11:4" format from subevents.
   Future<String?> getResultDetail(int eventId, int playerId) async {
     final db = await _dbService.database;
-    final rows = await db.query(
-      'CMP_PLAYER_EVENT',
-      columns: ['event_result_detail'],
-      where: 'event_id = ? AND player_id = ?',
-      whereArgs: [eventId, playerId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return rows.first['event_result_detail'] as String?;
+    // Get entity ID for the player
+    final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (pRows.isEmpty) return null;
+    final playerEntId = pRows.first['entity_id'] as int?;
+    if (playerEntId == null) return null;
+
+    // Get all subevents for this event, ordered by se_id
+    final subRows = await db.query('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId], orderBy: 'se_id');
+
+    // For single-result games (chess), no detail string needed
+    final playerSubs = subRows.where((s) => s['entity_id'] == playerEntId).toList();
+    final opponentSubs = subRows.where((s) => s['entity_id'] != playerEntId).toList();
+    if (playerSubs.length <= 1) return null;
+
+    // Multi-set: reconstruct "score:score" per set
+    final sets = <String>[];
+    for (int i = 0; i < playerSubs.length; i++) {
+      final pScore = (playerSubs[i]['se_result'] as num?)?.toInt() ?? 0;
+      final oScore = i < opponentSubs.length ? (opponentSubs[i]['se_result'] as num?)?.toInt() ?? 0 : 0;
+      sets.add('$pScore:$oScore');
+    }
+    return sets.join(' ');
   }
 
   /// Save result for both players in a game.
   Future<void> saveGameResult(int eventId, double? whiteResult, double? blackResult) async {
     final db = await _dbService.database;
-    final rows = await db.query(
-      'CMP_PLAYER_EVENT',
-      where: 'event_id = ?',
+    final subRows = await db.query(
+      'CMP_SUBEVENT',
+      where: 'ev_id = ?',
       whereArgs: [eventId],
-      orderBy: 'pe_id',
+      orderBy: 'se_id',
     );
-    if (rows.length >= 2) {
-      await db.update(
-        'CMP_PLAYER_EVENT',
-        {'event_result': whiteResult},
-        where: 'pe_id = ?',
-        whereArgs: [rows[0]['pe_id']],
-      );
-      await db.update(
-        'CMP_PLAYER_EVENT',
-        {'event_result': blackResult},
-        where: 'pe_id = ?',
-        whereArgs: [rows[1]['pe_id']],
-      );
+    if (subRows.length >= 2) {
+      await db.transaction((txn) async {
+        await txn.update(
+          'CMP_SUBEVENT',
+          {'se_result': whiteResult},
+          where: 'se_id = ?',
+          whereArgs: [subRows[0]['se_id']],
+        );
+        await txn.update(
+          'CMP_SUBEVENT',
+          {'se_result': blackResult},
+          where: 'se_id = ?',
+          whereArgs: [subRows[1]['se_id']],
+        );
+        // Update overall event result
+        int? esId;
+        if (whiteResult == 1.0) esId = 1;
+        else if (whiteResult == 0.0) esId = 2;
+        else if (whiteResult == 0.5) esId = 3;
+        await txn.update('CMP_EVENT', {
+          'event_result': whiteResult != null ? '$whiteResult:$blackResult' : null,
+          'es_id': whiteResult != null ? esId : null,
+        }, where: 'event_id = ?', whereArgs: [eventId]);
+      });
     }
   }
 }

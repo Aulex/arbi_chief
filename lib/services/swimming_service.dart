@@ -76,18 +76,23 @@ class SwimmingService {
 
   Future<void> deleteAllResults(int tId) async {
     final db = await _dbService.database;
-    // Find all subevents for events in this tournament (via stage)
-    await db.rawDelete('''
-      DELETE FROM CMP_SUBEVENT 
-      WHERE ev_id IN (
-        SELECT event_id FROM CMP_EVENT 
-        WHERE ts_id IN (SELECT ts_id FROM CMP_TOURNAMENT_STAGE WHERE t_id = ?)
-      )
+    // Only delete swimming-related subevents (those with swimming category names in se_note)
+    final swimmingCategories = SwimmingCategory.values.map((c) => "'${c.name}'").join(',');
+    // Find event IDs that have swimming subevents
+    final eventRows = await db.rawQuery('''
+      SELECT DISTINCT se.ev_id
+      FROM CMP_SUBEVENT se
+      JOIN CMP_EVENT e ON se.ev_id = e.event_id
+      WHERE e.ts_id IN (SELECT ts_id FROM CMP_TOURNAMENT_STAGE WHERE t_id = ?)
+        AND se.se_note IN ($swimmingCategories)
     ''', [tId]);
-    await db.rawDelete('''
-      DELETE FROM CMP_EVENT 
-      WHERE ts_id IN (SELECT ts_id FROM CMP_TOURNAMENT_STAGE WHERE t_id = ?)
-    ''', [tId]);
+
+    if (eventRows.isEmpty) return;
+    final eventIds = eventRows.map((r) => r['ev_id'] as int).toList();
+    final placeholders = eventIds.map((_) => '?').join(',');
+
+    await db.rawDelete('DELETE FROM CMP_SUBEVENT WHERE ev_id IN ($placeholders)', eventIds);
+    await db.rawDelete('DELETE FROM CMP_EVENT WHERE event_id IN ($placeholders)', eventIds);
   }
 
   /// Get all results for a tournament, optionally filtered by category.
@@ -95,6 +100,7 @@ class SwimmingService {
       {SwimmingCategory? category}) async {
     final db = await _dbService.database;
     
+    final swimmingCategories = SwimmingCategory.values.map((c) => "'${c.name}'").join(',');
     String sql = '''
       SELECT se.se_id as sr_id, e.ts_id as t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, t.team_id
@@ -103,9 +109,9 @@ class SwimmingService {
       JOIN CMP_TOURNAMENT_STAGE stage ON e.ts_id = stage.ts_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
       LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
-      WHERE stage.t_id = ?
+      WHERE stage.t_id = ? AND se.se_note IN ($swimmingCategories)
     ''';
-    
+
     final List<dynamic> args = [tId];
     if (category != null) {
       sql += ' AND se.se_note = ?';
@@ -120,7 +126,7 @@ class SwimmingService {
         id: r['sr_id'] as int,
         tournamentId: tId,
         playerId: r['player_id'] as int?,
-        teamId: r['team_id'] as int ?? 0,
+        teamId: (r['team_id'] as int?) ?? 0,
         category: SwimmingCategory.fromDb(r['category'] as String),
         timeMin: total ~/ 6000,
         timeSec: (total % 6000) ~/ 100,
