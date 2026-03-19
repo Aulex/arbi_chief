@@ -275,6 +275,32 @@ class SwimmingService {
       );
     }).toList();
   }
+
+  /// Finds a player ID and team ID based on their names within a tournament.
+  Future<({int? playerId, int? teamId})> findParticipant(
+      int tId, String fullName, String teamName) async {
+    final db = await _dbService.database;
+
+    // 1. Find team
+    final teamRows = await db.query('CMP_TEAM',
+        where: 'team_name = ? COLLATE NOCASE', whereArgs: [teamName.trim()]);
+    if (teamRows.isEmpty) return (playerId: null, teamId: null);
+    final teamId = teamRows.first['team_id'] as int;
+
+    // 2. Find player within that team in the tournament
+    final playerRows = await db.rawQuery('''
+      SELECT p.player_id
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER p ON pt.player_id = p.player_id
+      WHERE pt.t_id = ? AND pt.team_id = ?
+      AND (TRIM(p.player_surname || ' ' || p.player_name || ' ' || p.player_lastname) = ? COLLATE NOCASE)
+    ''', [tId, teamId, fullName.trim()]);
+
+    return (
+      playerId: playerRows.isNotEmpty ? playerRows.first['player_id'] as int : null,
+      teamId: teamId,
+    );
+  }
 }
 
 class _TeamScore {

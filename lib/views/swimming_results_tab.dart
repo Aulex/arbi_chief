@@ -197,6 +197,132 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     }
   }
 
+  void _showBulkImportDialog() {
+    final textC = TextEditingController();
+    bool importing = false;
+    String? error;
+
+    Future<List<_ParsedResult>> parseText(String text) async {
+      final svc = ref.read(swimmingServiceProvider);
+      // Replace all Unicode whitespace characters (from Excel) with regular spaces
+      text = text.replaceAll(
+          RegExp(
+              r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'),
+          ' ');
+      final lines =
+          text.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final result = <_ParsedResult>[];
+
+      for (final line in lines) {
+        final parts = line.split('\t').map((s) => s.trim()).toList();
+        if (parts.length < 5) continue;
+
+        final fullName = parts[0];
+        final teamName = parts[1];
+        final min = int.tryParse(parts[2]) ?? 0;
+        final sec = int.tryParse(parts[3]) ?? 0;
+        final ms = int.tryParse(parts[4]) ?? 0;
+
+        final ids = await svc.findParticipant(widget.tId, fullName, teamName);
+
+        result.add(_ParsedResult(
+          fullName: fullName,
+          teamName: teamName,
+          min: min,
+          sec: sec,
+          ms: ms,
+          playerId: ids.playerId,
+          teamId: ids.teamId,
+        ));
+      }
+      return result;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setST) => AlertDialog(
+          title: const Text('Імпорт результатів (Excel)'),
+          content: SizedBox(
+            width: 600,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Вставте дані з Excel (5 стовпців):\nПІБ | Команда | Хв | Сек | Мс',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textC,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    hintText: 'Шуба Ростислав Едуардович\tЕРП\t0\t24\t43',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setST(() {}),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Скасувати'),
+            ),
+            FilledButton(
+              onPressed: importing
+                  ? null
+                  : () async {
+                      setST(() => importing = true);
+                      try {
+                        final parsed = await parseText(textC.text);
+                        if (parsed.isEmpty) {
+                          setST(() {
+                            importing = false;
+                            error = 'Немає коректних даних';
+                          });
+                          return;
+                        }
+
+                        final svc = ref.read(swimmingServiceProvider);
+                        int count = 0;
+                        for (final p in parsed) {
+                          if (p.teamId != null) {
+                            await svc.saveResult(SwimmingResult(
+                              tournamentId: widget.tId,
+                              category: widget.category,
+                              playerId: p.playerId,
+                              teamId: p.teamId!,
+                              timeMin: p.min,
+                              timeSec: p.sec,
+                              timeDsec: p.ms,
+                            ));
+                            count++;
+                          }
+                        }
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _loadStandings();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Імпортовано результатів: $count')),
+                          );
+                        }
+                      } catch (e) {
+                        setST(() {
+                          importing = false;
+                          error = 'Помилка: $e';
+                        });
+                      }
+                    },
+              child: Text(importing ? 'Імпорт...' : 'Імпортувати'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -211,11 +337,19 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
               '${widget.category.fullName} — 50 м в/стиль',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const Spacer(),
+            FilledButton.icon(
+              onPressed: _showBulkImportDialog,
+              icon: const Icon(Icons.upload_file, size: 18),
+              label: const Text('Імпорт'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.indigo.shade400,
+              ),
+            ),
+            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: _addResult,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Додати результат'),
+              label: const Text('Додати'),
             ),
           ],
         ),
@@ -567,4 +701,24 @@ class _SwimmingResultDialogState extends ConsumerState<_SwimmingResultDialog> {
       ],
     );
   }
+}
+
+class _ParsedResult {
+  final String fullName;
+  final String teamName;
+  final int min;
+  final int sec;
+  final int ms;
+  final int? playerId;
+  final int? teamId;
+
+  _ParsedResult({
+    required this.fullName,
+    required this.teamName,
+    required this.min,
+    required this.sec,
+    required this.ms,
+    this.playerId,
+    this.teamId,
+  });
 }
