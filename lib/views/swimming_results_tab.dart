@@ -199,19 +199,24 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
 
   void _showBulkImportDialog() {
     final textC = TextEditingController();
+    List<_ParsedResult> preview = [];
     bool importing = false;
-    String? error;
+    bool parsing = false;
 
-    Future<List<_ParsedResult>> parseText(String text) async {
+    Future<void> updatePreview(String text, Function(void Function()) setST) async {
+      if (text.trim().isEmpty) {
+        setST(() => preview = []);
+        return;
+      }
+      setST(() => parsing = true);
       final svc = ref.read(swimmingServiceProvider);
-      // Replace all Unicode whitespace characters (from Excel) with regular spaces
-      text = text.replaceAll(
+      // Replace all Unicode whitespace characters
+      final cleanText = text.replaceAll(
           RegExp(
               r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'),
           ' ');
-      final lines =
-          text.split('\n').where((l) => l.trim().isNotEmpty).toList();
-      final result = <_ParsedResult>[];
+      final lines = cleanText.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final results = <_ParsedResult>[];
 
       for (final line in lines) {
         final parts = line.split('\t').map((s) => s.trim()).toList();
@@ -224,8 +229,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
         final ms = int.tryParse(parts[4]) ?? 0;
 
         final ids = await svc.findParticipant(widget.tId, fullName, teamName);
-
-        result.add(_ParsedResult(
+        results.add(_ParsedResult(
           fullName: fullName,
           teamName: teamName,
           min: min,
@@ -235,7 +239,10 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
           teamId: ids.teamId,
         ));
       }
-      return result;
+      setST(() {
+        preview = results;
+        parsing = false;
+      });
     }
 
     showDialog(
@@ -244,23 +251,76 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
         builder: (ctx, setST) => AlertDialog(
           title: const Text('Імпорт результатів (Excel)'),
           content: SizedBox(
-            width: 600,
+            width: 700,
+            height: 500,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Вставте дані з Excel (5 стовпців):\nПІБ | Команда | Хв | Сек | Мс',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 TextField(
                   controller: textC,
-                  maxLines: 8,
+                  maxLines: 5,
                   decoration: const InputDecoration(
                     hintText: 'Шуба Ростислав Едуардович\tЕРП\t0\t24\t43',
                     border: OutlineInputBorder(),
                   ),
-                  onChanged: (_) => setST(() {}),
+                  onChanged: (val) => updatePreview(val, setST),
+                ),
+                const SizedBox(height: 12),
+                const Text('Попередній перегляд:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: parsing
+                        ? const Center(child: CircularProgressIndicator())
+                        : preview.isEmpty
+                            ? const Center(child: Text('Немає даних для імпорту', style: TextStyle(color: Colors.grey)))
+                            : ListView.separated(
+                                padding: const EdgeInsets.all(8),
+                                itemCount: preview.length,
+                                separatorBuilder: (_, __) => const Divider(),
+                                itemBuilder: (ctx, i) {
+                                  final p = preview[i];
+                                  final ok = p.teamId != null && (widget.category == SwimmingCategory.relay || p.playerId != null);
+                                  return Row(
+                                    children: [
+                                      Icon(
+                                        ok ? Icons.check_circle : Icons.error,
+                                        color: ok ? Colors.green : Colors.red,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(p.fullName, style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: (widget.category != SwimmingCategory.relay && p.playerId == null) ? Colors.red : null,
+                                            )),
+                                            Text('${p.teamName} • ${p.min}:${p.sec.toString().padLeft(2, '0')}.${p.ms.toString().padLeft(2, '0')}',
+                                                style: TextStyle(fontSize: 12, color: p.teamId == null ? Colors.red : Colors.grey.shade600)),
+                                          ],
+                                        ),
+                                      ),
+                                      if (!ok)
+                                        Text(
+                                          p.teamId == null ? 'Команду не знайдено' : 'Учасника не знайдено',
+                                          style: const TextStyle(fontSize: 10, color: Colors.red),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                  ),
                 ),
               ],
             ),
@@ -271,24 +331,16 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
               child: const Text('Скасувати'),
             ),
             FilledButton(
-              onPressed: importing
+              onPressed: (importing || preview.isEmpty || !preview.any((p) => p.teamId != null && (widget.category == SwimmingCategory.relay || p.playerId != null)))
                   ? null
                   : () async {
                       setST(() => importing = true);
                       try {
-                        final parsed = await parseText(textC.text);
-                        if (parsed.isEmpty) {
-                          setST(() {
-                            importing = false;
-                            error = 'Немає коректних даних';
-                          });
-                          return;
-                        }
-
                         final svc = ref.read(swimmingServiceProvider);
                         int count = 0;
-                        for (final p in parsed) {
-                          if (p.teamId != null) {
+                        for (final p in preview) {
+                          final ok = p.teamId != null && (widget.category == SwimmingCategory.relay || p.playerId != null);
+                          if (ok) {
                             await svc.saveResult(SwimmingResult(
                               tournamentId: widget.tId,
                               category: widget.category,
@@ -309,10 +361,12 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                           );
                         }
                       } catch (e) {
-                        setST(() {
-                          importing = false;
-                          error = 'Помилка: $e';
-                        });
+                        setST(() => importing = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Помилка імпорту: $e')),
+                          );
+                        }
                       }
                     },
               child: Text(importing ? 'Імпорт...' : 'Імпортувати'),
@@ -507,13 +561,13 @@ class _SwimmingResultDialogState extends ConsumerState<_SwimmingResultDialog> {
               teamName: r['team_name'] as String,
             ))
         .toList();
+    if (_selectedTeamId != null && !_isRelay) {
+      await _loadPlayers(_selectedTeamId!);
+    }
     setState(() {
       _teams = teams;
       _loading = false;
     });
-    if (_selectedTeamId != null && !_isRelay) {
-      await _loadPlayers(_selectedTeamId!);
-    }
   }
 
   Future<void> _loadPlayers(int teamId) async {
@@ -590,7 +644,9 @@ class _SwimmingResultDialogState extends ConsumerState<_SwimmingResultDialog> {
                       // Player dropdown – key forces rebuild when team changes
                       DropdownButtonFormField<int>(
                         key: ValueKey('player_$_selectedTeamId'),
-                        value: _selectedPlayerId,
+                        value: _players.any((p) => p.playerId == _selectedPlayerId)
+                            ? _selectedPlayerId
+                            : null,
                         decoration: const InputDecoration(
                           labelText: 'Учасник',
                           border: OutlineInputBorder(),

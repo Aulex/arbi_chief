@@ -288,13 +288,19 @@ class SwimmingService {
     final teamId = teamRows.first['team_id'] as int;
 
     // 2. Find player within that team in the tournament
+    // Construct the full name in SQL, replacing multiple spaces with single space for better matching
     final playerRows = await db.rawQuery('''
       SELECT p.player_id
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_PLAYER p ON pt.player_id = p.player_id
       WHERE pt.t_id = ? AND pt.team_id = ?
-      AND (TRIM(p.player_surname || ' ' || p.player_name || ' ' || p.player_lastname) = ? COLLATE NOCASE)
-    ''', [tId, teamId, fullName.trim()]);
+      AND (
+        TRIM(REPLACE(REPLACE(REPLACE(
+          p.player_surname || ' ' || p.player_name || ' ' || p.player_lastname,
+          '  ', ' '), '  ', ' '), '  ', ' ')
+        ) = ? COLLATE NOCASE
+      )
+    ''', [tId, teamId, fullName.trim().replaceAll(RegExp(r'\s+'), ' ')]);
 
     return (
       playerId: playerRows.isNotEmpty ? playerRows.first['player_id'] as int : null,
