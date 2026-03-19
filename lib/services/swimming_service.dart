@@ -10,41 +10,123 @@ class SwimmingService {
 
   Future<int> saveResult(SwimmingResult result) async {
     final db = await _dbService.database;
-    final map = result.toMap();
+    
+    // 1. Get Entity ID
+    int? entityId;
+    if (result.playerId != null) {
+      final rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [result.playerId]);
+      if (rows.isNotEmpty) entityId = rows.first['entity_id'] as int?;
+    } else {
+      final rows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [result.teamId]);
+      if (rows.isNotEmpty) entityId = rows.first['entity_id'] as int?;
+    }
+
+    if (entityId == null) throw Exception("Entity ID not found for participant");
+
+    // 2. Create/Update CMP_EVENT
+    int eventId;
     if (result.id != null) {
-      await db.update('CMP_SWIMMING_RESULT', map,
-          where: 'sr_id = ?', whereArgs: [result.id]);
+      // Find event associated with this subevent
+      final subRows = await db.query('CMP_SUBEVENT', columns: ['ev_id'], where: 'se_id = ?', whereArgs: [result.id]);
+      eventId = subRows.first['ev_id'] as int;
+      
+      await db.update('CMP_EVENT', {
+        'event_result': result.totalDsec.toString(),
+      }, where: 'event_id = ?', whereArgs: [eventId]);
+    } else {
+      // Find or create a tournament stage for this tournament
+      final stageRows = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [result.tournamentId]);
+      int tsId = stageRows.isNotEmpty ? stageRows.first['ts_id'] as int : 1;
+
+      eventId = await db.insert('CMP_EVENT', {
+        'ts_id': tsId,
+        'et_id': result.category == SwimmingCategory.relay ? 2 : 1,
+        'event_result': result.totalDsec.toString(),
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_s_ev',
+      });
+    }
+
+    // 3. Save CMP_SUBEVENT
+    final subEventMap = {
+      'ev_id': eventId,
+      'entity_id': entityId,
+      'se_result': result.totalDsec.toDouble(),
+      'se_note': result.category.name,
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_s_se',
+    };
+
+    if (result.id != null) {
+      await db.update('CMP_SUBEVENT', subEventMap, where: 'se_id = ?', whereArgs: [result.id]);
       return result.id!;
     } else {
-      return await db.insert('CMP_SWIMMING_RESULT', map);
+      return await db.insert('CMP_SUBEVENT', subEventMap);
     }
   }
 
-  Future<void> deleteResult(int srId) async {
+  Future<void> deleteResult(int seId) async {
     final db = await _dbService.database;
-    await db.delete('CMP_SWIMMING_RESULT',
-        where: 'sr_id = ?', whereArgs: [srId]);
+    // Get event ID first
+    final rows = await db.query('CMP_SUBEVENT', columns: ['ev_id'], where: 'se_id = ?', whereArgs: [seId]);
+    if (rows.isNotEmpty) {
+      final evId = rows.first['ev_id'] as int;
+      await db.delete('CMP_SUBEVENT', where: 'se_id = ?', whereArgs: [seId]);
+      await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [evId]);
+    }
   }
 
   Future<void> deleteAllResults(int tId) async {
     final db = await _dbService.database;
-    await db.delete('CMP_SWIMMING_RESULT',
-        where: 't_id = ?', whereArgs: [tId]);
+    // Find all subevents for events in this tournament (via stage)
+    await db.rawDelete('''
+      DELETE FROM CMP_SUBEVENT 
+      WHERE ev_id IN (
+        SELECT event_id FROM CMP_EVENT 
+        WHERE ts_id IN (SELECT ts_id FROM CMP_TOURNAMENT_STAGE WHERE t_id = ?)
+      )
+    ''', [tId]);
+    await db.rawDelete('''
+      DELETE FROM CMP_EVENT 
+      WHERE ts_id IN (SELECT ts_id FROM CMP_TOURNAMENT_STAGE WHERE t_id = ?)
+    ''', [tId]);
   }
 
   /// Get all results for a tournament, optionally filtered by category.
   Future<List<SwimmingResult>> getResults(int tId,
       {SwimmingCategory? category}) async {
     final db = await _dbService.database;
-    final where = category != null
-        ? 't_id = ? AND category = ?'
-        : 't_id = ?';
-    final whereArgs = category != null
-        ? [tId, category.name]
-        : [tId];
-    final rows = await db.query('CMP_SWIMMING_RESULT',
-        where: where, whereArgs: whereArgs, orderBy: 'time_total ASC');
-    return rows.map((r) => SwimmingResult.fromMap(r)).toList();
+    
+    String sql = '''
+      SELECT se.se_id as sr_id, e.ts_id as t_id, se.se_result as time_total, se.se_note as category,
+             p.player_id, t.team_id
+      FROM CMP_SUBEVENT se
+      JOIN CMP_EVENT e ON se.ev_id = e.event_id
+      JOIN CMP_TOURNAMENT_STAGE stage ON e.ts_id = stage.ts_id
+      LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
+      LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
+      WHERE stage.t_id = ?
+    ''';
+    
+    final List<dynamic> args = [tId];
+    if (category != null) {
+      sql += ' AND se.se_note = ?';
+      args.add(category.name);
+    }
+    sql += ' ORDER BY se.se_result ASC';
+
+    final rows = await db.rawQuery(sql, args);
+    return rows.map((r) {
+      final total = (r['time_total'] as num).toInt();
+      return SwimmingResult(
+        id: r['sr_id'] as int,
+        tournamentId: tId,
+        playerId: r['player_id'] as int?,
+        teamId: r['team_id'] as int ?? 0,
+        category: SwimmingCategory.fromDb(r['category'] as String),
+        timeMin: total ~/ 6000,
+        timeSec: (total % 6000) ~/ 100,
+        timeDsec: total % 100,
+      );
+    }).toList();
   }
 
   // ── Individual Standings ──
@@ -55,23 +137,36 @@ class SwimmingService {
       int tId, SwimmingCategory category) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
-      SELECT sr.*, p.player_surname, p.player_name, p.player_lastname,
-             t.team_name
-      FROM CMP_SWIMMING_RESULT sr
-      LEFT JOIN CMP_PLAYER p ON sr.player_id = p.player_id
-      JOIN CMP_TEAM t ON sr.team_id = t.team_id
-      WHERE sr.t_id = ? AND sr.category = ?
-      ORDER BY sr.time_total ASC
+      SELECT se.se_id as sr_id, e.ts_id as t_id, se.se_result as time_total, se.se_note as category,
+             p.player_id, p.player_surname, p.player_name, p.player_lastname,
+             t.team_id, t.team_name
+      FROM CMP_SUBEVENT se
+      JOIN CMP_EVENT e ON se.ev_id = e.event_id
+      JOIN CMP_TOURNAMENT_STAGE stage ON e.ts_id = stage.ts_id
+      LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
+      LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
+      WHERE stage.t_id = ? AND se.se_note = ?
+      ORDER BY se.se_result ASC
     ''', [tId, category.name]);
 
     final ranked = <RankedSwimmingResult>[];
     int place = 1;
     for (int i = 0; i < rows.length; i++) {
-      final r = SwimmingResult.fromMap(rows[i]);
+      final total = (rows[i]['time_total'] as num).toInt();
+      final r = SwimmingResult(
+        id: rows[i]['sr_id'] as int,
+        tournamentId: tId,
+        playerId: rows[i]['player_id'] as int?,
+        teamId: rows[i]['team_id'] as int ?? 0,
+        category: SwimmingCategory.fromDb(rows[i]['category'] as String),
+        timeMin: total ~/ 6000,
+        timeSec: (total % 6000) ~/ 100,
+        timeDsec: total % 100,
+      );
       // Tie: same time as previous = same place
       if (i > 0) {
-        final prev = SwimmingResult.fromMap(rows[i - 1]);
-        if (r.totalDsec != prev.totalDsec) {
+        final prevTotal = (rows[i - 1]['time_total'] as num).toInt();
+        if (total != prevTotal) {
           place = i + 1;
         }
       }

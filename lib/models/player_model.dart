@@ -6,6 +6,8 @@ class Player {
   final int player_gender;
   final String player_date_birth; // Stored as yyyy-mm-dd in SQLite
   final int? t_type;
+  final int? entity_id;
+  final String? sync_uid;
 
   const Player({
     this.player_id,
@@ -15,6 +17,8 @@ class Player {
     required this.player_gender,
     required this.player_date_birth,
     this.t_type,
+    this.entity_id,
+    this.sync_uid,
   });
 
   // --- Date Helpers ---
@@ -93,6 +97,7 @@ class Player {
       player_gender: json['player_gender'] as int? ?? 0,
       player_date_birth: json['player_date_birth'] as String? ?? '',
       t_type: json['t_type'] as int?,
+      entity_id: json['entity_id'] as int?,
     );
   }
 
@@ -105,6 +110,7 @@ class Player {
       'player_gender': player_gender,
       'player_date_birth': player_date_birth,
       't_type': t_type,
+      'entity_id': entity_id,
     };
   }
 }
