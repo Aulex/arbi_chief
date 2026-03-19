@@ -442,6 +442,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         if (line.contains('\t')) {
           // Tab-separated (Excel paste)
           parts = line.split('\t').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+          // If we have "Full Name" [TAB] "Team" (2-3 parts total)
+          if (parts.length < 4 && parts.isNotEmpty) {
+            final nameComponents = parts[0].split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+            if (nameComponents.length >= 3) {
+              // Rebuild parts: [Surname, Name, Lastname, ...remaining components/columns]
+              parts = [...nameComponents, ...parts.sublist(1)];
+            }
+          }
         } else if (line.contains(';')) {
           // Semicolon-separated
           parts = line.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
