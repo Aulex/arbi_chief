@@ -80,7 +80,7 @@ class _SwimmingTeamStandingsTabState
         ),
         const SizedBox(height: 4),
         Text(
-          'Очки = сума місць (2×Ч35 + 2×Ч49 + 1×Ч50 + 1×Жін. + Естафета). Менше очок = краще.',
+          'Очки = сума місць (2×Ч35 + 2×Ч49 + 1×Ч50 + 1×Ж35 + 1×Ж49 + Естафета). Менше очок = краще.',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 12),
@@ -128,7 +128,11 @@ class _SwimmingTeamStandingsTabState
             numeric: true),
         DataColumn(
             label:
-                Text('Жін.', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('Ж35', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label:
+                Text('Ж49', style: TextStyle(fontWeight: FontWeight.bold)),
             numeric: true),
         DataColumn(
             label: Text('Естаф.',
@@ -143,10 +147,8 @@ class _SwimmingTeamStandingsTabState
         final m35 = _formatPlaces(s.categoryPlaces[SwimmingCategory.m35] ?? []);
         final m49 = _formatPlaces(s.categoryPlaces[SwimmingCategory.m49] ?? []);
         final m50 = _formatPlaces(s.categoryPlaces[SwimmingCategory.m50] ?? []);
-        // Best woman place from either f35 or f49
-        final f35p = s.categoryPlaces[SwimmingCategory.f35] ?? [];
-        final f49p = s.categoryPlaces[SwimmingCategory.f49] ?? [];
-        final bestWoman = _bestWomanPlace(f35p, f49p);
+        final f35 = _formatPlaces(s.categoryPlaces[SwimmingCategory.f35] ?? []);
+        final f49 = _formatPlaces(s.categoryPlaces[SwimmingCategory.f49] ?? []);
         final relay =
             _formatPlaces(s.categoryPlaces[SwimmingCategory.relay] ?? []);
 
@@ -180,7 +182,8 @@ class _SwimmingTeamStandingsTabState
             DataCell(Text(m35)),
             DataCell(Text(m49)),
             DataCell(Text(m50)),
-            DataCell(Text(bestWoman)),
+            DataCell(Text(f35)),
+            DataCell(Text(f49)),
             DataCell(Text(relay)),
             DataCell(Text(
               '${s.totalPoints}',
@@ -195,14 +198,5 @@ class _SwimmingTeamStandingsTabState
   String _formatPlaces(List<int> places) {
     if (places.isEmpty) return '-';
     return places.join('+');
-  }
-
-  String _bestWomanPlace(List<int> f35, List<int> f49) {
-    final all = <int>[];
-    if (f35.isNotEmpty) all.add(f35.first);
-    if (f49.isNotEmpty) all.add(f49.first);
-    if (all.isEmpty) return '-';
-    all.sort();
-    return '${all.first}';
   }
 }

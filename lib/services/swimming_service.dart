@@ -159,11 +159,10 @@ class SwimmingService {
       // 1 best from M50
       final m50Places = bestPlacesForTeam(m50Standings, teamId, 1);
 
-      // 1 best woman from EITHER f35 or f49 (best single result)
+      // 1 from F35 and 1 from F49
       final f35Places = bestPlacesForTeam(f35Standings, teamId, 1);
       final f49Places = bestPlacesForTeam(f49Standings, teamId, 1);
-      final bestWomanPlace = [f35Places.first, f49Places.first]..sort();
-      final womanPlaces = [bestWomanPlace.first];
+      final womanPlaces = [...f35Places, ...f49Places];
 
       // 1 relay
       final relayPlaces = bestPlacesForTeam(relayStandings, teamId, 1);
@@ -281,9 +280,14 @@ class SwimmingService {
       int tId, String fullName, String teamName) async {
     final db = await _dbService.database;
 
-    // 1. Find team
-    final teamRows = await db.query('CMP_TEAM',
-        where: 'team_name = ? COLLATE NOCASE', whereArgs: [teamName.trim()]);
+    // 1. Find team within the tournament
+    final teamRows = await db.rawQuery('''
+      SELECT DISTINCT t.team_id
+      FROM CMP_TEAM t
+      JOIN CMP_PLAYER_TEAM pt ON t.team_id = pt.team_id
+      WHERE pt.t_id = ? AND t.team_name = ? COLLATE NOCASE
+    ''', [tId, teamName.trim()]);
+
     if (teamRows.isEmpty) return (playerId: null, teamId: null);
     final teamId = teamRows.first['team_id'] as int;
 
@@ -296,7 +300,7 @@ class SwimmingService {
       WHERE pt.t_id = ? AND pt.team_id = ?
       AND (
         TRIM(REPLACE(REPLACE(REPLACE(
-          p.player_surname || ' ' || p.player_name || ' ' || p.player_lastname,
+          COALESCE(p.player_surname, '') || ' ' || COALESCE(p.player_name, '') || ' ' || COALESCE(p.player_lastname, ''),
           '  ', ' '), '  ', ' '), '  ', ' ')
         ) = ? COLLATE NOCASE
       )
