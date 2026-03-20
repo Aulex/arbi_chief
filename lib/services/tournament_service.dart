@@ -661,30 +661,26 @@ class TournamentService {
   /// [rowPlayerSets] is the detail string for the row player (e.g. "11:7 11:4 8:11").
   /// [colPlayerSets] is the mirror detail for the opponent (e.g. "7:11 4:11 11:8").
   /// Win/loss (1.0/0.0) is derived from who won more sets.
-  Future<void> saveTableTennisResult(int eventId, int rowPlayerId, {
+  Future<void> saveTableTennisResult(int eventId, int rowPlayerId, int colPlayerId, {
     required double rowResult,
     required String rowDetail,
     required String colDetail,
   }) async {
     final db = await _dbService.database;
-    
-    // Get Entity ID for the row player
+
+    // Get Entity IDs for both players
     final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [rowPlayerId]);
     final rowEntId = pRows.first['entity_id'] as int;
-
-    final subRows = await db.query('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
-    if (subRows.length < 2) return;
+    final cRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [colPlayerId]);
+    final colEntId = cRows.first['entity_id'] as int;
 
     await db.transaction((txn) async {
       // Clear old subevents for this event to rebuild from sets
       await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
-      
+
       // Parse rowDetail (e.g. "11:7 11:4")
       final rowSets = rowDetail.trim().split(RegExp(r'\s+'));
       final colSets = colDetail.trim().split(RegExp(r'\s+'));
-      
-      // Find the entity IDs
-      final otherEntId = subRows.firstWhere((r) => r['entity_id'] != rowEntId)['entity_id'] as int;
 
       for (int i = 0; i < rowSets.length; i++) {
         final rScore = double.tryParse(rowSets[i].split(':')[0]) ?? 0.0;
@@ -699,7 +695,7 @@ class TournamentService {
         });
         await txn.insert('CMP_SUBEVENT', {
           'ev_id': eventId,
-          'entity_id': otherEntId,
+          'entity_id': colEntId,
           'se_result': cScore,
           'se_note': 'Set ${i+1}',
           'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_c_s$i',

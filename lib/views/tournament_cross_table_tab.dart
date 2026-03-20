@@ -765,16 +765,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         );
       },
     ).then((_) {
-      for (final c in controllers) {
-        c.row.dispose();
-        c.col.dispose();
-      }
-      for (final f in focusNodes) {
-        f.row.dispose();
-        f.col.dispose();
-      }
-      saveFocusNode.dispose();
-      cancelFocusNode.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final c in controllers) {
+          c.row.dispose();
+          c.col.dispose();
+        }
+        for (final f in focusNodes) {
+          f.row.dispose();
+          f.col.dispose();
+        }
+        saveFocusNode.dispose();
+        cancelFocusNode.dispose();
+      });
     });
   }
 
@@ -1149,16 +1151,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         );
       },
     ).then((_) {
-      for (final c in controllers) {
-        c.row.dispose();
-        c.col.dispose();
-      }
-      for (final f in focusNodes) {
-        f.row.dispose();
-        f.col.dispose();
-      }
-      saveFocusNode.dispose();
-      cancelFocusNode.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final c in controllers) {
+          c.row.dispose();
+          c.col.dispose();
+        }
+        for (final f in focusNodes) {
+          f.row.dispose();
+          f.col.dispose();
+        }
+        saveFocusNode.dispose();
+        cancelFocusNode.dispose();
+      });
     });
   }
 
@@ -1209,7 +1213,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       whitePlayerId: rowPlayerId,
       blackPlayerId: colPlayerId,
     );
-    await svc.saveTableTennisResult(eventId!, rowPlayerId,
+    await svc.saveTableTennisResult(eventId!, rowPlayerId, colPlayerId,
       rowResult: rowResult,
       rowDetail: rowDetail,
       colDetail: colDetail,
