@@ -48,24 +48,18 @@ class TournamentService {
 
   Future<void> deleteTournament(int id) async {
     final db = await _dbService.database;
-    // Delete subevents, player_events, and events for all stages of this tournament
-    final stages = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [id]);
-    for (final s in stages) {
-      final tsId = s['ts_id'] as int;
-      final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 'ts_id = ?', whereArgs: [tsId]);
-      for (final e in events) {
-        await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
-      }
-      await db.delete('CMP_EVENT', where: 'ts_id = ?', whereArgs: [tsId]);
+    // Delete subevents and events for this tournament
+    final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 't_id = ?', whereArgs: [id]);
+    for (final e in events) {
+      await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
     }
-    await db.delete('CMP_TOURNAMENT_STAGE', where: 't_id = ?', whereArgs: [id]);
+    await db.delete('CMP_EVENT', where: 't_id = ?', whereArgs: [id]);
     // Delete player-team attribute values, then player-team assignments
     final teamAssignments = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 't_id = ?', whereArgs: [id]);
     for (final a in teamAssignments) {
       await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ?', whereArgs: [a['pte_id']]);
     }
     await db.delete('CMP_PLAYER_TEAM', where: 't_id = ?', whereArgs: [id]);
-    await db.delete('CMP_SWIMMING_RESULT', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
@@ -247,25 +241,9 @@ class TournamentService {
 
   // --- Games (CMP_EVENT + CMP_SUBEVENT) ---
 
-  /// Ensure a default stage exists for the tournament, return its ts_id.
-  Future<int> getOrCreateDefaultStage(int tId) async {
-    final db = await _dbService.database;
-    final rows = await db.query(
-      'CMP_TOURNAMENT_STAGE',
-      where: 't_id = ?',
-      whereArgs: [tId],
-      limit: 1,
-    );
-    if (rows.isNotEmpty) return rows.first['ts_id'] as int;
-    return await db.insert('CMP_TOURNAMENT_STAGE', {
-      't_id': tId,
-      'ts_name': 'Основний етап',
-    });
-  }
-
   /// Create a game between two players and return the event_id.
   Future<int> createGame({
-    required int tsId,
+    required int tId,
     required int whitePlayerId,
     required int blackPlayerId,
   }) async {
@@ -279,7 +257,7 @@ class TournamentService {
     final bEntId = bRows.first['entity_id'] as int;
 
     final eventId = await db.insert('CMP_EVENT', {
-      'ts_id': tsId,
+      't_id': tId,
       'event_date_begin': today,
       'et_id': 1, // Одиночний
     });
@@ -311,13 +289,12 @@ class TournamentService {
              p2.player_name AS b_name, p2.player_lastname AS b_lastname,
              p2.player_gender AS b_gender, p2.player_date_birth AS b_dob
       FROM CMP_EVENT e
-      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
       -- Get two distinct entities for each event
       JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id
       JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id > se1.entity_id
       JOIN CMP_PLAYER p1 ON se1.entity_id = p1.entity_id
       JOIN CMP_PLAYER p2 ON se2.entity_id = p2.entity_id
-      WHERE ts.t_id = ?
+      WHERE e.t_id = ?
       -- Group to avoid duplicates if there are multiple sets (subevents)
       GROUP BY e.event_id
       ORDER BY e.event_id
@@ -409,14 +386,13 @@ class TournamentService {
              p2.player_gender AS b_gender, p2.player_date_birth AS b_dob,
              COALESCE(CAST(v1.attr_value AS INTEGER), 0) AS board_number
       FROM CMP_EVENT e
-      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
       JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id
       JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id > se1.entity_id
       JOIN CMP_PLAYER p1 ON se1.entity_id = p1.entity_id
       JOIN CMP_PLAYER p2 ON se2.entity_id = p2.entity_id
-      LEFT JOIN CMP_PLAYER_TEAM pt1 ON pt1.player_id = p1.player_id AND pt1.player_state = 0 AND pt1.t_id = ts.t_id
+      LEFT JOIN CMP_PLAYER_TEAM pt1 ON pt1.player_id = p1.player_id AND pt1.player_state = 0 AND pt1.t_id = e.t_id
       LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE v1 ON pt1.pte_id = v1.pte_id AND v1.attr_id = 9
-      WHERE ts.t_id = ?
+      WHERE e.t_id = ?
       GROUP BY e.event_id
       ORDER BY board_number, e.event_id
     ''', [tId]);
@@ -504,7 +480,7 @@ class TournamentService {
 
   /// Mark a player as no-show: set all their games as losses (0) and opponents as wins (1).
   /// Creates games if they don't exist yet. All in a single transaction.
-  Future<void> markPlayerNoShow(int tId, int tsId, int playerId, List<int> opponentIds, {Set<int> alsoAbsentIds = const {}}) async {
+  Future<void> markPlayerNoShow(int tId, int playerId, List<int> opponentIds, {Set<int> alsoAbsentIds = const {}}) async {
     if (opponentIds.isEmpty) return;
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
@@ -523,10 +499,9 @@ class TournamentService {
         final rows = await txn.rawQuery('''
           SELECT e.event_id
           FROM CMP_EVENT e
-          JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
           JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id AND se1.entity_id = ?
           JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id = ?
-          WHERE ts.t_id = ?
+          WHERE e.t_id = ?
           LIMIT 1
         ''', [playerEntId, opponentEntId, tId]);
 
@@ -536,7 +511,7 @@ class TournamentService {
         } else {
           // Create game
           eventId = await txn.insert('CMP_EVENT', {
-            'ts_id': tsId,
+            't_id': tId,
             'event_date_begin': today,
             'et_id': 1,
           });
@@ -584,9 +559,8 @@ class TournamentService {
     final rows = await db.rawQuery('''
       SELECT e.event_id
       FROM CMP_EVENT e
-      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
       JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id AND se.entity_id = ?
-      WHERE ts.t_id = ? AND se.es_id = 4
+      WHERE e.t_id = ? AND se.es_id = 4
     ''', [entId, tId]);
     final eventIds = rows.map((r) => r['event_id'] as int).toList();
     await deleteGames(eventIds);
@@ -606,10 +580,9 @@ class TournamentService {
     final rows = await db.rawQuery('''
       SELECT e.event_id
       FROM CMP_EVENT e
-      JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
       JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id AND se1.entity_id = ?
       JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id = ?
-      WHERE ts.t_id = ?
+      WHERE e.t_id = ?
       LIMIT 1
     ''', [ent1, ent2, tId]);
     if (rows.isEmpty) return null;

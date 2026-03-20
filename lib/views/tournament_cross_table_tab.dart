@@ -421,15 +421,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         await svc.saveResultForPlayer(eventId, rowPlayerId, null);
       }
     } else {
-      // Run independent lookups in parallel
-      late final int tsId;
-      int? eventId;
-      await Future.wait([
-        svc.getOrCreateDefaultStage(widget.tId).then((v) => tsId = v),
-        svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId).then((v) => eventId = v),
-      ]);
+      int? eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
       eventId ??= await svc.createGame(
-        tsId: tsId,
+        tId: widget.tId,
         whitePlayerId: rowPlayerId,
         blackPlayerId: colPlayerId,
       );
@@ -1201,15 +1195,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     _applyTTResultInMemory(rowPlayerId, colPlayerId, rowResult, rowDetail, colDetail);
 
     final svc = ref.read(tournamentServiceProvider);
-    // Run independent lookups in parallel
-    late final int tsId;
-    int? eventId;
-    await Future.wait([
-      svc.getOrCreateDefaultStage(widget.tId).then((v) => tsId = v),
-      svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId).then((v) => eventId = v),
-    ]);
+    int? eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
     eventId ??= await svc.createGame(
-      tsId: tsId,
+      tId: widget.tId,
       whitePlayerId: rowPlayerId,
       blackPlayerId: colPlayerId,
     );
@@ -2517,12 +2505,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final svc = ref.read(tournamentServiceProvider);
     final teamSvc = ref.read(teamServiceProvider);
     final playerId = player.player.player_id!;
-    final tsId = await svc.getOrCreateDefaultStage(widget.tId);
     final opponentIds = allPlayers
         .where((p) => p.player.player_id != playerId && p.player.player_id! > 0)
         .map((p) => p.player.player_id!)
         .toList();
-    await svc.markPlayerNoShow(widget.tId, tsId, playerId, opponentIds, alsoAbsentIds: _absentPlayerIds);
+    await svc.markPlayerNoShow(widget.tId, playerId, opponentIds, alsoAbsentIds: _absentPlayerIds);
     await teamSvc.markPlayerNoShowAttr(playerId, widget.tId);
     await _loadData();
   }

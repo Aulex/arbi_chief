@@ -105,35 +105,7 @@ void main() async {
       }
     }
 
-    // 4. Swimming -> Event & SubEvent
-    print('Migrating Swimming Results...');
-    var swimming = await txn.rawQuery('''
-      SELECT sr.*, p.entity_id as p_ent, t.entity_id as t_ent
-      FROM CMP_SWIMMING_RESULT sr
-      LEFT JOIN CMP_PLAYER p ON sr.player_id = p.player_id
-      LEFT JOIN CMP_TEAM t ON sr.team_id = t.team_id
-    ''');
-
-    for (var sr in swimming) {
-      // Create a specific event for this swimming entry
-      var eventId = await txn.insert('CMP_EVENT', {
-        'ts_id': 1, // Default stage (hope it exists)
-        'et_id': 1, // Default single
-        'event_result': sr['time_total'].toString(),
-        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_mig_sr_ev_${sr['sr_id']}',
-      });
-
-      var entityId = sr['p_ent'] ?? sr['t_ent'];
-      if (entityId != null) {
-        await txn.insert('CMP_SUBEVENT', {
-          'ev_id': eventId,
-          'entity_id': entityId,
-          'se_result': (sr['time_total'] as int).toDouble(),
-          'se_note': sr['category'],
-          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_mig_sr_se_${sr['sr_id']}',
-        });
-      }
-    }
+    // 4. Swimming migration removed (CMP_SWIMMING_RESULT table dropped)
   });
 
   print('Migration complete!');

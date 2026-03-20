@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -114,7 +114,7 @@ class DatabaseService {
           }
         }
         if (oldVersion < 6) {
-          // Swimming results table
+          // Swimming results table (legacy, will be dropped in v8)
           await db.execute('''
             CREATE TABLE IF NOT EXISTS CMP_SWIMMING_RESULT (
               sr_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -191,6 +191,20 @@ class DatabaseService {
           for (final t in types) {
             await db.insert('CMP_EVENT_TYPE', {'et_name': t});
           }
+        }
+        if (oldVersion < 8) {
+          // Add t_id directly to CMP_EVENT (replacing ts_id → stage → tournament)
+          await db.execute('ALTER TABLE CMP_EVENT ADD COLUMN t_id INTEGER REFERENCES CMP_TOURNAMENT(t_id)');
+          // Populate t_id from the stage's tournament
+          await db.execute('''
+            UPDATE CMP_EVENT SET t_id = (
+              SELECT ts.t_id FROM CMP_TOURNAMENT_STAGE ts
+              WHERE ts.ts_id = CMP_EVENT.ts_id
+            )
+          ''');
+          // Drop the legacy tables
+          await db.execute('DROP TABLE IF EXISTS CMP_TOURNAMENT_STAGE');
+          await db.execute('DROP TABLE IF EXISTS CMP_SWIMMING_RESULT');
         }
       },
       onCreate: (db, version) async {
@@ -310,32 +324,20 @@ class DatabaseService {
           )
         ''');
 
-        // 11. CMP_TOURNAMENT_STAGE
-        await db.execute('''
-          CREATE TABLE CMP_TOURNAMENT_STAGE (
-            ts_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            t_id INTEGER,
-            ts_name TEXT,
-            sync_uid TEXT,
-            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id)
-          )
-        ''');
-
-        // 12. CMP_EVENT
+        // 11. CMP_EVENT
         await db.execute('''
           CREATE TABLE CMP_EVENT (
             event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type INTEGER,
+            t_id INTEGER,
             et_id INTEGER,
             event_date_begin TEXT,
             event_date_end TEXT,
             event_result TEXT,
             es_id INTEGER,
-            ts_id INTEGER,
             sync_uid TEXT,
+            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (et_id) REFERENCES CMP_EVENT_TYPE (et_id),
-            FOREIGN KEY (es_id) REFERENCES CMP_EVENT_STATE (es_id),
-            FOREIGN KEY (ts_id) REFERENCES CMP_TOURNAMENT_STAGE (ts_id)
+            FOREIGN KEY (es_id) REFERENCES CMP_EVENT_STATE (es_id)
           )
         ''');
 
@@ -427,25 +429,6 @@ class DatabaseService {
             sync_uid TEXT,
             FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
             FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
-          )
-        ''');
-
-        // 20. CMP_SWIMMING_RESULT
-        await db.execute('''
-          CREATE TABLE CMP_SWIMMING_RESULT (
-            sr_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            t_id INTEGER,
-            player_id INTEGER,
-            team_id INTEGER,
-            category TEXT NOT NULL,
-            time_min INTEGER NOT NULL DEFAULT 0,
-            time_sec INTEGER NOT NULL DEFAULT 0,
-            time_dsec INTEGER NOT NULL DEFAULT 0,
-            time_total INTEGER NOT NULL DEFAULT 0,
-            sync_uid TEXT,
-            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
-            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
-            FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id)
           )
         ''');
 

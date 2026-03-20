@@ -42,7 +42,6 @@ class DatabaseSyncService {
     'CMP_TOURNAMENT_ORGANIZER',
     'CMP_TOURNAMENT',
     'CMP_ATTR_VALUE',
-    'CMP_TOURNAMENT_STAGE',
     'CMP_EVENT',
     'CMP_PLAYER',
     'CMP_TEAM',
@@ -50,7 +49,6 @@ class DatabaseSyncService {
     'CMP_PLAYER_TEAM',
     'CMP_PLAYER_TEAM_ATTR_VALUE',
     'CMP_PLAYER_TOURNAMENT',
-    'CMP_SWIMMING_RESULT',
   ];
 
   // ──────────────────────────────────────────────

@@ -72,8 +72,6 @@ class TeamService {
     if (entityId != null) {
       await db.delete('CMP_SUBEVENT', where: 'entity_id = ?', whereArgs: [entityId]);
     }
-    // Delete CMP_SWIMMING_RESULT records
-    await db.delete('CMP_SWIMMING_RESULT', where: 'team_id = ?', whereArgs: [id]);
     // Delete attr values for all player-team assignments of this team
     final assignments = await db.query(
       'CMP_PLAYER_TEAM',
@@ -250,9 +248,8 @@ class TeamService {
       final eventRows = await db.rawQuery('''
         SELECT DISTINCT e.event_id
         FROM CMP_EVENT e
-        JOIN CMP_TOURNAMENT_STAGE ts ON e.ts_id = ts.ts_id
         JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
-        WHERE ts.t_id = ? AND se.entity_id = ?
+        WHERE e.t_id = ? AND se.entity_id = ?
       ''', [tId, entId]);
       for (final er in eventRows) {
         final eventId = er['event_id'] as int;

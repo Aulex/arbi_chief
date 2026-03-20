@@ -82,8 +82,6 @@ class PlayerService {
     await db.delete('CMP_PLAYER_TEAM', where: 'player_id = ?', whereArgs: [id]);
     // Delete CMP_PLAYER_TOURNAMENT records
     await db.delete('CMP_PLAYER_TOURNAMENT', where: 'player_id = ?', whereArgs: [id]);
-    // Delete CMP_SWIMMING_RESULT records
-    await db.delete('CMP_SWIMMING_RESULT', where: 'player_id = ?', whereArgs: [id]);
     // Delete the player
     await db.delete('CMP_PLAYER', where: 'player_id = ?', whereArgs: [id]);
     // Delete orphaned CMP_ENTITY

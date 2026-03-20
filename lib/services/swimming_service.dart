@@ -34,21 +34,8 @@ class SwimmingService {
         'event_result': result.totalDsec.toString(),
       }, where: 'event_id = ?', whereArgs: [eventId]);
     } else {
-      // Find or create a tournament stage for this tournament
-      final stageRows = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [result.tournamentId]);
-      int tsId;
-      if (stageRows.isNotEmpty) {
-        tsId = stageRows.first['ts_id'] as int;
-      } else {
-        tsId = await db.insert('CMP_TOURNAMENT_STAGE', {
-          't_id': result.tournamentId,
-          'ts_name': 'Основний етап',
-          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_s_ts',
-        });
-      }
-
       eventId = await db.insert('CMP_EVENT', {
-        'ts_id': tsId,
+        't_id': result.tournamentId,
         'et_id': result.category == SwimmingCategory.relay ? 2 : 1,
         'event_result': result.totalDsec.toString(),
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_s_ev',
@@ -92,7 +79,7 @@ class SwimmingService {
       SELECT DISTINCT se.ev_id
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
-      WHERE e.ts_id IN (SELECT ts_id FROM CMP_TOURNAMENT_STAGE WHERE t_id = ?)
+      WHERE e.t_id = ?
         AND se.se_note IN ($swimmingCategories)
     ''', [tId]);
 
@@ -111,14 +98,13 @@ class SwimmingService {
     
     final swimmingCategories = SwimmingCategory.values.map((c) => "'${c.name}'").join(',');
     String sql = '''
-      SELECT se.se_id as sr_id, e.ts_id as t_id, se.se_result as time_total, se.se_note as category,
+      SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, t.team_id
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
-      JOIN CMP_TOURNAMENT_STAGE stage ON e.ts_id = stage.ts_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
       LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
-      WHERE stage.t_id = ? AND se.se_note IN ($swimmingCategories)
+      WHERE e.t_id = ? AND se.se_note IN ($swimmingCategories)
     ''';
 
     final List<dynamic> args = [tId];
@@ -152,15 +138,14 @@ class SwimmingService {
       int tId, SwimmingCategory category) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
-      SELECT se.se_id as sr_id, e.ts_id as t_id, se.se_result as time_total, se.se_note as category,
+      SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, p.player_surname, p.player_name, p.player_lastname,
              t.team_id, t.team_name
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
-      JOIN CMP_TOURNAMENT_STAGE stage ON e.ts_id = stage.ts_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
       LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
-      WHERE stage.t_id = ? AND se.se_note = ?
+      WHERE e.t_id = ? AND se.se_note = ?
       ORDER BY se.se_result ASC
     ''', [tId, category.name]);
 
