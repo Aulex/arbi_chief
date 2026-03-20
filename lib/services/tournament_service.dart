@@ -48,21 +48,23 @@ class TournamentService {
 
   Future<void> deleteTournament(int id) async {
     final db = await _dbService.database;
-    // Delete subevents and events for this tournament
-    final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 't_id = ?', whereArgs: [id]);
-    for (final e in events) {
-      await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
-    }
-    await db.delete('CMP_EVENT', where: 't_id = ?', whereArgs: [id]);
-    // Delete player-team attribute values, then player-team assignments
-    final teamAssignments = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 't_id = ?', whereArgs: [id]);
-    for (final a in teamAssignments) {
-      await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ?', whereArgs: [a['pte_id']]);
-    }
-    await db.delete('CMP_PLAYER_TEAM', where: 't_id = ?', whereArgs: [id]);
-    await db.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
-    await db.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
-    await db.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      // Delete subevents and events for this tournament
+      final events = await txn.query('CMP_EVENT', columns: ['event_id'], where: 't_id = ?', whereArgs: [id]);
+      for (final e in events) {
+        await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
+      }
+      await txn.delete('CMP_EVENT', where: 't_id = ?', whereArgs: [id]);
+      // Delete player-team attribute values, then player-team assignments
+      final teamAssignments = await txn.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 't_id = ?', whereArgs: [id]);
+      for (final a in teamAssignments) {
+        await txn.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ?', whereArgs: [a['pte_id']]);
+      }
+      await txn.delete('CMP_PLAYER_TEAM', where: 't_id = ?', whereArgs: [id]);
+      await txn.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
+      await txn.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
+      await txn.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
+    });
   }
 
   // --- Tournament Participants (CMP_PLAYER_TOURNAMENT) ---
@@ -253,6 +255,7 @@ class TournamentService {
     // Get Entity IDs
     final wRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [whitePlayerId]);
     final bRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [blackPlayerId]);
+    if (wRows.isEmpty || bRows.isEmpty) throw Exception('Player entity not found');
     final wEntId = wRows.first['entity_id'] as int;
     final bEntId = bRows.first['entity_id'] as int;
 
@@ -328,8 +331,10 @@ class TournamentService {
   /// Delete a game and its subevents.
   Future<void> deleteGame(int eventId) async {
     final db = await _dbService.database;
-    await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
-    await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+    await db.transaction((txn) async {
+      await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+      await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+    });
   }
 
   /// Delete multiple games in a single transaction.
@@ -427,7 +432,9 @@ class TournamentService {
       // The SQL joins: se1.entity_id < se2.entity_id, so p1 = lower entity_id
       final wPlayer = white;
       final bPlayer = black;
-      final wPlayerEntId = (await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [wPlayer.player_id])).first['entity_id'] as int;
+      final wEntRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [wPlayer.player_id]);
+      if (wEntRows.isEmpty) continue;
+      final wPlayerEntId = wEntRows.first['entity_id'] as int;
 
       // Filter subevents per player
       final wSubs = subEvents.where((s) => s['entity_id'] == wPlayerEntId).toList();
@@ -487,12 +494,14 @@ class TournamentService {
     
     // Get player's entity_id
     final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (pRows.isEmpty) return;
     final playerEntId = pRows.first['entity_id'] as int;
 
     await db.transaction((txn) async {
       for (final opponentId in opponentIds) {
         // Get opponent's entity_id
         final oRows = await txn.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [opponentId]);
+        if (oRows.isEmpty) continue;
         final opponentEntId = oRows.first['entity_id'] as int;
 
         // Find existing game
@@ -554,6 +563,7 @@ class TournamentService {
   Future<void> clearPlayerNoShow(int tId, int playerId) async {
     final db = await _dbService.database;
     final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (pRows.isEmpty) return;
     final entId = pRows.first['entity_id'] as int;
 
     final rows = await db.rawQuery('''
@@ -596,6 +606,7 @@ class TournamentService {
     
     // Get Entity ID for the player
     final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (pRows.isEmpty) return;
     final playerEntId = pRows.first['entity_id'] as int;
 
     // Get all subevents for this event
@@ -650,8 +661,9 @@ class TournamentService {
 
     // Get Entity IDs for both players
     final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [rowPlayerId]);
-    final rowEntId = pRows.first['entity_id'] as int;
     final cRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [colPlayerId]);
+    if (pRows.isEmpty || cRows.isEmpty) return;
+    final rowEntId = pRows.first['entity_id'] as int;
     final colEntId = cRows.first['entity_id'] as int;
 
     await db.transaction((txn) async {
@@ -663,8 +675,11 @@ class TournamentService {
       final colSets = colDetail.trim().split(RegExp(r'\s+'));
 
       for (int i = 0; i < rowSets.length; i++) {
-        final rScore = double.tryParse(rowSets[i].split(':')[0]) ?? 0.0;
-        final cScore = double.tryParse(colSets[i].split(':')[0]) ?? 0.0;
+        final rParts = rowSets[i].split(':');
+        final cParts = i < colSets.length ? colSets[i].split(':') : ['0', '0'];
+        
+        final rScore = double.tryParse(rParts[0]) ?? 0.0;
+        final cScore = double.tryParse(cParts[0]) ?? 0.0;
         
         await txn.insert('CMP_SUBEVENT', {
           'ev_id': eventId,
@@ -688,7 +703,7 @@ class TournamentService {
       else if (rowResult == 0.0) esId = 2; // Поразка
 
       await txn.update('CMP_EVENT', {
-        'event_result': '$rowResult:$colDetail', // We could store a summary string here
+        'event_result': rowResult.toString(), // Store numeric result primarily
         'es_id': esId,
       }, where: 'event_id = ?', whereArgs: [eventId]);
     });

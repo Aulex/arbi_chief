@@ -28,6 +28,7 @@ class SwimmingService {
     if (result.id != null) {
       // Find event associated with this subevent
       final subRows = await db.query('CMP_SUBEVENT', columns: ['ev_id'], where: 'se_id = ?', whereArgs: [result.id]);
+      if (subRows.isEmpty) throw Exception("Subevent not found");
       eventId = subRows.first['ev_id'] as int;
       
       await db.update('CMP_EVENT', {
@@ -257,8 +258,8 @@ class SwimmingService {
       // 1 best woman from EITHER f35 or f49 (best single result)
       final f35Places = bestPlacesForTeam(f35Standings, teamId, 1);
       final f49Places = bestPlacesForTeam(f49Standings, teamId, 1);
-      final bestWomanPlace = [f35Places.first, f49Places.first]..sort();
-      final womanPlaces = [bestWomanPlace.first];
+      final bestWomanPlaceList = [...f35Places, ...f49Places]..sort();
+      final womanPlaces = [bestWomanPlaceList.first];
 
       // 1 relay
       final relayPlaces = bestPlacesForTeam(relayStandings, teamId, 1);

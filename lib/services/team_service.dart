@@ -47,6 +47,7 @@ class TeamService {
     if (team.team_id == null) {
       // New team: create CMP_ENTITY first
       final entId = await db.insert('CMP_ENTITY', {
+        'entity_type_id': 2,
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_t',
       });
       data['entity_id'] = entId;

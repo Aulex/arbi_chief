@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -235,6 +235,26 @@ class DatabaseService {
           await db.execute('ALTER TABLE CMP_EVENT_NEW RENAME TO CMP_EVENT');
           await db.execute('PRAGMA foreign_keys = ON');
         }
+        if (oldVersion < 10) {
+          // 1. Create CMP_ENTITY_TYPE
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS CMP_ENTITY_TYPE (
+              entity_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              entity_type_name TEXT,
+              sync_uid TEXT
+            )
+          ''');
+          // 2. Seed ENTITY_TYPE
+          await db.insert('CMP_ENTITY_TYPE', {'entity_type_name': 'Гравець'});
+          await db.insert('CMP_ENTITY_TYPE', {'entity_type_name': 'Команда'});
+          
+          // 3. Add entity_type_id to CMP_ENTITY
+          await db.execute('ALTER TABLE CMP_ENTITY ADD COLUMN entity_type_id INTEGER REFERENCES CMP_ENTITY_TYPE(entity_type_id)');
+          
+          // 4. Backfill existing entities (if any remained, though we cleared db)
+          // We can't easily know if an ent_id belongs to a player or team just from CMP_ENTITY,
+          // but since we just cleared the DB, there should be 0 rows.
+        }
       },
       onCreate: (db, version) async {
         // 1. CMP_TOURNAMENT_TYPE
@@ -246,10 +266,21 @@ class DatabaseService {
           )
         ''');
 
-        // 2. CMP_ENTITY
+        // 2. CMP_ENTITY (Modified in v10)
         await db.execute('''
           CREATE TABLE CMP_ENTITY (
             ent_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type_id INTEGER,
+            sync_uid TEXT,
+            FOREIGN KEY (entity_type_id) REFERENCES CMP_ENTITY_TYPE (entity_type_id)
+          )
+        ''');
+
+        // [NEW in v10] 2.1 CMP_ENTITY_TYPE
+        await db.execute('''
+          CREATE TABLE CMP_ENTITY_TYPE (
+            entity_type_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_type_name TEXT,
             sync_uid TEXT
           )
         ''');
@@ -490,6 +521,10 @@ class DatabaseService {
         await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Перетягування канату'});
         await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Спортивне орієнтування'});
         // CMP_ENTITY records are created dynamically when players/teams are added
+
+        // Entity Types (NEW in v10)
+        await db.insert('CMP_ENTITY_TYPE', {'entity_type_name': 'Гравець'});
+        await db.insert('CMP_ENTITY_TYPE', {'entity_type_name': 'Команда'});
 
         await db.insert('CMP_ATTR', {
           'attr_id': '1',
