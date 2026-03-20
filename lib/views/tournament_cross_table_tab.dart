@@ -4,6 +4,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
+import '../sports/table_tennis/table_tennis_providers.dart';
+import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
+import '../sports/chess/chess_scoring.dart' as chess_scoring;
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/standings_window_provider.dart';
@@ -1195,13 +1198,14 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     _applyTTResultInMemory(rowPlayerId, colPlayerId, rowResult, rowDetail, colDetail);
 
     final svc = ref.read(tournamentServiceProvider);
+    final ttSvc = ref.read(tableTennisServiceProvider);
     int? eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
     eventId ??= await svc.createGame(
       tId: widget.tId,
       whitePlayerId: rowPlayerId,
       blackPlayerId: colPlayerId,
     );
-    await svc.saveTableTennisResult(eventId!, rowPlayerId, colPlayerId,
+    await ttSvc.saveResult(eventId!, rowPlayerId, colPlayerId,
       rowResult: rowResult,
       rowDetail: rowDetail,
       colDetail: colDetail,
@@ -1275,14 +1279,15 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
   // --- Calculations ---
 
-  /// Raw points multiplier: 2 for racket sports (TT), 1 for board sports.
-  int get _pointMultiplier => _isTableTennis ? 2 : 1;
+  /// Raw points multiplier: delegated to sport-specific scoring.
+  int get _pointMultiplier => _isTableTennis
+      ? tt_scoring.tableTennisPointMultiplier
+      : chess_scoring.chessPointMultiplier;
 
   double _totalPoints(int boardNum, int playerId) {
     return (_boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
   }
 
-  /// Display points: for table tennis, a win gives 2 pts (loss 0).
   double _displayPoints(int boardNum, int playerId) {
     return _totalPoints(boardNum, playerId) * _pointMultiplier;
   }
@@ -1291,38 +1296,19 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     return (_boardResults[boardNum]?[playerId] ?? {}).length;
   }
 
-  /// Коефіцієнт Бергера = сума очок переможених суперників
-  /// + половина очок суперників, з якими нічия.
+  /// Коефіцієнт Бергера — delegated to chess scoring.
   double _bergerCoefficient(int boardNum, int playerId) {
-    final results = _boardResults[boardNum]?[playerId] ?? {};
-    double sb = 0;
-    for (final entry in results.entries) {
-      final result = entry.value;
-      final opponentPoints = _totalPoints(boardNum, entry.key);
-      if (result == 1.0) {
-        sb += opponentPoints;          // перемога: повна сума очок суперника
-      } else if (result == 0.5) {
-        sb += opponentPoints * 0.5;    // нічия: половина очок суперника
-      }
-      // поразка: 0
-    }
-    return sb;
+    return chess_scoring.bergerCoefficient(
+      _boardResults[boardNum],
+      boardNum,
+      playerId,
+      _totalPoints,
+    );
   }
 
-  /// Total balls scored and conceded for table tennis.
+  /// Total balls — delegated to table tennis scoring.
   ({int scored, int conceded}) _totalBalls(int boardNum, int playerId) {
-    int scored = 0;
-    int conceded = 0;
-    final details = _boardResultDetails[boardNum]?[playerId] ?? {};
-    for (final detail in details.values) {
-      for (final s in detail.split(' ')) {
-        final parts = s.split(':');
-        if (parts.length != 2) continue;
-        scored += int.tryParse(parts[0]) ?? 0;
-        conceded += int.tryParse(parts[1]) ?? 0;
-      }
-    }
-    return (scored: scored, conceded: conceded);
+    return tt_scoring.totalBalls(_boardResultDetails[boardNum], playerId);
   }
 
   List<({int teamId, String teamName, int? teamNumber, Player player})> _sortedStandings(
@@ -1359,21 +1345,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     return sorted;
   }
 
-  String _formatResult(double? result) {
-    if (result == null) return '';
-    if (result == 1.0) return '1';
-    if (result == 0.0) return '0';
-    if (result == 0.5) return '½';
-    return result.toString();
-  }
+  String _formatResult(double? result) => chess_scoring.formatChessResult(result);
 
-  /// Format phantom/absent result for table tennis: show "+"/"-" since no sets were played.
-  String _formatTTPhantomResult(double? result) {
-    if (result == null) return '';
-    if (result == 1.0) return '+';
-    if (result == 0.0) return '-';
-    return result.toString();
-  }
+  String _formatTTPhantomResult(double? result) => tt_scoring.formatPhantomResult(result);
 
   String _formatPoints(double points) {
     if (points == points.roundToDouble()) return points.toStringAsFixed(0);
@@ -1541,95 +1515,28 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   // --- Teams cross table ---
 
   /// Count sets won and lost from a detail string (e.g. "11:7 11:4 8:11").
-  ({int won, int lost}) _countSetsFromDetail(String detail) {
-    int won = 0;
-    int lost = 0;
-    for (final s in detail.split(' ')) {
-      final parts = s.split(':');
-      if (parts.length != 2) continue;
-      final a = int.tryParse(parts[0]);
-      final b = int.tryParse(parts[1]);
-      if (a == null || b == null) continue;
-      if (a > b) {
-        won++;
-      } else if (b > a) {
-        lost++;
-      }
+  // Table tennis set/ball counting — delegated to tt_scoring utilities.
+
+  int? _findPlayerIdForTeam(int boardNum, int teamId) {
+    final players = _boardPlayers[boardNum];
+    if (players == null) return null;
+    for (final p in players) {
+      if (p.teamId == teamId) return p.player.player_id;
     }
-    return (won: won, lost: lost);
+    return null;
   }
 
-  /// Count balls (goals) scored and conceded from a detail string.
-  ({int scored, int conceded}) _countBallsFromDetail(String detail) {
-    int scored = 0;
-    int conceded = 0;
-    for (final s in detail.split(' ')) {
-      final parts = s.split(':');
-      if (parts.length != 2) continue;
-      scored += int.tryParse(parts[0]) ?? 0;
-      conceded += int.tryParse(parts[1]) ?? 0;
-    }
-    return (scored: scored, conceded: conceded);
-  }
+  int _teamDirectSetDiff(int teamAId, int teamBId) =>
+      tt_scoring.teamDirectSetDiffWith(
+        _boardPlayers.keys.toSet(), _boardResultDetails, teamAId, teamBId, _findPlayerIdForTeam);
 
-  /// Set difference between two teams in their direct match (across all boards).
-  int _teamDirectSetDiff(int teamAId, int teamBId) {
-    int setsWon = 0;
-    int setsLost = 0;
-    for (final boardEntry in _boardPlayers.entries) {
-      final boardNum = boardEntry.key;
-      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
-      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
-      if (playerA == null || playerB == null) continue;
-      final aId = playerA.player.player_id!;
-      final bId = playerB.player.player_id!;
-      final detail = _boardResultDetails[boardNum]?[aId]?[bId];
-      if (detail == null || detail.isEmpty) continue;
-      final sets = _countSetsFromDetail(detail);
-      setsWon += sets.won;
-      setsLost += sets.lost;
-    }
-    return setsWon - setsLost;
-  }
+  int _teamDirectBallDiff(int teamAId, int teamBId) =>
+      tt_scoring.teamDirectBallDiffWith(
+        _boardPlayers.keys.toSet(), _boardResultDetails, teamAId, teamBId, _findPlayerIdForTeam);
 
-  /// Ball/goal difference between two teams in their direct match (across all boards).
-  int _teamDirectBallDiff(int teamAId, int teamBId) {
-    int scored = 0;
-    int conceded = 0;
-    for (final boardEntry in _boardPlayers.entries) {
-      final boardNum = boardEntry.key;
-      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
-      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
-      if (playerA == null || playerB == null) continue;
-      final aId = playerA.player.player_id!;
-      final bId = playerB.player.player_id!;
-      final detail = _boardResultDetails[boardNum]?[aId]?[bId];
-      if (detail == null || detail.isEmpty) continue;
-      final balls = _countBallsFromDetail(detail);
-      scored += balls.scored;
-      conceded += balls.conceded;
-    }
-    return scored - conceded;
-  }
-
-  /// Total set difference for a team across the entire tournament (all boards, all opponents).
-  int _teamTotalSetDiff(int teamId) {
-    int setsWon = 0;
-    int setsLost = 0;
-    for (final boardEntry in _boardPlayers.entries) {
-      final boardNum = boardEntry.key;
-      final player = boardEntry.value.where((p) => p.teamId == teamId).firstOrNull;
-      if (player == null) continue;
-      final pId = player.player.player_id!;
-      final details = _boardResultDetails[boardNum]?[pId] ?? {};
-      for (final detail in details.values) {
-        final sets = _countSetsFromDetail(detail);
-        setsWon += sets.won;
-        setsLost += sets.lost;
-      }
-    }
-    return setsWon - setsLost;
-  }
+  int _teamTotalSetDiff(int teamId) =>
+      tt_scoring.teamTotalSetDiffWith(
+        _boardPlayers.keys.toSet(), _boardResultDetails, teamId, _findPlayerIdForTeam);
 
   /// Calculate team match score: sum individual board results for teamA vs teamB.
   ({double a, double b}) _teamMatchScore(int teamAId, int teamBId) {
@@ -2653,19 +2560,6 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   }
 
   /// Format table tennis cell display: "3:1" set score + ball details on second line
-  String _formatTableTennisCell(String detail, double? result) {
-    final sets = detail.split(' ');
-    int rowWins = 0;
-    int colWins = 0;
-    for (final s in sets) {
-      final parts = s.split(':');
-      if (parts.length != 2) continue;
-      final a = int.tryParse(parts[0]) ?? 0;
-      final b = int.tryParse(parts[1]) ?? 0;
-      if (a > b) rowWins++;
-      else if (b > a) colWins++;
-    }
-    // Show only game result (e.g. 2-0, 2-1)
-    return '$rowWins:$colWins';
-  }
+  String _formatTableTennisCell(String detail, double? result) =>
+      tt_scoring.formatTableTennisCell(detail, result);
 }

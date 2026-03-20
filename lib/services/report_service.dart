@@ -8,6 +8,8 @@ import '../models/player_model.dart';
 import '../models/report_model.dart';
 import '../models/sport_type_config.dart';
 import '../models/tournament_model.dart';
+import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
+import '../sports/chess/chess_scoring.dart' as chess_scoring;
 import 'team_service.dart';
 import 'tournament_service.dart';
 
@@ -142,46 +144,31 @@ class ReportService {
   }
 
   // ---------------------------------------------------------------------------
-  // Scoring helpers
+  // Scoring helpers — delegating to sport-specific scoring utilities
   // ---------------------------------------------------------------------------
 
   double totalPoints(ReportData data, int boardNum, int playerId) {
     return (data.boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
   }
 
-  /// Display points: for table tennis, a win gives 2 pts (multiplied).
   double displayPoints(ReportData data, int boardNum, int playerId, bool isTableTennis) {
-    return totalPoints(data, boardNum, playerId) * (isTableTennis ? 2 : 1);
+    final multiplier = isTableTennis
+        ? tt_scoring.tableTennisPointMultiplier
+        : chess_scoring.chessPointMultiplier;
+    return totalPoints(data, boardNum, playerId) * multiplier;
   }
 
   double bergerCoefficient(ReportData data, int boardNum, int playerId) {
-    final results = data.boardResults[boardNum]?[playerId] ?? {};
-    double sb = 0;
-    for (final entry in results.entries) {
-      final result = entry.value;
-      final opponentPoints = totalPoints(data, boardNum, entry.key);
-      if (result == 1.0) {
-        sb += opponentPoints;
-      } else if (result == 0.5) {
-        sb += opponentPoints * 0.5;
-      }
-    }
-    return sb;
+    return chess_scoring.bergerCoefficient(
+      data.boardResults[boardNum],
+      boardNum,
+      playerId,
+      (bn, pid) => totalPoints(data, bn, pid),
+    );
   }
 
   ({int scored, int conceded}) totalBalls(ReportData data, int boardNum, int playerId) {
-    int scored = 0;
-    int conceded = 0;
-    final det = data.boardResultDetails[boardNum]?[playerId] ?? {};
-    for (final detail in det.values) {
-      for (final s in detail.split(' ')) {
-        final parts = s.split(':');
-        if (parts.length != 2) continue;
-        scored += int.tryParse(parts[0]) ?? 0;
-        conceded += int.tryParse(parts[1]) ?? 0;
-      }
-    }
-    return (scored: scored, conceded: conceded);
+    return tt_scoring.totalBalls(data.boardResultDetails[boardNum], playerId);
   }
 
   int gamesPlayed(ReportData data, int boardNum, int playerId) {
@@ -245,88 +232,29 @@ class ReportService {
     return (a: 0.0, b: 0.0);
   }
 
-  ({int won, int lost}) _countSetsFromDetail(String detail) {
-    int won = 0;
-    int lost = 0;
-    for (final s in detail.split(' ')) {
-      final parts = s.split(':');
-      if (parts.length != 2) continue;
-      final a = int.tryParse(parts[0]);
-      final b = int.tryParse(parts[1]);
-      if (a == null || b == null) continue;
-      if (a > b) won++;
-      else if (b > a) lost++;
+  int? _findPlayerIdForTeam(ReportData data, int boardNum, int teamId) {
+    final players = data.boardPlayers[boardNum];
+    if (players == null) return null;
+    for (final p in players) {
+      if (p.teamId == teamId) return p.player.player_id;
     }
-    return (won: won, lost: lost);
+    return null;
   }
 
-  ({int scored, int conceded}) _countBallsFromDetail(String detail) {
-    int scored = 0;
-    int conceded = 0;
-    for (final s in detail.split(' ')) {
-      final parts = s.split(':');
-      if (parts.length != 2) continue;
-      scored += int.tryParse(parts[0]) ?? 0;
-      conceded += int.tryParse(parts[1]) ?? 0;
-    }
-    return (scored: scored, conceded: conceded);
-  }
+  int teamDirectSetDiff(ReportData data, int teamAId, int teamBId) =>
+      tt_scoring.teamDirectSetDiffWith(
+        data.boardPlayers.keys.toSet(), data.boardResultDetails, teamAId, teamBId,
+        (bn, tid) => _findPlayerIdForTeam(data, bn, tid));
 
-  int teamDirectSetDiff(ReportData data, int teamAId, int teamBId) {
-    int setsWon = 0;
-    int setsLost = 0;
-    for (final boardEntry in data.boardPlayers.entries) {
-      final boardNum = boardEntry.key;
-      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
-      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
-      if (playerA == null || playerB == null) continue;
-      final aId = playerA.player.player_id!;
-      final bId = playerB.player.player_id!;
-      final detail = data.boardResultDetails[boardNum]?[aId]?[bId];
-      if (detail == null || detail.isEmpty) continue;
-      final sets = _countSetsFromDetail(detail);
-      setsWon += sets.won;
-      setsLost += sets.lost;
-    }
-    return setsWon - setsLost;
-  }
+  int teamDirectBallDiff(ReportData data, int teamAId, int teamBId) =>
+      tt_scoring.teamDirectBallDiffWith(
+        data.boardPlayers.keys.toSet(), data.boardResultDetails, teamAId, teamBId,
+        (bn, tid) => _findPlayerIdForTeam(data, bn, tid));
 
-  int teamDirectBallDiff(ReportData data, int teamAId, int teamBId) {
-    int scored = 0;
-    int conceded = 0;
-    for (final boardEntry in data.boardPlayers.entries) {
-      final boardNum = boardEntry.key;
-      final playerA = boardEntry.value.where((p) => p.teamId == teamAId).firstOrNull;
-      final playerB = boardEntry.value.where((p) => p.teamId == teamBId).firstOrNull;
-      if (playerA == null || playerB == null) continue;
-      final aId = playerA.player.player_id!;
-      final bId = playerB.player.player_id!;
-      final detail = data.boardResultDetails[boardNum]?[aId]?[bId];
-      if (detail == null || detail.isEmpty) continue;
-      final balls = _countBallsFromDetail(detail);
-      scored += balls.scored;
-      conceded += balls.conceded;
-    }
-    return scored - conceded;
-  }
-
-  int teamTotalSetDiff(ReportData data, int teamId) {
-    int setsWon = 0;
-    int setsLost = 0;
-    for (final boardEntry in data.boardPlayers.entries) {
-      final boardNum = boardEntry.key;
-      final player = boardEntry.value.where((p) => p.teamId == teamId).firstOrNull;
-      if (player == null) continue;
-      final pId = player.player.player_id!;
-      final details = data.boardResultDetails[boardNum]?[pId] ?? {};
-      for (final detail in details.values) {
-        final sets = _countSetsFromDetail(detail);
-        setsWon += sets.won;
-        setsLost += sets.lost;
-      }
-    }
-    return setsWon - setsLost;
-  }
+  int teamTotalSetDiff(ReportData data, int teamId) =>
+      tt_scoring.teamTotalSetDiffWith(
+        data.boardPlayers.keys.toSet(), data.boardResultDetails, teamId,
+        (bn, tid) => _findPlayerIdForTeam(data, bn, tid));
 
   // ---------------------------------------------------------------------------
   // Formatting helpers
@@ -345,6 +273,7 @@ class ReportService {
     return s;
   }
 
+  /// Format chess result for PDF: uses "1/2" instead of "½" for PDF compatibility.
   String fmtResult(double? result) {
     if (result == null) return '';
     if (result == 1.0) return '1';
@@ -353,22 +282,15 @@ class ReportService {
     return result.toString();
   }
 
+  /// Format table tennis result for PDF: "2:0\n(11:7, 11:4)".
   String fmtResultTT(ReportData data, int boardNum, int rowId, int colId) {
     final detail = data.boardResultDetails[boardNum]?[rowId]?[colId];
     final result = data.boardResults[boardNum]?[rowId]?[colId];
     if (result == null) return '';
     if (detail == null || detail.isEmpty) return fmtResult(result);
+    final setScore = tt_scoring.formatTableTennisCell(detail, result);
     final sets = detail.split(' ');
-    int rowWins = 0, colWins = 0;
-    for (final s in sets) {
-      final parts = s.split(':');
-      if (parts.length != 2) continue;
-      final a = int.tryParse(parts[0]) ?? 0;
-      final b = int.tryParse(parts[1]) ?? 0;
-      if (a > b) rowWins++;
-      else if (b > a) colWins++;
-    }
-    return '$rowWins:$colWins\n(${sets.join(', ')})';
+    return '$setScore\n(${sets.join(', ')})';
   }
 
   // ---------------------------------------------------------------------------
