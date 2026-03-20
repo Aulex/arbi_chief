@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -205,6 +205,35 @@ class DatabaseService {
           // Drop the legacy tables
           await db.execute('DROP TABLE IF EXISTS CMP_TOURNAMENT_STAGE');
           await db.execute('DROP TABLE IF EXISTS CMP_SWIMMING_RESULT');
+        }
+        if (oldVersion < 9) {
+          // Recreate CMP_EVENT without the old ts_id foreign key to
+          // CMP_TOURNAMENT_STAGE (which was dropped in v8). SQLite does not
+          // support DROP COLUMN / DROP CONSTRAINT, so we rebuild the table.
+          await db.execute('PRAGMA foreign_keys = OFF');
+          await db.execute('''
+            CREATE TABLE CMP_EVENT_NEW (
+              event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              t_id INTEGER,
+              et_id INTEGER,
+              event_date_begin TEXT,
+              event_date_end TEXT,
+              event_result TEXT,
+              es_id INTEGER,
+              sync_uid TEXT,
+              FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
+              FOREIGN KEY (et_id) REFERENCES CMP_EVENT_TYPE (et_id),
+              FOREIGN KEY (es_id) REFERENCES CMP_EVENT_STATE (es_id)
+            )
+          ''');
+          await db.execute('''
+            INSERT INTO CMP_EVENT_NEW (event_id, t_id, et_id, event_date_begin, event_date_end, event_result, es_id, sync_uid)
+            SELECT event_id, t_id, et_id, event_date_begin, event_date_end, event_result, es_id, sync_uid
+            FROM CMP_EVENT
+          ''');
+          await db.execute('DROP TABLE CMP_EVENT');
+          await db.execute('ALTER TABLE CMP_EVENT_NEW RENAME TO CMP_EVENT');
+          await db.execute('PRAGMA foreign_keys = ON');
         }
       },
       onCreate: (db, version) async {
