@@ -252,12 +252,9 @@ class TournamentService {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
     
-    // Get Entity IDs
-    final wRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [whitePlayerId]);
-    final bRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [blackPlayerId]);
-    if (wRows.isEmpty || bRows.isEmpty) throw Exception('Player entity not found');
-    final wEntId = wRows.first['entity_id'] as int;
-    final bEntId = bRows.first['entity_id'] as int;
+    // Get Entity IDs, creating them if missing (legacy players may lack one)
+    final wEntId = await _ensurePlayerEntity(db, whitePlayerId);
+    final bEntId = await _ensurePlayerEntity(db, blackPlayerId);
 
     final eventId = await db.insert('CMP_EVENT', {
       't_id': tId,
@@ -277,6 +274,20 @@ class TournamentService {
     });
     
     return eventId;
+  }
+
+  /// Ensure a player has a CMP_ENTITY row; create one if missing (legacy data).
+  Future<int> _ensurePlayerEntity(dynamic db, int playerId) async {
+    final rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (rows.isEmpty) throw Exception('Player not found: $playerId');
+    final existing = rows.first['entity_id'] as int?;
+    if (existing != null) return existing;
+    final entId = await db.insert('CMP_ENTITY', {
+      'entity_type_id': 1,
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
+    });
+    await db.update('CMP_PLAYER', {'entity_id': entId}, where: 'player_id = ?', whereArgs: [playerId]);
+    return entId;
   }
 
   /// Get all games for a tournament (via its stages).
@@ -434,7 +445,8 @@ class TournamentService {
       final bPlayer = black;
       final wEntRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [wPlayer.player_id]);
       if (wEntRows.isEmpty) continue;
-      final wPlayerEntId = wEntRows.first['entity_id'] as int;
+      final wPlayerEntId = wEntRows.first['entity_id'] as int?;
+      if (wPlayerEntId == null) continue;
 
       // Filter subevents per player
       final wSubs = subEvents.where((s) => s['entity_id'] == wPlayerEntId).toList();
@@ -492,17 +504,13 @@ class TournamentService {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
     
-    // Get player's entity_id
-    final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
-    if (pRows.isEmpty) return;
-    final playerEntId = pRows.first['entity_id'] as int;
+    // Get player's entity_id (create if missing)
+    final playerEntId = await _ensurePlayerEntity(db, playerId);
 
     await db.transaction((txn) async {
       for (final opponentId in opponentIds) {
-        // Get opponent's entity_id
-        final oRows = await txn.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [opponentId]);
-        if (oRows.isEmpty) continue;
-        final opponentEntId = oRows.first['entity_id'] as int;
+        // Get opponent's entity_id (create if missing)
+        final opponentEntId = await _ensurePlayerEntity(txn, opponentId);
 
         // Find existing game
         final rows = await txn.rawQuery('''
@@ -564,7 +572,8 @@ class TournamentService {
     final db = await _dbService.database;
     final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
     if (pRows.isEmpty) return;
-    final entId = pRows.first['entity_id'] as int;
+    final entId = pRows.first['entity_id'] as int?;
+    if (entId == null) return;
 
     final rows = await db.rawQuery('''
       SELECT e.event_id
@@ -604,10 +613,8 @@ class TournamentService {
   Future<void> saveResultForPlayer(int eventId, int playerId, double? playerResult) async {
     final db = await _dbService.database;
     
-    // Get Entity ID for the player
-    final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
-    if (pRows.isEmpty) return;
-    final playerEntId = pRows.first['entity_id'] as int;
+    // Get Entity ID for the player (create if missing)
+    final playerEntId = await _ensurePlayerEntity(db, playerId);
 
     // Get all subevents for this event
     final subRows = await db.query(
