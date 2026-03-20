@@ -172,7 +172,7 @@ class SwimmingService {
         id: rows[i]['sr_id'] as int,
         tournamentId: tId,
         playerId: rows[i]['player_id'] as int?,
-        teamId: rows[i]['team_id'] as int ?? 0,
+        teamId: (rows[i]['team_id'] as int?) ?? 0,
         category: SwimmingCategory.fromDb(rows[i]['category'] as String),
         timeMin: total ~/ 6000,
         timeSec: (total % 6000) ~/ 100,
