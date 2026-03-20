@@ -78,7 +78,6 @@ DATABASE TABLES (SQLite)
   CMP_PLAYER_TOURNAMENT      Tournament participation links
   CMP_PLAYER_TEAM            Team membership links
   CMP_EVENT                  Match / game records
-  CMP_PLAYER_EVENT           Player-specific results and scoring
   CMP_ATTR / CMP_ATTR_VALUE  Configurable tournament attributes
   CMP_PLAYER_BOARD_ASSIGNMENT  Board / position assignments
 

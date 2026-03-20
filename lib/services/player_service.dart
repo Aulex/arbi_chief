@@ -73,8 +73,6 @@ class PlayerService {
     if (entityId != null) {
       await db.delete('CMP_SUBEVENT', where: 'entity_id = ?', whereArgs: [entityId]);
     }
-    // Delete CMP_PLAYER_EVENT records
-    await db.delete('CMP_PLAYER_EVENT', where: 'player_id = ?', whereArgs: [id]);
     // Delete CMP_PLAYER_TEAM_ATTR_VALUE for all assignments
     final assignments = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 'player_id = ?', whereArgs: [id]);
     for (final a in assignments) {

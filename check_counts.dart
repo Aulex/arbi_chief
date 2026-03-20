@@ -4,7 +4,7 @@ import 'dart:io';
 void main() async {
   sqfliteFfiInit();
   var databaseFactory = databaseFactoryFfi;
-  final dbPath = 'e:\\Projects\\arbi_chief\\build\\windows\\x64\\runner\\Debug\\tournament_blueprint_v14.db';
+  final dbPath = 'e:\\Projects\\arbi_chief\\build\\windows\\x64\\runner\\Debug\\databaseFile.db';
   var db = await databaseFactory.openDatabase(dbPath);
 
   final tRow = await db.rawQuery('SELECT t_id, count(*) as c FROM CMP_SWIMMING_RESULT GROUP BY t_id ORDER BY c DESC LIMIT 1');

@@ -51,7 +51,7 @@ class DatabaseService {
         : await getDatabasesPath();
 
     // v6 to reflect the strict alignment with the SQL blueprint 📐
-    final path = join(dbPath, 'tournament_blueprint_v14.db');
+    final path = join(dbPath, 'databaseFile.db');
 
     return await openDatabase(
       path,
@@ -85,16 +85,6 @@ class DatabaseService {
             'attr_id': '8',
             'dict_value': 'Результат жіночої ракетки',
           });
-          // Store detailed set scores for table tennis (e.g. "11:7 11:4 8:11")
-          await db.execute('ALTER TABLE CMP_PLAYER_EVENT ADD COLUMN event_result_detail TEXT');
-        }
-        if (oldVersion < 4) {
-          // Ensure event_result_detail column exists (may have been missed if DB was already at v3)
-          final cols = await db.rawQuery('PRAGMA table_info(CMP_PLAYER_EVENT)');
-          final hasDetail = cols.any((c) => c['name'] == 'event_result_detail');
-          if (!hasDetail) {
-            await db.execute('ALTER TABLE CMP_PLAYER_EVENT ADD COLUMN event_result_detail TEXT');
-          }
         }
         if (oldVersion < 5) {
           // Add sync_uid column to every user table for reliable duplicate detection during sync.
@@ -366,23 +356,7 @@ class DatabaseService {
           )
         ''');
 
-        // 14. CMP_PLAYER_EVENT
-        await db.execute('''
-          CREATE TABLE CMP_PLAYER_EVENT (
-            pe_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_id INTEGER,
-            player_id INTEGER,
-            asgn_date TEXT,
-            event_result REAL,
-            event_result_valid INTEGER,
-            event_result_detail TEXT,
-            sync_uid TEXT,
-            FOREIGN KEY (event_id) REFERENCES CMP_EVENT (event_id),
-            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
-          )
-        ''');
-
-        // 15. CMP_TEAM
+        // 14. CMP_TEAM
         await db.execute('''
           CREATE TABLE CMP_TEAM (
             team_id INTEGER PRIMARY KEY AUTOINCREMENT,

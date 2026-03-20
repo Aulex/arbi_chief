@@ -55,7 +55,6 @@ SQLite database with the following core tables:
 - `CMP_PLAYER_TOURNAMENT` — Tournament participation links
 - `CMP_PLAYER_TEAM` — Team membership links
 - `CMP_EVENT` — Match/game events
-- `CMP_PLAYER_EVENT` — Player-specific game results
 - `CMP_ATTR` / `CMP_ATTR_VALUE` — Configurable tournament attributes
 
 ## Supported Platforms

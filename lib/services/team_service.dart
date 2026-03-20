@@ -256,7 +256,6 @@ class TeamService {
       ''', [tId, entId]);
       for (final er in eventRows) {
         final eventId = er['event_id'] as int;
-        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
         await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
         await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
       }

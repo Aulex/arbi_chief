@@ -29,7 +29,6 @@ class DatabaseSyncService {
   /// Columns that form a logical unique key for duplicate detection.
   /// Tables not listed here use all non-PK data columns.
   static const Map<String, List<String>> _uniqueKeyColumns = {
-    'CMP_PLAYER_EVENT': ['event_id', 'player_id'],
   };
 
   static const List<String> _tableOrder = [
@@ -46,7 +45,6 @@ class DatabaseSyncService {
     'CMP_TOURNAMENT_STAGE',
     'CMP_EVENT',
     'CMP_PLAYER',
-    'CMP_PLAYER_EVENT',
     'CMP_TEAM',
     'CMP_SUBEVENT',
     'CMP_PLAYER_TEAM',
@@ -325,7 +323,7 @@ class DatabaseSyncService {
     final result = {
       'export_type': 'structure',
       'exported_at': DateTime.now().toIso8601String(),
-      'database_name': 'tournament_blueprint_v14.db',
+      'database_name': 'databaseFile.db',
       'tables': tablesMap,
     };
 
@@ -358,7 +356,7 @@ class DatabaseSyncService {
     final result = {
       'export_type': 'data',
       'exported_at': DateTime.now().toIso8601String(),
-      'database_name': 'tournament_blueprint_v14.db',
+      'database_name': 'databaseFile.db',
       'tables': tablesMap,
     };
 
@@ -396,7 +394,7 @@ class DatabaseSyncService {
     final result = {
       'export_type': 'full',
       'exported_at': DateTime.now().toIso8601String(),
-      'database_name': 'tournament_blueprint_v14.db',
+      'database_name': 'databaseFile.db',
       'tables': tablesMap,
     };
 

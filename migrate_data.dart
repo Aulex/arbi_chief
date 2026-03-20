@@ -4,7 +4,7 @@ import 'dart:io';
 void main() async {
   sqfliteFfiInit();
   var db = await databaseFactoryFfi.openDatabase(
-    'e:\\Projects\\arbi_chief\\build\\windows\\x64\\runner\\Debug\\tournament_blueprint_v14.db',
+    'e:\\Projects\\arbi_chief\\build\\windows\\x64\\runner\\Debug\\databaseFile.db',
     options: OpenDatabaseOptions(
       version: 7,
       onUpgrade: (db, oldVersion, newVersion) async {

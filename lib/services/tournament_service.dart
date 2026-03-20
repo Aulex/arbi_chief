@@ -54,7 +54,6 @@ class TournamentService {
       final tsId = s['ts_id'] as int;
       final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 'ts_id = ?', whereArgs: [tsId]);
       for (final e in events) {
-        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [e['event_id']]);
         await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
       }
       await db.delete('CMP_EVENT', where: 'ts_id = ?', whereArgs: [tsId]);
@@ -352,7 +351,6 @@ class TournamentService {
   /// Delete a game and its subevents.
   Future<void> deleteGame(int eventId) async {
     final db = await _dbService.database;
-    await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
     await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
     await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
   }
@@ -363,7 +361,6 @@ class TournamentService {
     final db = await _dbService.database;
     await db.transaction((txn) async {
       for (final eventId in eventIds) {
-        await txn.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
         await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
         await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
       }
