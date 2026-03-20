@@ -36,7 +36,16 @@ class SwimmingService {
     } else {
       // Find or create a tournament stage for this tournament
       final stageRows = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [result.tournamentId]);
-      int tsId = stageRows.isNotEmpty ? stageRows.first['ts_id'] as int : 1;
+      int tsId;
+      if (stageRows.isNotEmpty) {
+        tsId = stageRows.first['ts_id'] as int;
+      } else {
+        tsId = await db.insert('CMP_TOURNAMENT_STAGE', {
+          't_id': result.tournamentId,
+          'ts_name': 'Основний етап',
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_s_ts',
+        });
+      }
 
       eventId = await db.insert('CMP_EVENT', {
         'ts_id': tsId,
