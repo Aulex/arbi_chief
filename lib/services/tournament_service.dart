@@ -48,17 +48,25 @@ class TournamentService {
 
   Future<void> deleteTournament(int id) async {
     final db = await _dbService.database;
-    // Delete subevents and events for all stages of this tournament
+    // Delete subevents, player_events, and events for all stages of this tournament
     final stages = await db.query('CMP_TOURNAMENT_STAGE', columns: ['ts_id'], where: 't_id = ?', whereArgs: [id]);
     for (final s in stages) {
       final tsId = s['ts_id'] as int;
       final events = await db.query('CMP_EVENT', columns: ['event_id'], where: 'ts_id = ?', whereArgs: [tsId]);
       for (final e in events) {
+        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [e['event_id']]);
         await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
       }
       await db.delete('CMP_EVENT', where: 'ts_id = ?', whereArgs: [tsId]);
     }
     await db.delete('CMP_TOURNAMENT_STAGE', where: 't_id = ?', whereArgs: [id]);
+    // Delete player-team attribute values, then player-team assignments
+    final teamAssignments = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 't_id = ?', whereArgs: [id]);
+    for (final a in teamAssignments) {
+      await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ?', whereArgs: [a['pte_id']]);
+    }
+    await db.delete('CMP_PLAYER_TEAM', where: 't_id = ?', whereArgs: [id]);
+    await db.delete('CMP_SWIMMING_RESULT', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
     await db.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
