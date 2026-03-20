@@ -251,8 +251,7 @@ class DatabaseService {
             attr_data_type TEXT,
             attr_entity_type INTEGER,
             sync_uid TEXT,
-            FOREIGN KEY (attr_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id),
-            FOREIGN KEY (attr_entity_type) REFERENCES CMP_ENTITY (ent_id)
+            FOREIGN KEY (attr_t_type) REFERENCES CMP_TOURNAMENT_TYPE (type_id)
           )
         ''');
 
@@ -476,70 +475,6 @@ class DatabaseService {
           )
         ''');
 
-        // 13. CMP_PLAYER_TEAM
-        await db.execute('''
-          CREATE TABLE CMP_PLAYER_TEAM (
-            pte_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id INTEGER,
-            player_id INTEGER,
-            t_id INTEGER,
-            team_number INTEGER,
-            asgn_date TEXT,
-            player_state INTEGER,
-            sync_uid TEXT,
-            FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id),
-            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
-            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id)
-          )
-        ''');
-
-        // 14. CMP_PLAYER_TEAM_ATTR_VALUE
-        await db.execute('''
-          CREATE TABLE CMP_PLAYER_TEAM_ATTR_VALUE (
-            pta_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pte_id INTEGER,
-            attr_id INTEGER,
-            attr_value TEXT,
-            att_value_dict_id INTEGER,
-            sync_uid TEXT,
-            FOREIGN KEY (pte_id) REFERENCES CMP_PLAYER_TEAM (pte_id),
-            FOREIGN KEY (attr_id) REFERENCES CMP_ATTR (attr_id),
-            FOREIGN KEY (att_value_dict_id) REFERENCES CMP_ATTR_DICT (dict_id)
-          )
-        ''');
-
-        // 15. CMP_PLAYER_TOURNAMENT
-        await db.execute('''
-          CREATE TABLE CMP_PLAYER_TOURNAMENT (
-            pt_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            t_id INTEGER,
-            player_id INTEGER,
-            asgn_date TEXT,
-            sync_uid TEXT,
-            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
-            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id)
-          )
-        ''');
-
-        // 16. CMP_SWIMMING_RESULT
-        await db.execute('''
-          CREATE TABLE CMP_SWIMMING_RESULT (
-            sr_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            t_id INTEGER,
-            player_id INTEGER,
-            team_id INTEGER,
-            category TEXT NOT NULL,
-            time_min INTEGER NOT NULL DEFAULT 0,
-            time_sec INTEGER NOT NULL DEFAULT 0,
-            time_dsec INTEGER NOT NULL DEFAULT 0,
-            time_total INTEGER NOT NULL DEFAULT 0,
-            sync_uid TEXT,
-            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT (t_id),
-            FOREIGN KEY (player_id) REFERENCES CMP_PLAYER (player_id),
-            FOREIGN KEY (team_id) REFERENCES CMP_TEAM (team_id)
-          )
-        ''');
-
         // ── Seed data ──
 
         // Event States
@@ -568,16 +503,7 @@ class DatabaseService {
         await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Гирьовий спорт'});
         await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Перетягування канату'});
         await db.insert('CMP_TOURNAMENT_TYPE', {'type_name': 'Спортивне орієнтування'});
-        await db.insert('CMP_ENTITY', {
-          'ent_t_type': '1',
-          'ent_name': 'Tournament',
-        });
-        await db.insert('CMP_ENTITY', {
-          'ent_t_type': '1',
-          'ent_name': 'Player',
-        });
-        await db.insert('CMP_ENTITY', {'ent_t_type': '1', 'ent_name': 'Team'});
-        await db.insert('CMP_ENTITY', {'ent_t_type': '1', 'ent_name': 'Event'});
+        // CMP_ENTITY records are created dynamically when players/teams are added
 
         await db.insert('CMP_ATTR', {
           'attr_id': '1',

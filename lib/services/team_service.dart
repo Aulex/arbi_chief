@@ -45,8 +45,13 @@ class TeamService {
     final db = await _dbService.database;
     final data = team.toJson();
     if (team.team_id == null) {
+      // New team: create CMP_ENTITY first
+      final entId = await db.insert('CMP_ENTITY', {
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_t',
+      });
+      data['entity_id'] = entId;
       final id = await db.insert('CMP_TEAM', data);
-      return team.copyWith(team_id: id);
+      return team.copyWith(team_id: id, entity_id: entId);
     } else {
       await db.update(
         'CMP_TEAM',
@@ -60,6 +65,15 @@ class TeamService {
 
   Future<void> deleteTeam(int id) async {
     final db = await _dbService.database;
+    // Get entity_id before deleting
+    final teamRows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [id]);
+    final entityId = teamRows.isNotEmpty ? teamRows.first['entity_id'] as int? : null;
+    // Delete CMP_SUBEVENT records referencing this entity
+    if (entityId != null) {
+      await db.delete('CMP_SUBEVENT', where: 'entity_id = ?', whereArgs: [entityId]);
+    }
+    // Delete CMP_SWIMMING_RESULT records
+    await db.delete('CMP_SWIMMING_RESULT', where: 'team_id = ?', whereArgs: [id]);
     // Delete attr values for all player-team assignments of this team
     final assignments = await db.query(
       'CMP_PLAYER_TEAM',
@@ -76,6 +90,10 @@ class TeamService {
     }
     await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ?', whereArgs: [id]);
     await db.delete('CMP_TEAM', where: 'team_id = ?', whereArgs: [id]);
+    // Delete orphaned CMP_ENTITY
+    if (entityId != null) {
+      await db.delete('CMP_ENTITY', where: 'ent_id = ?', whereArgs: [entityId]);
+    }
   }
 
   Future<List<PlayerTeamAssignment>> getTeamAssignments(int teamId, int tId) async {
@@ -238,6 +256,7 @@ class TeamService {
       ''', [tId, entId]);
       for (final er in eventRows) {
         final eventId = er['event_id'] as int;
+        await db.delete('CMP_PLAYER_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
         await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
         await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
       }

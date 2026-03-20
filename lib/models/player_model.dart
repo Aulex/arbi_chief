@@ -76,6 +76,7 @@ class Player {
     int? player_gender,
     String? player_date_birth,
     int? t_type,
+    int? entity_id,
   }) {
     return Player(
       player_id: player_id ?? this.player_id,
@@ -85,6 +86,7 @@ class Player {
       player_gender: player_gender ?? this.player_gender,
       player_date_birth: player_date_birth ?? this.player_date_birth,
       t_type: t_type ?? this.t_type,
+      entity_id: entity_id ?? this.entity_id,
     );
   }
 

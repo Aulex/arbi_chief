@@ -19,15 +19,17 @@ class PlayerService {
     return List.generate(maps.length, (i) => Player.fromJson(maps[i]));
   }
 
-  // Insert or Update a player 💾
+  // Insert or Update a player
   Future<void> savePlayer(Player player) async {
     final db = await _dbService.database;
     final data = player.toJson();
 
-    // Check if player_id is null (New Player) or has a value (Update)
     if (player.player_id == null) {
-      // For a new record, we let the database handle the ID
-      // player_id is already excluded or null in toJson() logic for new entries
+      // New player: create CMP_ENTITY first, then insert player with entity_id
+      final entId = await db.insert('CMP_ENTITY', {
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
+      });
+      data['entity_id'] = entId;
       await db.insert('CMP_PLAYER', data);
     } else {
       // Update existing record where player_id matches
@@ -47,16 +49,48 @@ class PlayerService {
     final ids = <int>[];
     await db.transaction((txn) async {
       for (final player in players) {
-        final id = await txn.insert('CMP_PLAYER', player.toJson());
+        final data = player.toJson();
+        // Create CMP_ENTITY for each new player
+        final entId = await txn.insert('CMP_ENTITY', {
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
+        });
+        data['entity_id'] = entId;
+        final id = await txn.insert('CMP_PLAYER', data);
         ids.add(id);
       }
     });
     return ids;
   }
 
-  // Remove a player from the database 🗑️
+  // Remove a player and all related records
   Future<void> deletePlayer(int id) async {
     final db = await _dbService.database;
+    // Get entity_id before deleting
+    final rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [id]);
+    final entityId = rows.isNotEmpty ? rows.first['entity_id'] as int? : null;
+
+    // Delete CMP_SUBEVENT records referencing this entity
+    if (entityId != null) {
+      await db.delete('CMP_SUBEVENT', where: 'entity_id = ?', whereArgs: [entityId]);
+    }
+    // Delete CMP_PLAYER_EVENT records
+    await db.delete('CMP_PLAYER_EVENT', where: 'player_id = ?', whereArgs: [id]);
+    // Delete CMP_PLAYER_TEAM_ATTR_VALUE for all assignments
+    final assignments = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 'player_id = ?', whereArgs: [id]);
+    for (final a in assignments) {
+      await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ?', whereArgs: [a['pte_id']]);
+    }
+    // Delete CMP_PLAYER_TEAM records
+    await db.delete('CMP_PLAYER_TEAM', where: 'player_id = ?', whereArgs: [id]);
+    // Delete CMP_PLAYER_TOURNAMENT records
+    await db.delete('CMP_PLAYER_TOURNAMENT', where: 'player_id = ?', whereArgs: [id]);
+    // Delete CMP_SWIMMING_RESULT records
+    await db.delete('CMP_SWIMMING_RESULT', where: 'player_id = ?', whereArgs: [id]);
+    // Delete the player
     await db.delete('CMP_PLAYER', where: 'player_id = ?', whereArgs: [id]);
+    // Delete orphaned CMP_ENTITY
+    if (entityId != null) {
+      await db.delete('CMP_ENTITY', where: 'ent_id = ?', whereArgs: [entityId]);
+    }
   }
 }

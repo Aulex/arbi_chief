@@ -30,12 +30,13 @@ class DatabaseSyncService {
   /// Tables not listed here use all non-PK data columns.
   static const Map<String, List<String>> _uniqueKeyColumns = {
     'CMP_PLAYER_EVENT': ['event_id', 'player_id'],
-    'CMP_EVENT': ['ts_id', 'event_date_begin'],
   };
 
   static const List<String> _tableOrder = [
     'CMP_TOURNAMENT_TYPE',
     'CMP_ENTITY',
+    'CMP_EVENT_STATE',
+    'CMP_EVENT_TYPE',
     'CMP_ATTR',
     'CMP_ATTR_DICT',
     'CMP_TOURNAMENT_LOCATION',
@@ -47,9 +48,11 @@ class DatabaseSyncService {
     'CMP_PLAYER',
     'CMP_PLAYER_EVENT',
     'CMP_TEAM',
+    'CMP_SUBEVENT',
     'CMP_PLAYER_TEAM',
     'CMP_PLAYER_TEAM_ATTR_VALUE',
     'CMP_PLAYER_TOURNAMENT',
+    'CMP_SWIMMING_RESULT',
   ];
 
   // ──────────────────────────────────────────────
