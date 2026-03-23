@@ -1698,7 +1698,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                   _tableCell('${widget.config.boardAbbrev}1', style: headerStyle),
                 _tableCell('${widget.config.boardAbbrev}${widget.config.boardCount}', style: headerStyle),
                 // Black separator column
-                Container(constraints: const BoxConstraints(minWidth: 4, minHeight: 28), color: Colors.black),
+                Container(constraints: const BoxConstraints(minWidth: 12, minHeight: 28), color: Colors.black),
                 // Standings headers
                 _tableCell('№', style: headerStyle),
                 _tableCell('Команда', style: headerStyle, minWidth: 140),
@@ -1727,7 +1727,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                     _tableCell(_formatPoints(teamBoard1Pts[teamIdsByNumber[i]]!), style: cellStyle),
                   _tableCell(_formatPoints(teamBoard3Pts[teamIdsByNumber[i]]!), style: cellStyle),
                   // Black separator column
-                  Container(constraints: const BoxConstraints(minWidth: 4, minHeight: 28), color: Colors.black),
+                  Container(constraints: const BoxConstraints(minWidth: 12, minHeight: 28), color: Colors.black),
                   // Standings cells (sorted by place)
                   _tableCell(
                     '${teamMap[sortedTeamIds[i]]!.teamNumber ?? ''}',
@@ -2125,7 +2125,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             if (isTT) _tableCell('М.З.', style: headerStyle),
             if (isTT) _tableCell('М.П.', style: headerStyle),
             // Black separator column
-            Container(constraints: const BoxConstraints(minWidth: 4, minHeight: 28), color: Colors.black),
+            Container(constraints: const BoxConstraints(minWidth: 12, minHeight: 28), color: Colors.black),
             // Standings headers
             _tableCell('№к', style: headerStyle),
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
@@ -2191,7 +2191,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               if (isTT)
                 _tableCell('${_totalBalls(boardNum, players[i].player.player_id!).conceded}', style: cellStyle),
               // Black separator column
-              Container(constraints: const BoxConstraints(minWidth: 4, minHeight: 28), color: Colors.black),
+              Container(constraints: const BoxConstraints(minWidth: 12, minHeight: 28), color: Colors.black),
               // Standings cells (sorted order)
               _tableCell(
                 '${sorted[i].teamNumber ?? ''}',

@@ -204,7 +204,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     const nameWidth = 180.0;
     const rankWidth = 36.0;
     const statsWidth = 56.0;
-    const separatorWidth = 4.0;
+    const separatorWidth = 12.0;
 
     final standingsByTeam = {for (final s in standings) s.teamId: s};
 
