@@ -31,6 +31,23 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
   SportTypeConfig get _sportConfig => getConfigForType(widget.tournament.t_type);
   bool get _isSwimming => isSwimming(widget.tournament.t_type);
   bool get _isVolleyball => isVolleyball(widget.tournament.t_type);
+  int _volleyballTeamCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isVolleyball) {
+      _loadVolleyballTeamCount();
+    }
+  }
+
+  Future<void> _loadVolleyballTeamCount() async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final teams = await teamSvc.getTeamListForTournament(widget.tournament.t_id!);
+    if (mounted) {
+      setState(() => _volleyballTeamCount = teams.length);
+    }
+  }
 
   Future<void> _openStandingsWindow() async {
     // If already open, bring it to focus
@@ -84,19 +101,22 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (_isVolleyball) {
-      tabCount = 5;
-      tabs = const [
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.group_work_outlined, size: 18), SizedBox(width: 6), Text('Групи')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      final showGroups = _volleyballTeamCount >= 9;
+      tabCount = showGroups ? 5 : 4;
+      tabs = [
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        if (showGroups)
+          const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.group_work_outlined, size: 18), SizedBox(width: 6), Text('Групи')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         VolleyballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
-        VolleyballGroupManagementTab(tId: widget.tournament.t_id!),
+        if (showGroups)
+          VolleyballGroupManagementTab(tId: widget.tournament.t_id!),
         TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
-        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig, onTeamsChanged: _loadVolleyballTeamCount),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else {

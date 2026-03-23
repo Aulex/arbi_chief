@@ -13,7 +13,8 @@ import '../viewmodels/tournament_viewmodel.dart';
 class TournamentTeamsTab extends ConsumerStatefulWidget {
   final Tournament tournament;
   final SportTypeConfig config;
-  const TournamentTeamsTab({super.key, required this.tournament, required this.config});
+  final VoidCallback? onTeamsChanged;
+  const TournamentTeamsTab({super.key, required this.tournament, required this.config, this.onTeamsChanged});
 
   @override
   ConsumerState<TournamentTeamsTab> createState() => _TournamentTeamsTabState();
@@ -86,7 +87,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
 
   void _reloadData() {
     setState(() => _loading = true);
-    _loadData();
+    _loadData().then((_) => widget.onTeamsChanged?.call());
   }
 
   Future<void> _showBoardPlayerPicker(int boardNum, ({Team team, int? teamNumber, Map<int, int> boards}) teamData) async {

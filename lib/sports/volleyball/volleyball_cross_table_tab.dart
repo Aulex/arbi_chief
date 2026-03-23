@@ -74,12 +74,19 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       ));
     }
 
-    // Build games map
+    // Build games map (both directions for mirrored display)
     final gamesMap = <(int, int), _GameData>{};
     for (final g in games) {
       gamesMap[(g.teamAEntityId, g.teamBEntityId)] = _GameData(
         eventId: g.eventId,
         detail: g.teamADetail,
+        eventResult: g.eventResult,
+        esId: g.esId,
+      );
+      // Mirror: store reverse direction with team B's detail
+      gamesMap[(g.teamBEntityId, g.teamAEntityId)] = _GameData(
+        eventId: g.eventId,
+        detail: g.teamBDetail,
         eventResult: g.eventResult,
         esId: g.esId,
       );
@@ -184,19 +191,27 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     const nameWidth = 180.0;
     const rankWidth = 36.0;
     const statsWidth = 56.0;
+    const separatorWidth = 4.0;
 
     final standingsByTeam = {for (final s in standings) s.teamId: s};
+
+    // Column indices:
+    // 0: rank, 1: name, 2..n+1: opponent cells, n+2: О, n+3: П, n+4: Р
+    // n+5: separator, n+6: команда, n+7: очки, n+8: місце
+    final n = teams.length;
 
     return Table(
       defaultColumnWidth: const FixedColumnWidth(cellWidth),
       columnWidths: {
         0: const FixedColumnWidth(rankWidth),
         1: const FixedColumnWidth(nameWidth),
-        // columns 2..teams.length+1 are opponent cells
-        // then points, sets, score columns
-        teams.length + 2: const FixedColumnWidth(statsWidth),
-        teams.length + 3: const FixedColumnWidth(statsWidth),
-        teams.length + 4: const FixedColumnWidth(statsWidth),
+        n + 2: const FixedColumnWidth(statsWidth),
+        n + 3: const FixedColumnWidth(statsWidth),
+        n + 4: const FixedColumnWidth(statsWidth),
+        n + 5: const FixedColumnWidth(separatorWidth),
+        n + 6: const FixedColumnWidth(nameWidth),
+        n + 7: const FixedColumnWidth(statsWidth),
+        n + 8: const FixedColumnWidth(rankWidth),
       },
       border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
       children: [
@@ -206,16 +221,22 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
           children: [
             _headerCell('#'),
             _headerCell('Команда'),
-            for (int j = 0; j < teams.length; j++)
+            for (int j = 0; j < n; j++)
               _headerCell('${j + 1}'),
             _headerCell('О'),
             _headerCell('П'),
             _headerCell('Р'),
+            // Separator
+            Container(height: 36, color: Colors.black),
+            // Standings headers
+            _headerCell('Команда'),
+            _headerCell('Очки'),
+            _headerCell('Місце'),
           ],
         ),
         // Data rows
-        for (int i = 0; i < teams.length; i++)
-          _buildTeamRow(i, teams, standingsByTeam, carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
+        for (int i = 0; i < n; i++)
+          _buildTeamRow(i, teams, standingsByTeam, standings, carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
       ],
     );
   }
@@ -223,13 +244,17 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   TableRow _buildTeamRow(
     int i,
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
-    Map<int, scoring.VolleyballStanding> standingsByTeam, {
+    Map<int, scoring.VolleyballStanding> standingsByTeam,
+    List<scoring.VolleyballStanding> sortedStandings, {
     Map<(int, int), _GameData>? carryOverGames,
     bool readOnlyCarryOver = false,
   }) {
     final team = teams[i];
     final standing = standingsByTeam[team.teamId];
     final isRemoved = _removedTeamIds.contains(team.teamId);
+
+    // Standings row (sorted by place)
+    final standingRow = i < sortedStandings.length ? sortedStandings[i] : null;
 
     return TableRow(
       decoration: BoxDecoration(
@@ -253,6 +278,12 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         _dataCell('${standing?.setsWon ?? 0}:${standing?.setsLost ?? 0}'),
         // Point ratio
         _dataCell('${standing?.pointsScored ?? 0}:${standing?.pointsConceded ?? 0}'),
+        // Black separator
+        Container(height: 36, color: Colors.black),
+        // Standings: team name, points, place
+        _teamNameCell(standingRow?.teamName ?? ''),
+        _dataCell('${standingRow?.matchPoints ?? 0}', bold: true),
+        _dataCell('${standingRow?.rank ?? i + 1}', bold: true),
       ],
     );
   }
@@ -484,13 +515,17 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   List<scoring.VolleyballStanding> _calculateStandings(
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
   ) {
-    // Build games map for these teams only
+    // Build games map for these teams only (one direction per game to avoid double-counting)
     final teamEntityIds = teams.map((t) => t.entityId).whereType<int>().toSet();
     final filteredGames = <(int, int), String>{};
+    final seenPairs = <(int, int)>{};
 
     for (final entry in _games.entries) {
       final (aEntId, bEntId) = entry.key;
       if (teamEntityIds.contains(aEntId) && teamEntityIds.contains(bEntId)) {
+        // Skip if we've already added the reverse direction
+        if (seenPairs.contains((bEntId, aEntId))) continue;
+        seenPairs.add((aEntId, bEntId));
         final detail = entry.value.detail;
         if (detail != null) {
           filteredGames[(aEntId, bEntId)] = detail;
