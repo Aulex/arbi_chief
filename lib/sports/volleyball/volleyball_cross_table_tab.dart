@@ -149,6 +149,19 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
+                if (_games.isNotEmpty)
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 14),
+                    label: const Text('Очистити', style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => _confirmClearResults(),
+                  ),
+                const SizedBox(width: 8),
                 Text(
                   '${teams.length} команд',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
@@ -538,6 +551,36 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       games: filteredGames,
       removedTeamIds: _removedTeamIds,
     );
+  }
+
+  void _confirmClearResults() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Очистити результати?'),
+        content: const Text('Видалити всі результати ігор у таблиці?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _clearAllResults();
+            },
+            child: const Text('Очистити', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearAllResults() async {
+    final vSvc = ref.read(volleyballServiceProvider);
+    final eventIds = _games.values.map((g) => g.eventId).toSet();
+    for (final id in eventIds) {
+      await vSvc.deleteTeamGame(id);
+    }
+    await _loadData();
   }
 
   // --- Set Score Dialog ---
