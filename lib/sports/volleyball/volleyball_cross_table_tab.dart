@@ -279,7 +279,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       ),
       children: [
         // Rank
-        _dataCell('${standing?.rank ?? i + 1}', bold: true),
+        _dataCell('${i + 1}', bold: true),
         // Team name
         _teamNameCell(team.teamName, isRemoved: isRemoved),
         // Opponent cells
