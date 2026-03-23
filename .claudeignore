@@ -1,0 +1,51 @@
+# Build outputs
+build/
+.dart_tool/
+
+# Dependencies
+.pub/
+.pub-cache/
+
+# Platform build artifacts
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/build/
+windows/build/
+linux/build/
+macos/build/
+
+# Generated files
+android/**/GeneratedPluginRegistrant.java
+ios/**/GeneratedPluginRegistrant.*
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Lock file (large, not useful for code understanding)
+pubspec.lock
+
+# Platform-specific project configs (auto-generated, rarely need editing)
+android/app/build.gradle.kts
+ios/Runner.xcodeproj/project.pbxproj
+ios/Runner.xcworkspace/
+macos/Runner.xcodeproj/project.pbxproj
+macos/Runner.xcworkspace/
+windows/runner/*.g.cpp
+windows/runner/*.g.h
+
+# Database files
+*.db
+
+# Test coverage
+coverage/
