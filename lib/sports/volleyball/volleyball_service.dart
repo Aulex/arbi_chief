@@ -253,13 +253,15 @@ class VolleyballService {
     await db.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 11', whereArgs: [tId]);
   }
 
-  /// Auto-assign groups: shuffle teams and distribute into groups of 3-5.
-  /// Group count = ceil(teamCount / 4), targeting 4-5 per group, min 3.
+  /// Auto-assign groups: shuffle teams and distribute into two groups
+  /// when 9 or more teams, otherwise groups of 3-5.
   Future<void> autoAssignGroups(int tId, List<int> teamIds) async {
     if (teamIds.isEmpty) return;
     final db = await _dbService.database;
 
-    final groupCount = (teamIds.length / 4).ceil().clamp(1, teamIds.length);
+    final groupCount = teamIds.length >= 9
+        ? 2
+        : (teamIds.length / 4).ceil().clamp(1, teamIds.length);
     final shuffled = List<int>.from(teamIds)..shuffle(Random());
 
     // Group names: A, B, C, ...
