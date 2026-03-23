@@ -28,9 +28,10 @@ class PlayerService {
       // New player: create CMP_ENTITY first, then insert player with entity_id
       final entId = await db.insert('CMP_ENTITY', {
         'entity_type_id': 1,
-        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
+        'sync_uid': await SyncUidGenerator.generate(),
       });
       data['entity_id'] = entId;
+      data['sync_uid'] = await SyncUidGenerator.generate();
       await db.insert('CMP_PLAYER', data);
     } else {
       // Update existing record where player_id matches
@@ -54,9 +55,10 @@ class PlayerService {
         // Create CMP_ENTITY for each new player
         final entId = await txn.insert('CMP_ENTITY', {
           'entity_type_id': 1,
-          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
+          'sync_uid': await SyncUidGenerator.generate(),
         });
         data['entity_id'] = entId;
+        data['sync_uid'] = await SyncUidGenerator.generate();
         final id = await txn.insert('CMP_PLAYER', data);
         ids.add(id);
       }
@@ -67,9 +69,7 @@ class PlayerService {
   // Remove a player and all related records
   Future<void> deletePlayer(int id) async {
     final db = await _dbService.database;
-    // Get entity_id before deleting
-    final rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [id]);
-    final entityId = rows.isNotEmpty ? rows.first['entity_id'] as int? : null;
+    final entityId = await _dbService.ensurePlayerEntity(db, id);
 
     // Delete CMP_SUBEVENT records referencing this entity
     if (entityId != null) {

@@ -100,11 +100,13 @@ class SwimmingService {
     final swimmingCategories = SwimmingCategory.values.map((c) => "'${c.name}'").join(',');
     String sql = '''
       SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
-             p.player_id, t.team_id
+             p.player_id, 
+             COALESCE(t.team_id, pt.team_id) as team_id
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
       LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
+      LEFT JOIN CMP_PLAYER_TEAM pt ON p.player_id = pt.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
       WHERE e.t_id = ? AND se.se_note IN ($swimmingCategories)
     ''';
 
@@ -117,12 +119,14 @@ class SwimmingService {
 
     final rows = await db.rawQuery(sql, args);
     return rows.map((r) {
-      final total = (r['time_total'] as num).toInt();
+      final total = (r['time_total'] as num?)?.toInt() ?? 0;
+      final teamId = r['team_id'] as int? ?? 0;
+      
       return SwimmingResult(
         id: r['sr_id'] as int,
         tournamentId: tId,
         playerId: r['player_id'] as int?,
-        teamId: (r['team_id'] as int?) ?? 0,
+        teamId: teamId,
         category: SwimmingCategory.fromDb(r['category'] as String),
         timeMin: total ~/ 6000,
         timeSec: (total % 6000) ~/ 100,
@@ -141,11 +145,14 @@ class SwimmingService {
     final rows = await db.rawQuery('''
       SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, p.player_surname, p.player_name, p.player_lastname,
-             t.team_id, t.team_name
+             COALESCE(t.team_id, pt.team_id) as team_id,
+             COALESCE(t.team_name, t2.team_name) as team_name
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
       LEFT JOIN CMP_TEAM t ON se.entity_id = t.entity_id
+      LEFT JOIN CMP_PLAYER_TEAM pt ON p.player_id = pt.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
+      LEFT JOIN CMP_TEAM t2 ON pt.team_id = t2.team_id
       WHERE e.t_id = ? AND se.se_note = ?
       ORDER BY se.se_result ASC
     ''', [tId, category.name]);
@@ -153,12 +160,14 @@ class SwimmingService {
     final ranked = <RankedSwimmingResult>[];
     int place = 1;
     for (int i = 0; i < rows.length; i++) {
-      final total = (rows[i]['time_total'] as num).toInt();
+      final total = (rows[i]['time_total'] as num?)?.toInt() ?? 0;
+      final teamId = rows[i]['team_id'] as int? ?? 0;
+
       final r = SwimmingResult(
         id: rows[i]['sr_id'] as int,
         tournamentId: tId,
         playerId: rows[i]['player_id'] as int?,
-        teamId: (rows[i]['team_id'] as int?) ?? 0,
+        teamId: teamId,
         category: SwimmingCategory.fromDb(rows[i]['category'] as String),
         timeMin: total ~/ 6000,
         timeSec: (total % 6000) ~/ 100,

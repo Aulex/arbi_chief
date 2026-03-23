@@ -687,4 +687,31 @@ class DatabaseService {
       },
     );
   }
+  /// Ensure a player has a CMP_ENTITY row; create one if missing (legacy data).
+  Future<int> ensurePlayerEntity(dynamic db, int playerId) async {
+    final rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (rows.isEmpty) throw Exception('Player not found: $playerId');
+    final existing = rows.first['entity_id'] as int?;
+    if (existing != null) return existing;
+    final entId = await db.insert('CMP_ENTITY', {
+      'entity_type_id': 1, // Гравець
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
+    });
+    await db.update('CMP_PLAYER', {'entity_id': entId}, where: 'player_id = ?', whereArgs: [playerId]);
+    return entId;
+  }
+
+  /// Ensure a team has a CMP_ENTITY row; create one if missing (legacy data).
+  Future<int> ensureTeamEntity(dynamic db, int teamId) async {
+    final rows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [teamId]);
+    if (rows.isEmpty) throw Exception('Team not found: $teamId');
+    final existing = rows.first['entity_id'] as int?;
+    if (existing != null) return existing;
+    final entId = await db.insert('CMP_ENTITY', {
+      'entity_type_id': 2, // Команда
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_t',
+    });
+    await db.update('CMP_TEAM', {'entity_id': entId}, where: 'team_id = ?', whereArgs: [teamId]);
+    return entId;
+  }
 }

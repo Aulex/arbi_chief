@@ -252,43 +252,32 @@ class TournamentService {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
     
-    // Get Entity IDs, creating them if missing (legacy players may lack one)
-    final wEntId = await _ensurePlayerEntity(db, whitePlayerId);
-    final bEntId = await _ensurePlayerEntity(db, blackPlayerId);
+    return await db.transaction((txn) async {
+      // Get Entity IDs, creating them if missing (legacy players may lack one)
+      final wEntId = await _dbService.ensurePlayerEntity(txn, whitePlayerId);
+      final bEntId = await _dbService.ensurePlayerEntity(txn, blackPlayerId);
 
-    final eventId = await db.insert('CMP_EVENT', {
-      't_id': tId,
-      'event_date_begin': today,
-      'et_id': 1, // Одиночний
+      final eventId = await txn.insert('CMP_EVENT', {
+        't_id': tId,
+        'event_date_begin': today,
+        'et_id': 1, // Одиночний
+      });
+      
+      await txn.insert('CMP_SUBEVENT', {
+        'ev_id': eventId,
+        'entity_id': wEntId,
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_w_se',
+      });
+      await txn.insert('CMP_SUBEVENT', {
+        'ev_id': eventId,
+        'entity_id': bEntId,
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_b_se',
+      });
+      
+      return eventId;
     });
-    
-    await db.insert('CMP_SUBEVENT', {
-      'ev_id': eventId,
-      'entity_id': wEntId,
-      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_w_se',
-    });
-    await db.insert('CMP_SUBEVENT', {
-      'ev_id': eventId,
-      'entity_id': bEntId,
-      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_b_se',
-    });
-    
-    return eventId;
   }
 
-  /// Ensure a player has a CMP_ENTITY row; create one if missing (legacy data).
-  Future<int> _ensurePlayerEntity(dynamic db, int playerId) async {
-    final rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
-    if (rows.isEmpty) throw Exception('Player not found: $playerId');
-    final existing = rows.first['entity_id'] as int?;
-    if (existing != null) return existing;
-    final entId = await db.insert('CMP_ENTITY', {
-      'entity_type_id': 1,
-      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_p',
-    });
-    await db.update('CMP_PLAYER', {'entity_id': entId}, where: 'player_id = ?', whereArgs: [playerId]);
-    return entId;
-  }
 
   /// Get all games for a tournament (via its stages).
   Future<List<({int eventId, Player white, Player black, String? dateBegin})>>
@@ -439,15 +428,9 @@ class TournamentService {
         player_date_birth: r['b_dob'] as String? ?? '',
       );
 
-      // Determine which entity is "white" (p1 from the SQL = lower entity_id)
-      // The SQL joins: se1.entity_id < se2.entity_id, so p1 = lower entity_id
-      final wPlayer = white;
-      final bPlayer = black;
-      final wEntRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [wPlayer.player_id]);
-      if (wEntRows.isEmpty) continue;
-      final wPlayerEntId = wEntRows.first['entity_id'] as int?;
-      if (wPlayerEntId == null) continue;
-
+      // Determine which entity is "white"
+      final wPlayerEntId = await _dbService.ensurePlayerEntity(db, white.player_id!);
+      
       // Filter subevents per player
       final wSubs = subEvents.where((s) => s['entity_id'] == wPlayerEntId).toList();
       final bSubs = subEvents.where((s) => s['entity_id'] != wPlayerEntId).toList();
@@ -505,12 +488,12 @@ class TournamentService {
     final today = DateTime.now().toIso8601String().split('T').first;
     
     // Get player's entity_id (create if missing)
-    final playerEntId = await _ensurePlayerEntity(db, playerId);
+    final playerEntId = await _dbService.ensurePlayerEntity(db, playerId);
 
     await db.transaction((txn) async {
       for (final opponentId in opponentIds) {
         // Get opponent's entity_id (create if missing)
-        final opponentEntId = await _ensurePlayerEntity(txn, opponentId);
+        final opponentEntId = await _dbService.ensurePlayerEntity(txn, opponentId);
 
         // Find existing game
         final rows = await txn.rawQuery('''
@@ -589,12 +572,8 @@ class TournamentService {
   Future<int?> findGameBetweenPlayers(int tId, int player1Id, int player2Id) async {
     final db = await _dbService.database;
     // Get entity IDs for both players
-    final p1Rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [player1Id]);
-    final p2Rows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [player2Id]);
-    if (p1Rows.isEmpty || p2Rows.isEmpty) return null;
-    final ent1 = p1Rows.first['entity_id'] as int?;
-    final ent2 = p2Rows.first['entity_id'] as int?;
-    if (ent1 == null || ent2 == null) return null;
+    final ent1 = await _dbService.ensurePlayerEntity(db, player1Id);
+    final ent2 = await _dbService.ensurePlayerEntity(db, player2Id);
 
     final rows = await db.rawQuery('''
       SELECT e.event_id
@@ -609,47 +588,57 @@ class TournamentService {
   }
 
   /// Save result for a specific player in a game; sets complement for opponent.
-  /// When playerResult is null, also clears event_result_detail.
   Future<void> saveResultForPlayer(int eventId, int playerId, double? playerResult) async {
     final db = await _dbService.database;
     
-    // Get Entity ID for the player (create if missing)
-    final playerEntId = await _ensurePlayerEntity(db, playerId);
-
-    // Get all subevents for this event
-    final subRows = await db.query(
-      'CMP_SUBEVENT',
-      where: 'ev_id = ?',
-      whereArgs: [eventId],
-      orderBy: 'se_id',
-    );
-    if (subRows.length < 2) return;
+    // 1. Identify both players in this game
+    final eventRows = await db.rawQuery('''
+      SELECT se.entity_id, p.player_id
+      FROM CMP_SUBEVENT se
+      JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
+      WHERE se.ev_id = ?
+    ''', [eventId]);
+    
+    if (eventRows.isEmpty) return;
+    
+    // Find who is the 'player' and who is the 'opponent'
+    int? playerEntId;
+    int? opponentEntId;
+    
+    for (final r in eventRows) {
+      if (r['player_id'] == playerId) {
+        playerEntId = r['entity_id'] as int;
+      } else {
+        opponentEntId = r['entity_id'] as int;
+      }
+    }
+    
+    if (playerEntId == null || opponentEntId == null) return;
 
     final complement = playerResult != null ? 1.0 - playerResult : null;
 
     await db.transaction((txn) async {
-      for (final row in subRows) {
-        final entId = row['entity_id'] as int;
-        if (entId == playerEntId) {
-          await txn.update('CMP_SUBEVENT', {'se_result': playerResult}, 
-              where: 'se_id = ?', whereArgs: [row['se_id']]);
-        } else {
-          await txn.update('CMP_SUBEVENT', {'se_result': complement}, 
-              where: 'se_id = ?', whereArgs: [row['se_id']]);
-        }
-      }
+      await txn.update('CMP_SUBEVENT', {'se_result': playerResult}, 
+          where: 'ev_id = ? AND entity_id = ?', whereArgs: [eventId, playerEntId]);
+      
+      await txn.update('CMP_SUBEVENT', {'se_result': complement}, 
+          where: 'ev_id = ? AND entity_id = ?', whereArgs: [eventId, opponentEntId]);
       
       // Update overall event result summary
       if (playerResult != null) {
-        // Find which outcome name matches
         int? esId;
-        if (playerResult == 1.0) esId = 1; // Перемога (hardcoded for now as per seed)
-        else if (playerResult == 0.0) esId = 2; // Поразка
-        else if (playerResult == 0.5) esId = 3; // Нічия
+        if (playerResult == 1.0) esId = 1;
+        else if (playerResult == 0.0) esId = 2;
+        else if (playerResult == 0.5) esId = 3;
         
         await txn.update('CMP_EVENT', {
           'event_result': playerResult.toString(),
           'es_id': esId,
+        }, where: 'event_id = ?', whereArgs: [eventId]);
+      } else {
+        await txn.update('CMP_EVENT', {
+          'event_result': null,
+          'es_id': null,
         }, where: 'event_id = ?', whereArgs: [eventId]);
       }
     });

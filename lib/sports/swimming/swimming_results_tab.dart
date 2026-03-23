@@ -618,7 +618,7 @@ class _SwimmingResultDialogState extends ConsumerState<_SwimmingResultDialog> {
                     const SizedBox(height: 16),
                     // Team dropdown
                     DropdownButtonFormField<int>(
-                      value: _selectedTeamId,
+                      value: _teams.any((t) => t.teamId == _selectedTeamId) ? _selectedTeamId : null,
                       decoration: const InputDecoration(
                         labelText: 'Команда',
                         border: OutlineInputBorder(),

@@ -77,6 +77,7 @@ class Player {
     String? player_date_birth,
     int? t_type,
     int? entity_id,
+    String? sync_uid,
   }) {
     return Player(
       player_id: player_id ?? this.player_id,
@@ -87,6 +88,7 @@ class Player {
       player_date_birth: player_date_birth ?? this.player_date_birth,
       t_type: t_type ?? this.t_type,
       entity_id: entity_id ?? this.entity_id,
+      sync_uid: sync_uid ?? this.sync_uid,
     );
   }
 
@@ -100,6 +102,7 @@ class Player {
       player_date_birth: json['player_date_birth'] as String? ?? '',
       t_type: json['t_type'] as int?,
       entity_id: json['entity_id'] as int?,
+      sync_uid: json['sync_uid'] as String?,
     );
   }
 
@@ -113,6 +116,7 @@ class Player {
       'player_date_birth': player_date_birth,
       't_type': t_type,
       'entity_id': entity_id,
+      'sync_uid': sync_uid,
     };
   }
 }

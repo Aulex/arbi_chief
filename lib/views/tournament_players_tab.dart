@@ -242,44 +242,44 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   void _showBulkImportDialog() {
     _focusNode.unfocus();
     final textC = TextEditingController();
+    int format = 0; // 0: ПІБ, 1: ПІ
     bool importing = false;
     String? error;
     int importedCount = 0;
 
-    List<_ParsedPlayer> _parseText(String text) {
-      // Replace all Unicode whitespace characters (from Excel) with regular spaces
+    List<_ParsedPlayer> parseText(String text, int fmt) {
       text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedPlayer>[];
       for (final line in lines) {
-        // Split by tab (Excel), semicolon, or spaces
-        final parts = line
-            .split(RegExp(r'\t|;|\s+'))
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList();
-        if (parts.isEmpty) continue;
-        result.add(_ParsedPlayer(
-          surname: parts.isNotEmpty ? parts[0] : '',
-          name: parts.length > 1 ? parts[1] : '',
-          lastname: parts.length > 2 ? parts[2] : '',
-        ));
+        final parts = line.split(RegExp(r'\t|;')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        List<String> finalParts = parts;
+        if (parts.length == 1) {
+          finalParts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        }
+        if (finalParts.isEmpty) continue;
+        if (fmt == 0) {
+          result.add(_ParsedPlayer(
+            surname: finalParts[0],
+            name: finalParts.length > 1 ? finalParts[1] : '',
+            lastname: finalParts.length > 2 ? finalParts.sublist(2).join(' ') : '',
+          ));
+        } else {
+          result.add(_ParsedPlayer(
+            surname: finalParts[0],
+            name: finalParts.length > 1 ? finalParts.sublist(1).join(' ') : '',
+            lastname: '',
+          ));
+        }
       }
       return result;
     }
-
-    // Use controller listener to catch ALL text changes (typing, paste, programmatic)
-    late void Function(void Function()) _setST;
-    textC.addListener(() {
-      _setST(() {});
-    });
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setST) {
-          _setST = setST;
-          final parsed = _parseText(textC.text);
+          final parsed = parseText(textC.text, format);
           return Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: ConstrainedBox(
@@ -294,17 +294,33 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       children: [
                         Icon(Icons.upload_file, color: Colors.indigo),
                         SizedBox(width: 12),
-                        Text(
-                          'Швидкий імпорт гравців',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        Text('Швидкий імпорт гравців', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('Формат:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        ChoiceChip(
+                          label: const Text('Прізвище Ім\'я По батькові'),
+                          selected: format == 0,
+                          onSelected: (v) => setST(() => format = 0),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Прізвище Ім\'я'),
+                          selected: format == 1,
+                          onSelected: (v) => setST(() => format = 1),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Вставте дані з Excel (Ctrl+V). Кожен рядок — один гравець.\n'
-                      'Формат: Прізвище  Ім\'я  По батькові (розділені табуляцією або ;)',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    Text(
+                      format == 0 
+                        ? 'Вставте дані з Excel. Кожен рядок: Прізвище  Ім\'я  По батькові (TAB або ;)'
+                        : 'Вставте дані з Excel. Кожен рядок: Прізвище  Ім\'я (TAB або ;)',
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     const SizedBox(height: 12),
                     Flexible(
@@ -319,17 +335,12 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.all(12),
                         ),
-                        onChanged: (_) {
-                          setST(() => error = null);
-                        },
+                        onChanged: (v) => setST(() => error = null),
                       ),
                     ),
                     if (parsed.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        'Розпізнано гравців: ${parsed.length}',
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo),
-                      ),
+                      Text('Розпізнано гравців: ${parsed.length}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo)),
                       const SizedBox(height: 4),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxHeight: 120),
@@ -341,12 +352,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                             final genderLabel = Player.detectGender(p.name, p.lastname) == 0 ? 'Ч' : 'Ж';
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 1),
-                              child: Text(
-                                '${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($genderLabel)',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: p.surname.isEmpty ? Colors.red : Colors.black87,
-                                ),
+                              child: Text('${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($genderLabel)',
+                                style: TextStyle(fontSize: 12, color: p.surname.isEmpty ? Colors.red : Colors.black87),
                               ),
                             );
                           },
@@ -367,52 +374,39 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
-                          onPressed: importing || parsed.isEmpty
-                              ? null
-                              : () async {
-                                  setST(() => importing = true);
-                                  try {
-                                    final validPlayers = parsed.where((p) => p.surname.isNotEmpty).toList();
-                                    // Bulk-insert all players in a single transaction
-                                    final playerIds = await ref.read(playerProvider.notifier).bulkAddPlayers(
-                                      validPlayers.map((p) => (
-                                        surname: p.surname,
-                                        name: p.name,
-                                        lastname: p.lastname,
-                                        gender: Player.detectGender(p.name, p.lastname),
-                                        dob: '',
-                                      )).toList(),
-                                    );
-                                    // Bulk-add all new players to tournament in a single transaction
-                                    await ref.read(tournamentServiceProvider)
-                                        .bulkAddParticipants(widget.tId, playerIds);
-                                    importedCount = playerIds.length;
-                                    if (dialogContext.mounted) Navigator.pop(dialogContext);
-                                    _loadData();
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Імпортовано гравців: $importedCount')),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    setST(() {
-                                      importing = false;
-                                      error = 'Помилка: $e';
-                                    });
-                                  }
-                                },
+                          onPressed: importing || parsed.isEmpty ? null : () async {
+                            setST(() => importing = true);
+                            try {
+                              final currentParsed = parseText(textC.text, format);
+                              final validPlayers = currentParsed.where((p) => p.surname.isNotEmpty).toList();
+                              final playerIds = await ref.read(playerProvider.notifier).bulkAddPlayers(
+                                validPlayers.map((p) => (
+                                  surname: p.surname,
+                                  name: p.name,
+                                  lastname: p.lastname,
+                                  gender: Player.detectGender(p.name, p.lastname),
+                                  dob: '',
+                                )).toList(),
+                              );
+                              await ref.read(tournamentServiceProvider).bulkAddParticipants(widget.tId, playerIds);
+                              importedCount = playerIds.length;
+                              if (dialogContext.mounted) Navigator.pop(dialogContext);
+                              _loadData();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Імпортовано гравців: $importedCount')));
+                              }
+                            } catch (e) {
+                              setST(() {
+                                importing = false;
+                                error = 'Помилка: $e';
+                              });
+                            }
+                          },
                           icon: importing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.download_done),
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.download_done),
                           label: Text(importing ? 'Імпорт...' : 'Імпортувати (${parsed.length})'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            foregroundColor: Colors.white,
-                          ),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
                         ),
                       ],
                     ),
@@ -429,47 +423,43 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   void _showBulkImportTeamsDialog() {
     _focusNode.unfocus();
     final textC = TextEditingController();
+    int format = 0; // 0: ПІБ + Команда, 1: ПІ + Команда
     bool importing = false;
     String? error;
 
-    List<_ParsedTeamPlayer> _parseText(String text) {
-      // Replace all Unicode whitespace characters (from Excel) with regular spaces
+    List<_ParsedTeamPlayer> parseText(String text, int fmt) {
       text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedTeamPlayer>[];
       for (final line in lines) {
-        List<String> parts;
-        if (line.contains('\t')) {
-          // Tab-separated (Excel paste)
-          parts = line.split('\t').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-          // If we have "Full Name" [TAB] "Team" (2-3 parts total)
-          if (parts.length < 4 && parts.isNotEmpty) {
-            final nameComponents = parts[0].split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-            if (nameComponents.length >= 3) {
-              // Rebuild parts: [Surname, Name, Lastname, ...remaining components/columns]
-              parts = [...nameComponents, ...parts.sublist(1)];
+        List<String> parts = line.split(RegExp(r'\t|;')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        if (parts.length == 1) {
+          final spaceParts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+          if (fmt == 0) {
+            if (spaceParts.length >= 4) {
+              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: spaceParts[2], teamName: spaceParts.sublist(3).join(' ')));
+            }
+          } else {
+            if (spaceParts.length >= 3) {
+              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: '', teamName: spaceParts.sublist(2).join(' ')));
             }
           }
-        } else if (line.contains(';')) {
-          // Semicolon-separated
-          parts = line.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         } else {
-          // Space-separated
-          parts = line.trim().split(RegExp(r'\s+'));
+          if (fmt == 0) {
+            if (parts.length >= 4) {
+              result.add(_ParsedTeamPlayer(surname: parts[0], name: parts[1], lastname: parts[2], teamName: parts.sublist(3).join(' ')));
+            }
+          } else {
+            if (parts.length >= 3) {
+              result.add(_ParsedTeamPlayer(
+                surname: parts[0],
+                name: parts[1],
+                lastname: '',
+                teamName: parts.sublist(2).join(' '),
+              ));
+            }
+          }
         }
-        // Format: Прізвище Ім'я По батькові Команда
-        if (parts.length < 3) continue; // need at least surname + name + lastname (team optional)
-        final surname = parts[0];
-        final name = parts[1];
-        final lastname = parts[2];
-        final teamName = parts.length >= 4 ? parts.sublist(3).join(' ') : '';
-        if (teamName.isEmpty) continue; // team is required for this import
-        result.add(_ParsedTeamPlayer(
-          teamName: teamName,
-          surname: surname,
-          name: name,
-          lastname: lastname,
-        ));
       }
       return result;
     }
@@ -486,7 +476,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         builder: (dialogContext, setST) {
           _setST = setST;
           // Parse fresh from controller on every build
-          final parsed = _parseText(textC.text);
+          final parsed = parseText(textC.text, format);
           // Group by team for preview
           final teamGroups = <String, List<_ParsedTeamPlayer>>{};
           for (final p in parsed) {
@@ -513,11 +503,30 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('Формат:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        ChoiceChip(
+                          label: const Text('ПІБ + Команда'),
+                          selected: format == 0,
+                          onSelected: (v) => setST(() => format = 0),
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('ПІ + Команда'),
+                          selected: format == 1,
+                          onSelected: (v) => setST(() => format = 1),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Вставте дані з Excel (Ctrl+V). Кожен рядок — один гравець.\n'
-                      'Формат: Прізвище\tІм\'я\tПо батькові\tКоманда',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    Text(
+                      format == 0 
+                        ? 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда (через TAB/;/пробіл)'
+                        : 'Кожен рядок: Прізвище  Ім\'я  Команда (через TAB/;/пробіл)',
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     const SizedBox(height: 12),
                     Flexible(
@@ -537,43 +546,56 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         },
                       ),
                     ),
-                    if (teamGroups.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Розпізнано: ${teamGroups.length} команд, ${parsed.length} гравців',
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo),
-                      ),
-                      const SizedBox(height: 4),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 150),
-                        child: ListView(
-                          shrinkWrap: true,
-                          children: [
-                            for (final entry in teamGroups.entries) ...[
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  '${entry.key} (${entry.value.length})',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                              ),
-                              for (var i = 0; i < entry.value.length; i++)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 16),
-                                  child: Text(
-                                    '${i + 1}. ${entry.value[i].surname} ${entry.value[i].name} ${entry.value[i].lastname} '
-                                    '(${Player.detectGender(entry.value[i].name, entry.value[i].lastname) == 0 ? 'Ч' : 'Ж'})',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: entry.value[i].surname.isEmpty ? Colors.red : Colors.black87,
+                    Builder(builder: (ctx) {
+                      final parsed = parseText(textC.text, format);
+                      // Group by team for preview
+                      final teamGroups = <String, List<_ParsedTeamPlayer>>{};
+                      for (final p in parsed) {
+                        teamGroups.putIfAbsent(p.teamName, () => []).add(p);
+                      }
+                      if (teamGroups.isEmpty) return const SizedBox.shrink();
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 8),
+                          Text(
+                            'Розпізнано: ${teamGroups.length} команд, ${parsed.length} гравців',
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo),
+                          ),
+                          const SizedBox(height: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 150),
+                            child: ListView(
+                              shrinkWrap: true,
+                              children: [
+                                for (final entry in teamGroups.entries) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      '${entry.key} (${entry.value.length})',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                     ),
                                   ),
-                                ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
+                                  for (var i = 0; i < entry.value.length; i++)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 16),
+                                      child: Text(
+                                        '${i + 1}. ${entry.value[i].surname} ${entry.value[i].name} ${entry.value[i].lastname} '
+                                        '(${Player.detectGender(entry.value[i].name, entry.value[i].lastname) == 0 ? 'Ч' : 'Ж'})',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: entry.value[i].surname.isEmpty ? Colors.red : Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
                     if (error != null) ...[
                       const SizedBox(height: 8),
                       Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
@@ -593,14 +615,15 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                               : () async {
                                   setST(() => importing = true);
                                   try {
+                                    final currentParsed = parseText(textC.text, format);
                                     final teamSvc = ref.read(teamServiceProvider);
                                     final playerNotifier = ref.read(playerProvider.notifier);
                                     final tournamentSvc = ref.read(tournamentServiceProvider);
                                     final tType = widget.tType;
-
+    
                                     // Group by team
                                     final groups = <String, List<_ParsedTeamPlayer>>{};
-                                    for (final p in parsed) {
+                                    for (final p in currentParsed) {
                                       if (p.surname.isEmpty) continue;
                                       groups.putIfAbsent(p.teamName, () => []).add(p);
                                     }
@@ -695,6 +718,122 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           );
         },
       ),
+    );
+  }
+
+  void _showExportDialog() {
+    bool includeTeams = true;
+    final svc = ref.read(tournamentServiceProvider);
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setST) => FutureBuilder<List<Player>>(
+          future: svc.getParticipants(widget.tId),
+          builder: (ctx, snapshot) {
+            String content = 'Завантаження...';
+            if (snapshot.hasData) {
+              final players = snapshot.data!;
+              players.sort((a, b) => a.player_surname.compareTo(b.player_surname));
+              
+              if (includeTeams) {
+                // Fetch team assignments for everyone
+                content = '';
+                return FutureBuilder<Map<int, Team>>(
+                  future: ref.read(teamServiceProvider).getPlayerTeamsMap(widget.tId),
+                  builder: (ctx, teamSnapshot) {
+                    if (teamSnapshot.hasData) {
+                      final teamMap = teamSnapshot.data!;
+                      content = players.map((p) {
+                        final team = teamMap[p.player_id];
+                        return '${p.fullName}${team != null ? ' ${team.team_name}' : ''}';
+                      }).join('\n');
+                    }
+                    return _buildExportUI(ctx, setST, content, includeTeams, (val) => setST(() => includeTeams = val));
+                  },
+                );
+              } else {
+                content = players.map((p) => p.fullName).join('\n');
+              }
+            }
+            return _buildExportUI(ctx, setST, content, includeTeams, (val) => setST(() => includeTeams = val));
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExportUI(BuildContext ctx, StateSetter setST, String content, bool includeTeams, Function(bool) onToggle) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.output, color: Colors.indigo),
+          SizedBox(width: 12),
+          Text('Експорт гравців'),
+        ],
+      ),
+      content: SizedBox(
+        width: 600,
+        height: 500,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Формат:'),
+                const SizedBox(width: 16),
+                ChoiceChip(
+                  label: const Text('Тільки ПІБ'),
+                  selected: !includeTeams,
+                  onSelected: (val) => onToggle(false),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('ПІБ + Команда'),
+                  selected: includeTeams,
+                  onSelected: (val) => onToggle(true),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Скопіюйте текст нижче (Ctrl+C):',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: TextField(
+                controller: TextEditingController(text: content),
+                readOnly: true,
+                maxLines: null,
+                expands: true,
+                textAlignVertical: TextAlignVertical.top,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Закрити'),
+        ),
+        FilledButton.icon(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: content));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Скопійовано в буфер обміну')),
+            );
+          },
+          icon: const Icon(Icons.copy, size: 18),
+          label: const Text('Копіювати'),
+        ),
+      ],
     );
   }
 
@@ -1045,6 +1184,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                   onPressed: _showBulkImportTeamsDialog,
                   icon: const Icon(Icons.group_add, size: 18),
                   label: const Text('Імпорт гравців/команд'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.indigo,
+                    side: const BorderSide(color: Colors.indigo),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _showExportDialog,
+                  icon: const Icon(Icons.output, size: 18),
+                  label: const Text('Експорт'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.indigo,
                     side: const BorderSide(color: Colors.indigo),

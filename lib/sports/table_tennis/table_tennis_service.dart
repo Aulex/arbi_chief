@@ -20,12 +20,9 @@ class TableTennisService {
   }) async {
     final db = await _dbService.database;
 
-    // Get Entity IDs for both players
-    final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [rowPlayerId]);
-    final cRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [colPlayerId]);
-    if (pRows.isEmpty || cRows.isEmpty) return;
-    final rowEntId = pRows.first['entity_id'] as int;
-    final colEntId = cRows.first['entity_id'] as int;
+    // Get Entity IDs for both players (creating if missing for legacy compatibility)
+    final rowEntId = await _dbService.ensurePlayerEntity(db, rowPlayerId);
+    final colEntId = await _dbService.ensurePlayerEntity(db, colPlayerId);
 
     await db.transaction((txn) async {
       // Clear old subevents for this event to rebuild from sets

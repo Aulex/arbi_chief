@@ -48,9 +48,10 @@ class TeamService {
       // New team: create CMP_ENTITY first
       final entId = await db.insert('CMP_ENTITY', {
         'entity_type_id': 2,
-        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ent_t',
+        'sync_uid': await SyncUidGenerator.generate(),
       });
       data['entity_id'] = entId;
+      data['sync_uid'] = await SyncUidGenerator.generate();
       final id = await db.insert('CMP_TEAM', data);
       return team.copyWith(team_id: id, entity_id: entId);
     } else {
@@ -242,10 +243,7 @@ class TeamService {
 
     // Delete games and results for these players in this tournament
     for (final playerId in playerIds) {
-      final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
-      if (pRows.isEmpty) continue;
-      final entId = pRows.first['entity_id'] as int?;
-      if (entId == null) continue;
+      final entId = await _dbService.ensurePlayerEntity(db, playerId);
       final eventRows = await db.rawQuery('''
         SELECT DISTINCT e.event_id
         FROM CMP_EVENT e
@@ -551,5 +549,22 @@ class TeamService {
       where: 'pte_id = ? AND attr_id = 10',
       whereArgs: [pteId],
     );
+  }
+
+  /// Returns a map of player ID to their assigned Team in a specific tournament.
+  Future<Map<int, Team>> getPlayerTeamsMap(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, t.team_id, t.team_name, t.t_type
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_TEAM t ON pt.team_id = t.team_id
+      WHERE pt.t_id = ? AND pt.player_id IS NOT NULL
+    ''', [tId]);
+    
+    final Map<int, Team> result = {};
+    for (final r in rows) {
+      result[r['player_id'] as int] = Team.fromJson(r);
+    }
+    return result;
   }
 }

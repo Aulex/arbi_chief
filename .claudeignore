@@ -41,8 +41,6 @@ macos/Pods/
 .DS_Store
 Thumbs.db
 
-# Database files
-*.db
 
 # Binary and media assets not useful for code context
 *.png

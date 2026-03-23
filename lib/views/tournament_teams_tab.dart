@@ -125,6 +125,12 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
             if (assignedPlayerIds.contains(p.player_id)) return false;
             if (allTeamPlayerIds.contains(p.player_id)) return false;
             if (search.isNotEmpty && !p.fullName.toLowerCase().contains(search.toLowerCase())) return false;
+            
+            // Gender constraint for board 3 (or last board) if configured
+            if (widget.config.lastBoardWomenOnly && boardNum == widget.config.boardCount) {
+              if (p.player_gender != 1) return false;
+            }
+            
             return true;
           }).toList();
 
@@ -558,6 +564,19 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
 
     Future<void> savePlayer(BuildContext dialogContext) async {
       if (surnameC.text.trim().isEmpty || nameC.text.trim().isEmpty) return;
+      
+      // Gender validation for board 3 (or last board) if configured
+      if (widget.config.lastBoardWomenOnly && selectedBoard == widget.config.boardCount) {
+        if (gender != 1) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('На цю ${widget.config.boardLabel.toLowerCase()}у можна призначати тільки жінок'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
 
       final tournamentSvc = ref.read(tournamentServiceProvider);
       final teamSvc = ref.read(teamServiceProvider);
@@ -778,6 +797,22 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                           ),
                         ],
                       ),
+                      if (widget.config.lastBoardWomenOnly && selectedBoard == widget.config.boardCount)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Увага: на цю ${widget.config.boardLabel.toLowerCase()}у можна призначати тільки жінок',
+                                  style: const TextStyle(fontSize: 12, color: Colors.orange, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (widget.config.boardCount > 0) ...[
                         const SizedBox(height: 16),
                         DropdownButtonFormField<int?>(
