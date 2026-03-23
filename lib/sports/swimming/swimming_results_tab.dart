@@ -382,111 +382,141 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     super.build(context);
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    return Column(
-      children: [
-        // Header with add button
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 500;
+
+        return Column(
           children: [
-            Text(
-              '${widget.category.fullName} — 50 м в/стиль',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            FilledButton.icon(
-              onPressed: _showBulkImportDialog,
-              icon: const Icon(Icons.upload_file, size: 18),
-              label: const Text('Імпорт'),
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.indigo.shade400,
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: _addResult,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Додати'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // Results table
-        Expanded(
-          child: _standings.isEmpty
-              ? Center(
-                  child: Text(
-                    'Немає результатів',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                  ),
-                )
-              : Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    side: BorderSide(color: Colors.grey.shade300, width: 1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SingleChildScrollView(
-                    child: _buildResultsTable(),
+            // Header with add button
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  '${widget.category.fullName} — 50 м в/стиль',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                FilledButton.icon(
+                  onPressed: _showBulkImportDialog,
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text('Імпорт'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.indigo.shade400,
                   ),
                 ),
-        ),
-      ],
+                FilledButton.icon(
+                  onPressed: _addResult,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Додати'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Results table
+            Expanded(
+              child: _standings.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Немає результатів',
+                        style: TextStyle(
+                            color: Colors.grey.shade500, fontSize: 14),
+                      ),
+                    )
+                  : Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(
+                            color: Colors.grey.shade300, width: 1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: SingleChildScrollView(
+                        child: _buildResultsTable(
+                            constraints.maxWidth, isNarrow),
+                      ),
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildResultsTable() {
+  Widget _buildResultsTable(double availableWidth, bool isNarrow) {
     final isRelay = widget.category == SwimmingCategory.relay;
 
-    return DataTable(
-      columnSpacing: 24,
-      headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
-      columns: [
-        const DataColumn(label: Text('М', style: TextStyle(fontWeight: FontWeight.bold))),
-        if (!isRelay)
-          const DataColumn(label: Text('ПІБ', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('Час', style: TextStyle(fontWeight: FontWeight.bold))),
-        const DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
-      ],
-      rows: _standings.map((r) {
-        return DataRow(
-          cells: [
-            DataCell(Text(
-              '${r.place}',
-              style: TextStyle(
-                fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
-                color: r.place == 1
-                    ? Colors.amber.shade800
-                    : r.place == 2
-                        ? Colors.grey.shade600
-                        : r.place == 3
-                            ? Colors.brown
-                            : null,
-              ),
-            )),
-            if (!isRelay)
-              DataCell(Text(r.playerName ?? '')),
-            DataCell(Text(r.teamName ?? '')),
-            DataCell(Text(
-              r.result.timeFormatted,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-            )),
-            DataCell(Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  onPressed: () => _editResult(r),
-                  tooltip: 'Редагувати',
+    return SizedBox(
+      width: availableWidth,
+      child: DataTable(
+        columnSpacing: isNarrow ? 12 : 24,
+        horizontalMargin: isNarrow ? 8 : 24,
+        headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
+        columns: [
+          const DataColumn(
+              label:
+                  Text('М', style: TextStyle(fontWeight: FontWeight.bold))),
+          if (!isRelay)
+            const DataColumn(
+                label: Text('ПІБ',
+                    style: TextStyle(fontWeight: FontWeight.bold))),
+          const DataColumn(
+              label: Text('Команда',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          const DataColumn(
+              label: Text('Час',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          const DataColumn(
+              label:
+                  Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+        rows: _standings.map((r) {
+          return DataRow(
+            cells: [
+              DataCell(Text(
+                '${r.place}',
+                style: TextStyle(
+                  fontWeight:
+                      r.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                  color: r.place == 1
+                      ? Colors.amber.shade800
+                      : r.place == 2
+                          ? Colors.grey.shade600
+                          : r.place == 3
+                              ? Colors.brown
+                              : null,
                 ),
-                IconButton(
-                  icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
-                  onPressed: () => _deleteResult(r),
-                  tooltip: 'Видалити',
-                ),
-              ],
-            )),
-          ],
-        );
-      }).toList(),
+              )),
+              if (!isRelay) DataCell(Text(r.playerName ?? '')),
+              DataCell(Text(r.teamName ?? '')),
+              DataCell(Text(
+                r.result.timeFormatted,
+                style:
+                    const TextStyle(fontFamily: 'monospace', fontSize: 14),
+              )),
+              DataCell(Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    onPressed: () => _editResult(r),
+                    tooltip: 'Редагувати',
+                  ),
+                  if (!isNarrow)
+                    IconButton(
+                      icon: Icon(Icons.delete_outline,
+                          size: 18, color: Colors.red.shade400),
+                      onPressed: () => _deleteResult(r),
+                      tooltip: 'Видалити',
+                    ),
+                ],
+              )),
+            ],
+          );
+        }).toList(),
+      ),
     );
   }
 }
