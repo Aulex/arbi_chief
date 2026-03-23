@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -255,6 +255,30 @@ class DatabaseService {
           // We can't easily know if an ent_id belongs to a player or team just from CMP_ENTITY,
           // but since we just cleared the DB, there should be 0 rows.
         }
+        if (oldVersion < 11) {
+          // CMP_TEAM_ATTR: per-team-per-tournament attributes (group assignment, removal flag)
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS CMP_TEAM_ATTR (
+              ta_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              team_id INTEGER,
+              t_id INTEGER,
+              attr_id INTEGER,
+              attr_value TEXT,
+              sync_uid TEXT UNIQUE,
+              FOREIGN KEY (team_id) REFERENCES CMP_TEAM(team_id),
+              FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT(t_id),
+              FOREIGN KEY (attr_id) REFERENCES CMP_ATTR(attr_id)
+            )
+          ''');
+          // Seed "Група" attribute for volleyball (attr_entity_type=3 for team-tournament)
+          await db.insert('CMP_ATTR', {
+            'attr_id': '11',
+            'attr_name': 'Група',
+            'attr_data_type': 'TEXT',
+            'attr_entity_type': 3,
+            'attr_t_type': 3,
+          });
+        }
       },
       onCreate: (db, version) async {
         // 1. CMP_TOURNAMENT_TYPE
@@ -447,6 +471,21 @@ class DatabaseService {
           )
         ''');
 
+        // 16b. CMP_TEAM_ATTR (NEW in v11)
+        await db.execute('''
+          CREATE TABLE CMP_TEAM_ATTR (
+            ta_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id INTEGER,
+            t_id INTEGER,
+            attr_id INTEGER,
+            attr_value TEXT,
+            sync_uid TEXT UNIQUE,
+            FOREIGN KEY (team_id) REFERENCES CMP_TEAM(team_id),
+            FOREIGN KEY (t_id) REFERENCES CMP_TOURNAMENT(t_id),
+            FOREIGN KEY (attr_id) REFERENCES CMP_ATTR(attr_id)
+          )
+        ''');
+
         // 17. CMP_PLAYER_TEAM
         await db.execute('''
           CREATE TABLE CMP_PLAYER_TEAM (
@@ -588,6 +627,15 @@ class DatabaseService {
           'attr_name': 'Неявка',
           'attr_data_type': 'INTEGER',
           'attr_entity_type': '2',
+        });
+
+        // Група attribute for volleyball team-tournament (NEW in v11)
+        await db.insert('CMP_ATTR', {
+          'attr_id': '11',
+          'attr_name': 'Група',
+          'attr_data_type': 'TEXT',
+          'attr_entity_type': 3,
+          'attr_t_type': 3,
         });
 
         await db.insert('CMP_ATTR_DICT', {

@@ -76,6 +76,17 @@ const checkersConfig = SportTypeConfig(
   boardAbbrev: 'Д',
 );
 
+/// Config for volleyball (team-vs-team, no boards).
+const volleyballConfig = SportTypeConfig(
+  boardLabel: 'Корт',
+  boardCount: 0,
+  lastBoardWomenOnly: false,
+  hasTeamCrossTable: true,
+  hasBoardCrossTables: false,
+  boardLabelPlural: 'кортах',
+  boardAbbrev: 'К',
+);
+
 /// Config for swimming (no boards, time-based).
 const swimmingConfig = SportTypeConfig(
   boardLabel: 'Категорія',
@@ -90,10 +101,14 @@ const swimmingConfig = SportTypeConfig(
 /// Returns true if the sport type is swimming (Плавання).
 bool isSwimming(int? typeId) => typeId == 6;
 
+/// Returns true if the sport type is volleyball (Волейбол).
+bool isVolleyball(int? typeId) => typeId == 3;
+
 /// Map type_id → config. Falls back to chess config for unknown types.
 SportTypeConfig getConfigForType(int? typeId) {
   switch (typeId) {
     case 1: return chessConfig;       // Шахи
+    case 3: return volleyballConfig;  // Волейбол
     case 6: return swimmingConfig;    // Плавання
     case 7: return checkersConfig;    // Шашки
     case 11: return tableTennisConfig; // Настільний теніс

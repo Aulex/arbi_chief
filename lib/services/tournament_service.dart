@@ -63,6 +63,7 @@ class TournamentService {
       await txn.delete('CMP_PLAYER_TEAM', where: 't_id = ?', whereArgs: [id]);
       await txn.delete('CMP_PLAYER_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
       await txn.delete('CMP_ATTR_VALUE', where: 't_id = ?', whereArgs: [id]);
+      await txn.delete('CMP_TEAM_ATTR', where: 't_id = ?', whereArgs: [id]);
       await txn.delete('CMP_TOURNAMENT', where: 't_id = ?', whereArgs: [id]);
     });
   }
