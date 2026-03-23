@@ -203,8 +203,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     const cellWidth = 56.0;
     const nameWidth = 180.0;
     const rankWidth = 36.0;
+    const placeWidth = 48.0;
     const statsWidth = 56.0;
-    const separatorWidth = 12.0;
+    const separatorWidth = 15.0;
 
     final standingsByTeam = {for (final s in standings) s.teamId: s};
 
@@ -224,7 +225,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         n + 5: const FixedColumnWidth(separatorWidth),
         n + 6: const FixedColumnWidth(nameWidth),
         n + 7: const FixedColumnWidth(statsWidth),
-        n + 8: const FixedColumnWidth(rankWidth),
+        n + 8: const FixedColumnWidth(placeWidth),
       },
       border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
       children: [
@@ -235,12 +236,18 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
             _headerCell('#'),
             _headerCell('Команда'),
             for (int j = 0; j < n; j++)
-              _headerCell('${j + 1}'),
+              _headerCell('${teams[j].teamNumber ?? j + 1}'),
             _headerCell('О'),
             _headerCell('П'),
             _headerCell('Р'),
             // Separator
-            Container(height: 36, color: Colors.black),
+            Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                border: Border.all(color: Colors.black, width: 0.5),
+              ),
+            ),
             // Standings headers
             _headerCell('Команда'),
             _headerCell('Очки'),
@@ -278,8 +285,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                 : null,
       ),
       children: [
-        // Rank
-        _dataCell('${i + 1}', bold: true),
+        // Rank (team number from team tab)
+        _dataCell('${team.teamNumber ?? i + 1}', bold: true),
         // Team name
         _teamNameCell(team.teamName, isRemoved: isRemoved),
         // Opponent cells
@@ -292,7 +299,13 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         // Point ratio
         _dataCell('${standing?.pointsScored ?? 0}:${standing?.pointsConceded ?? 0}'),
         // Black separator
-        Container(height: 36, color: Colors.black),
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            border: Border.all(color: Colors.black, width: 0.5),
+          ),
+        ),
         // Standings: team name, points, place
         _teamNameCell(standingRow?.teamName ?? ''),
         _dataCell('${standingRow?.matchPoints ?? 0}', bold: true),
