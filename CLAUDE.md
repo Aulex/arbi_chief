@@ -19,7 +19,7 @@ Arbi Chief is a cross-platform tournament management application for sports arbi
 | Футзал | Futsal | Registered |
 | Гирьовий спорт | Kettlebell Sport | Registered |
 | Армрестлінг | Arm Wrestling | Registered |
-| Волейбол | Volleyball | Registered |
+| Волейбол | Volleyball | Fully implemented |
 | Стрітбол | Streetball | Registered |
 | Легка атлетика | Track & Field | Registered |
 | Велоспорт | Cycling | Registered |
@@ -92,7 +92,7 @@ lib/
 │   ├── tournament_players_tab.dart
 │   ├── tournament_teams_tab.dart
 │   └── tournament_view.dart
-└── sports/                  # Sport-specific logic (3 sport modules)
+└── sports/                  # Sport-specific logic (4 sport modules)
     ├── sport_type_config.dart       # Sport type definitions & UI config
     ├── chess/
     │   └── chess_scoring.dart
@@ -101,13 +101,19 @@ lib/
     │   ├── swimming_results_tab.dart
     │   ├── swimming_service.dart
     │   └── swimming_team_standings_tab.dart
-    └── table_tennis/
-        ├── table_tennis_providers.dart
-        ├── table_tennis_scoring.dart
-        └── table_tennis_service.dart
+    ├── table_tennis/
+    │   ├── table_tennis_providers.dart
+    │   ├── table_tennis_scoring.dart
+    │   └── table_tennis_service.dart
+    └── volleyball/
+        ├── volleyball_cross_table_tab.dart
+        ├── volleyball_group_management_tab.dart
+        ├── volleyball_providers.dart
+        ├── volleyball_scoring.dart
+        └── volleyball_service.dart
 ```
 
-**Total: ~53 Dart source files**
+**Total: ~58 Dart source files**
 
 ### Data Flow
 
@@ -177,4 +183,4 @@ Tests are in `test/`. Currently minimal — `widget_test.dart` is a placeholder.
 - Windows stores DB alongside the executable; other platforms use system DB path
 - Multi-window support (standings display) uses `desktop_multi_window` package
 - Gender is auto-detected from Ukrainian patronymic names
-- Only 4 of 14 sports have full dedicated implementations (chess, checkers, table tennis, swimming); the rest use the generic tournament flow
+- Only 5 of 14 sports have full dedicated implementations (chess, checkers, table tennis, swimming, volleyball); the rest use the generic tournament flow
