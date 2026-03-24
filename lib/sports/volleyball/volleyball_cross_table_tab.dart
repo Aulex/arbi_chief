@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../viewmodels/team_viewmodel.dart';
+import '../../viewmodels/tournament_viewmodel.dart';
 import 'volleyball_providers.dart';
 import 'volleyball_service.dart';
 import 'volleyball_scoring.dart' as scoring;
@@ -30,7 +31,14 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Map<(int, int), _GameData> _games = {}; // (teamAEntityId, teamBEntityId) → data
   Map<int, String> _groupAssignments = {};
   Set<int> _removedTeamIds = {};
-  int _selectedSegment = 0; // 0=Групи, 1=Фінал, 2+=Місця
+  int _selectedSegment = 0; // 0=Групи, 1=Фінал, 2=Місця(матчі), 3=Місця(колова)
+
+  /// Places from each group that advance to finals (attr_id=10), e.g. [1,2,3].
+  List<int> _finalsPlaces = [1, 2];
+  /// Places for cross-group match play (attr_id=11), e.g. [4,5].
+  List<int> _crossGroupMatchPlaces = [];
+  /// Places for round-robin/cycle system (attr_id=12), e.g. [6,7].
+  List<int> _cyclePlaces = [];
 
   int? _hoveredRow;
   int? _hoveredCol;
@@ -73,11 +81,17 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Future<void> _loadData() async {
     final teamSvc = ref.read(teamServiceProvider);
     final vSvc = ref.read(volleyballServiceProvider);
+    final tSvc = ref.read(tournamentServiceProvider);
 
     final teamList = await teamSvc.getTeamListForTournament(widget.tId);
     final games = await vSvc.getTeamGamesForTournament(widget.tId);
     final groups = await vSvc.getGroupAssignments(widget.tId);
     final removed = await vSvc.getRemovedTeamIds(widget.tId);
+
+    // Load tournament settings for volleyball group mode
+    final finalsPlacesStr = await tSvc.getAttrValue(widget.tId, 10);
+    final crossGroupStr = await tSvc.getAttrValue(widget.tId, 11);
+    final cycleStr = await tSvc.getAttrValue(widget.tId, 12);
 
     // Build teams with entity_ids
     final teams = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
@@ -116,8 +130,63 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       _games = gamesMap;
       _groupAssignments = groups;
       _removedTeamIds = removed;
+      _finalsPlaces = _parsePlaces(finalsPlacesStr, defaultPlaces: [1, 2]);
+      _crossGroupMatchPlaces = _parsePlaces(crossGroupStr);
+      _cyclePlaces = _parsePlaces(cycleStr);
       _loading = false;
     });
+  }
+
+  /// Parse comma-separated place numbers like "1,2,3" into [1,2,3].
+  List<int> _parsePlaces(String? value, {List<int> defaultPlaces = const []}) {
+    if (value == null || value.trim().isEmpty) return defaultPlaces;
+    return value
+        .split(',')
+        .map((s) => int.tryParse(s.trim()))
+        .whereType<int>()
+        .toList();
+  }
+
+  /// Get teams from a group at given 1-based place positions.
+  List<({int teamId, String teamName, int? teamNumber, int? entityId})>
+      _getTeamsAtPlaces(List<String> groupNames, List<int> places) {
+    final result = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
+    for (final groupName in groupNames) {
+      final groupTeams = _getGroupTeams(groupName);
+      final standings = _calculateStandings(groupTeams);
+      for (final place in places) {
+        final idx = place - 1; // Convert 1-based to 0-based
+        if (idx >= 0 && idx < standings.length) {
+          final s = standings[idx];
+          final team = groupTeams.where((t) => t.teamId == s.teamId).firstOrNull;
+          if (team != null) result.add(team);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Build carry-over games map for teams that were in the same group.
+  Map<(int, int), _GameData> _buildCarryOverGames(
+    List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
+  ) {
+    final carryOver = <(int, int), _GameData>{};
+    for (int i = 0; i < teams.length; i++) {
+      for (int j = i + 1; j < teams.length; j++) {
+        final a = teams[i];
+        final b = teams[j];
+        if (a.entityId == null || b.entityId == null) continue;
+        final groupA = _groupAssignments[a.teamId];
+        final groupB = _groupAssignments[b.teamId];
+        if (groupA == groupB && groupA != null) {
+          final game = _games[(a.entityId!, b.entityId!)];
+          if (game != null) {
+            carryOver[(a.entityId!, b.entityId!)] = game;
+          }
+        }
+      }
+    }
+    return carryOver;
   }
 
   bool get _useGroupMode => _teams.length >= 9 && _groupAssignments.isNotEmpty;
@@ -419,20 +488,46 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
   // --- Group Mode (≥ 9 teams) ---
 
-  int _countFinalists(List<String> groupNames) {
-    int count = 0;
-    for (final groupName in groupNames) {
-      final groupTeams = _getGroupTeams(groupName);
-      final standings = _calculateStandings(groupTeams);
-      count += standings.length < 2 ? standings.length : 2;
-    }
-    return count;
-  }
-
   Widget _buildGroupModeView() {
     final groupNames = _groupAssignments.values.toSet().toList()..sort();
-    final finalistCount = _countFinalists(groupNames);
-    final consolationCount = _teams.length - finalistCount;
+
+    // Build segments dynamically based on configured settings
+    final segments = <ButtonSegment<int>>[
+      const ButtonSegment(value: 0, label: Text('Групи')),
+    ];
+
+    // Segment 1: Finals (places from _finalsPlaces)
+    if (_finalsPlaces.isNotEmpty) {
+      final placesLabel = _finalsPlaces.join(',');
+      segments.add(ButtonSegment(
+        value: 1,
+        label: Text('Фінал ($placesLabel місця)'),
+      ));
+    }
+
+    // Segment 2: Cross-group match places (attr_id=11)
+    if (_crossGroupMatchPlaces.isNotEmpty) {
+      final placesLabel = _crossGroupMatchPlaces.join(',');
+      segments.add(ButtonSegment(
+        value: 2,
+        label: Text('Місця $placesLabel'),
+      ));
+    }
+
+    // Segment 3: Round-robin/cycle places (attr_id=12)
+    if (_cyclePlaces.isNotEmpty) {
+      final placesLabel = _cyclePlaces.join(',');
+      segments.add(ButtonSegment(
+        value: 3,
+        label: Text('Колова $placesLabel'),
+      ));
+    }
+
+    // Ensure selected segment is valid
+    final validValues = segments.map((s) => s.value).toSet();
+    if (!validValues.contains(_selectedSegment)) {
+      _selectedSegment = 0;
+    }
 
     return Column(
       children: [
@@ -440,26 +535,30 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: SegmentedButton<int>(
-            segments: [
-              const ButtonSegment(value: 0, label: Text('Групи')),
-              ButtonSegment(value: 1, label: Text('Фінал (1-$finalistCount)')),
-              if (consolationCount > 0)
-                ButtonSegment(value: 2, label: Text('Місця ${finalistCount + 1}-${_teams.length}')),
-            ],
+            segments: segments,
             selected: {_selectedSegment},
             onSelectionChanged: (v) => setState(() => _selectedSegment = v.first),
           ),
         ),
         // Content
-        Expanded(
-          child: _selectedSegment == 0
-              ? _buildGroupsView(groupNames)
-              : _selectedSegment == 1
-                  ? _buildFinalsView(groupNames)
-                  : _buildConsolationView(groupNames),
-        ),
+        Expanded(child: _buildSegmentContent(groupNames)),
       ],
     );
+  }
+
+  Widget _buildSegmentContent(List<String> groupNames) {
+    switch (_selectedSegment) {
+      case 0:
+        return _buildGroupsView(groupNames);
+      case 1:
+        return _buildFinalsView(groupNames);
+      case 2:
+        return _buildCrossGroupMatchView(groupNames);
+      case 3:
+        return _buildCyclePlacesView(groupNames);
+      default:
+        return _buildGroupsView(groupNames);
+    }
   }
 
   Widget _buildGroupsView(List<String> groupNames) {
@@ -487,36 +586,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   }
 
   Widget _buildFinalsView(List<String> groupNames) {
-    // Top 2 from each group
-    final finalists = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
-    for (final groupName in groupNames) {
-      final groupTeams = _getGroupTeams(groupName);
-      final standings = _calculateStandings(groupTeams);
-      for (int i = 0; i < 2 && i < standings.length; i++) {
-        final s = standings[i];
-        final team = groupTeams.where((t) => t.teamId == s.teamId).firstOrNull;
-        if (team != null) finalists.add(team);
-      }
-    }
-
-    // Carry-over: games between finalists who were in the same group
-    final carryOver = <(int, int), _GameData>{};
-    for (int i = 0; i < finalists.length; i++) {
-      for (int j = i + 1; j < finalists.length; j++) {
-        final a = finalists[i];
-        final b = finalists[j];
-        if (a.entityId == null || b.entityId == null) continue;
-        // Same group?
-        final groupA = _groupAssignments[a.teamId];
-        final groupB = _groupAssignments[b.teamId];
-        if (groupA == groupB && groupA != null) {
-          final game = _games[(a.entityId!, b.entityId!)];
-          if (game != null) {
-            carryOver[(a.entityId!, b.entityId!)] = game;
-          }
-        }
-      }
-    }
+    final finalists = _getTeamsAtPlaces(groupNames, _finalsPlaces);
+    final carryOver = _buildCarryOverGames(finalists);
 
     if (finalists.isEmpty) {
       return const Center(child: Text('Спочатку проведіть груповий етап'));
@@ -529,43 +600,33 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     );
   }
 
-  Widget _buildConsolationView(List<String> groupNames) {
-    // Teams that didn't make finals (3rd place and below from each group)
-    final consolation = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
-    for (final groupName in groupNames) {
-      final groupTeams = _getGroupTeams(groupName);
-      final standings = _calculateStandings(groupTeams);
-      for (int i = 2; i < standings.length; i++) {
-        final s = standings[i];
-        final team = groupTeams.where((t) => t.teamId == s.teamId).firstOrNull;
-        if (team != null) consolation.add(team);
-      }
-    }
+  /// Cross-group match play for specified places (attr_id=11).
+  Widget _buildCrossGroupMatchView(List<String> groupNames) {
+    final teams = _getTeamsAtPlaces(groupNames, _crossGroupMatchPlaces);
+    final carryOver = _buildCarryOverGames(teams);
 
-    // Carry-over for consolation teams from same group
-    final carryOver = <(int, int), _GameData>{};
-    for (int i = 0; i < consolation.length; i++) {
-      for (int j = i + 1; j < consolation.length; j++) {
-        final a = consolation[i];
-        final b = consolation[j];
-        if (a.entityId == null || b.entityId == null) continue;
-        final groupA = _groupAssignments[a.teamId];
-        final groupB = _groupAssignments[b.teamId];
-        if (groupA == groupB && groupA != null) {
-          final game = _games[(a.entityId!, b.entityId!)];
-          if (game != null) {
-            carryOver[(a.entityId!, b.entityId!)] = game;
-          }
-        }
-      }
-    }
-
-    if (consolation.isEmpty) {
+    if (teams.isEmpty) {
       return const Center(child: Text('Немає команд для розіграшу'));
     }
 
     return _buildSimpleCrossTable(
-      consolation,
+      teams,
+      carryOverGames: carryOver,
+      readOnlyCarryOver: true,
+    );
+  }
+
+  /// Round-robin/cycle system for specified places (attr_id=12).
+  Widget _buildCyclePlacesView(List<String> groupNames) {
+    final teams = _getTeamsAtPlaces(groupNames, _cyclePlaces);
+    final carryOver = _buildCarryOverGames(teams);
+
+    if (teams.isEmpty) {
+      return const Center(child: Text('Немає команд для колової системи'));
+    }
+
+    return _buildSimpleCrossTable(
+      teams,
       carryOverGames: carryOver,
       readOnlyCarryOver: true,
     );
