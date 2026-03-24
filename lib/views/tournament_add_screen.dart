@@ -34,6 +34,11 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
   bool _isLoading = false;
   String _startingListSort = "За алфавітом";
 
+  // Tournament conduct settings (Налаштування проведення)
+  final _finalsPlacesController = TextEditingController(text: '1,2');
+  final _crossGroupMatchPlacesController = TextEditingController();
+  final _cyclePlacesController = TextEditingController();
+
   final _winPointsController = TextEditingController(text: '1');
   final _drawPointsController = TextEditingController(text: '0,5');
   final _lossPointsController = TextEditingController(text: '0');
@@ -61,7 +66,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     if (widget.isEditMode && widget.tournament != null) {
       final t = widget.tournament!;
       tNameController.text = t.t_name;
@@ -85,6 +90,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     final substitutes = await svc.getAttrValue(tId, 6);
     final scoringPoints = await svc.getAttrDictValueMap(tId, 7);
     final tieBreakers = await svc.getAttrDictValueList(tId, 8);
+    final finalsPlaces = await svc.getAttrValue(tId, 10);
+    final crossGroupMatchPlaces = await svc.getAttrValue(tId, 11);
+    final cyclePlaces = await svc.getAttrValue(tId, 12);
     if (!mounted) return;
     setState(() {
       if (timeControl != null) selectedTimeControl = timeControl;
@@ -105,6 +113,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       for (final key in _tieBreakers.keys) {
         _tieBreakers[key] = tieBreakers.contains(key);
       }
+      if (finalsPlaces != null) _finalsPlacesController.text = finalsPlaces;
+      if (crossGroupMatchPlaces != null) _crossGroupMatchPlacesController.text = crossGroupMatchPlaces;
+      if (cyclePlaces != null) _cyclePlacesController.text = cyclePlaces;
     });
   }
 
@@ -128,6 +139,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     _organizerNameController.dispose();
     _organizerSiteController.dispose();
     _organizerPhoneController.dispose();
+    _finalsPlacesController.dispose();
+    _crossGroupMatchPlacesController.dispose();
+    _cyclePlacesController.dispose();
     super.dispose();
   }
 
@@ -165,6 +179,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
         'Поразка': _lossPointsController.text.trim(),
       },
       selectedTieBreakers: selectedTieBreakers,
+      finalsPlaces: _finalsPlacesController.text.trim(),
+      crossGroupMatchPlaces: _crossGroupMatchPlacesController.text.trim(),
+      cyclePlaces: _cyclePlacesController.text.trim(),
     );
 
     setState(() => _isLoading = false);
@@ -191,6 +208,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
               Tab(child: Text("Б: Система проведення", style: TextStyle(color: Colors.grey.shade400))),
               Tab(child: Text("В: Командні налаштування", style: TextStyle(color: Colors.grey.shade400))),
               Tab(child: Text("Г: Очки та Тай-брейки", style: TextStyle(color: Colors.grey.shade400))),
+              const Tab(text: "Д: Налаштування проведення"),
             ],
           ),
           Expanded(
@@ -202,6 +220,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
                 _buildConductionSystemTab(),
                 _buildTeamSettingsTab(),
                 _buildScoringTab(),
+                _buildTournamentConductTab(),
               ],
             ),
           ),
@@ -663,6 +682,149 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
           },
         );
       }).toList(),
+    ]);
+  }
+
+  Widget _buildTournamentConductTab() {
+    return _buildTab([
+      const Text(
+        'Налаштування проведення',
+        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        'Визначте, як місця в групах впливають на подальші етапи турніру.',
+        style: TextStyle(color: Colors.grey.shade600),
+      ),
+      const SizedBox(height: 24),
+
+      // --- Finals places ---
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade300, width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.emoji_events_outlined, color: Colors.amber, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Місця, що виходять у фінал з груп',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Вкажіть номери місць через кому (наприклад: 1,2). '
+                'Команди/гравці з цих місць у кожній групі потраплять у фінальну частину.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _finalsPlacesController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: '1,2',
+                  labelText: 'Місця до фіналу',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // --- Cross-group matches ---
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade300, width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.swap_horiz_rounded, color: Colors.indigo, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Місця для матчів між групами',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Вкажіть номери місць через кому (наприклад: 3,4). '
+                'Команди/гравці з однакових місць у різних групах зіграють між собою для визначення підсумкових позицій.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _crossGroupMatchPlacesController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: '3,4',
+                  labelText: 'Місця для матчів',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+
+      // --- Cycle system places ---
+      Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade300, width: 1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.loop_rounded, color: Colors.teal, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Місця для колової системи',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Вкажіть номери місць через кому (наприклад: 5,6). '
+                'Команди/гравці з цих місць у групах зіграють між собою коловою системою для визначення підсумкових позицій.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _cyclePlacesController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: '5,6',
+                  labelText: 'Місця для колової',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     ]);
   }
 

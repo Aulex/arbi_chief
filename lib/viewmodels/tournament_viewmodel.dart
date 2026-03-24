@@ -34,6 +34,9 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     bool? allowSubstitutes,
     Map<String, String>? scoringPoints,
     List<String>? selectedTieBreakers,
+    String? finalsPlaces,
+    String? crossGroupMatchPlaces,
+    String? cyclePlaces,
   }) async {
     final svc = ref.read(tournamentServiceProvider);
     final effectiveTypeId = typeId ?? ref.read(selectedSportTypeProvider);
@@ -116,6 +119,21 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
         }
       }
       await svc.saveAttrValues(tId: tId, attrId: 8, values: values);
+    }
+
+    // attr_id=10: "Місця до фіналу з груп" — TEXT
+    if (finalsPlaces != null && finalsPlaces.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 10, attrValue: finalsPlaces);
+    }
+
+    // attr_id=11: "Місця для матчів між групами" — TEXT
+    if (crossGroupMatchPlaces != null && crossGroupMatchPlaces.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 11, attrValue: crossGroupMatchPlaces);
+    }
+
+    // attr_id=12: "Місця для колової системи" — TEXT
+    if (cyclePlaces != null && cyclePlaces.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 12, attrValue: cyclePlaces);
     }
 
     ref.invalidateSelf();
