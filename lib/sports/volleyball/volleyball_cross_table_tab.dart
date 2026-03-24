@@ -419,8 +419,20 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
   // --- Group Mode (≥ 9 teams) ---
 
+  int _countFinalists(List<String> groupNames) {
+    int count = 0;
+    for (final groupName in groupNames) {
+      final groupTeams = _getGroupTeams(groupName);
+      final standings = _calculateStandings(groupTeams);
+      count += standings.length < 2 ? standings.length : 2;
+    }
+    return count;
+  }
+
   Widget _buildGroupModeView() {
     final groupNames = _groupAssignments.values.toSet().toList()..sort();
+    final finalistCount = _countFinalists(groupNames);
+    final consolationCount = _teams.length - finalistCount;
 
     return Column(
       children: [
@@ -430,9 +442,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
           child: SegmentedButton<int>(
             segments: [
               const ButtonSegment(value: 0, label: Text('Групи')),
-              const ButtonSegment(value: 1, label: Text('Фінал (1-8)')),
-              if (_teams.length > 8)
-                ButtonSegment(value: 2, label: Text('Місця 9-${_teams.length}')),
+              ButtonSegment(value: 1, label: Text('Фінал (1-$finalistCount)')),
+              if (consolationCount > 0)
+                ButtonSegment(value: 2, label: Text('Місця ${finalistCount + 1}-${_teams.length}')),
             ],
             selected: {_selectedSegment},
             onSelectionChanged: (v) => setState(() => _selectedSegment = v.first),
