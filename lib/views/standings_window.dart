@@ -92,6 +92,20 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
   Timer? _autoTabTimer;
   int _autoTabSeconds = 0; // 0 = disabled
 
+  // Per-board scroll controllers to avoid creating them inside LayoutBuilder
+  final Map<int, ScrollController> _boardVerticalControllers = {};
+  final Map<int, ScrollController> _boardHorizontalControllers = {};
+  final ScrollController _teamsVerticalController = ScrollController();
+  final ScrollController _teamsHorizontalController = ScrollController();
+
+  ScrollController _getBoardVerticalController(int boardNum) {
+    return _boardVerticalControllers.putIfAbsent(boardNum, () => ScrollController());
+  }
+
+  ScrollController _getBoardHorizontalController(int boardNum) {
+    return _boardHorizontalControllers.putIfAbsent(boardNum, () => ScrollController());
+  }
+
   @override
   void initState() {
     super.initState();
@@ -199,6 +213,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
   void dispose() {
     _autoTabTimer?.cancel();
     _tabController?.dispose();
+    for (final c in _boardVerticalControllers.values) c.dispose();
+    for (final c in _boardHorizontalControllers.values) c.dispose();
+    _teamsVerticalController.dispose();
+    _teamsHorizontalController.dispose();
     super.dispose();
   }
 
@@ -319,10 +337,11 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
       );
     }
 
+    final verticalController = _getBoardVerticalController(boardNum);
+    final horizontalController = _getBoardHorizontalController(boardNum);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final verticalController = ScrollController();
-        final horizontalController = ScrollController();
         return Scrollbar(
           thumbVisibility: true,
           controller: verticalController,
@@ -472,19 +491,17 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final verticalController = ScrollController();
-        final horizontalController = ScrollController();
         return Scrollbar(
           thumbVisibility: true,
-          controller: verticalController,
+          controller: _teamsVerticalController,
           child: Scrollbar(
             thumbVisibility: true,
-            controller: horizontalController,
+            controller: _teamsHorizontalController,
             notificationPredicate: (notification) => notification.depth == 1,
             child: SingleChildScrollView(
-              controller: verticalController,
+              controller: _teamsVerticalController,
               child: SingleChildScrollView(
-                controller: horizontalController,
+                controller: _teamsHorizontalController,
                 scrollDirection: Axis.horizontal,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(

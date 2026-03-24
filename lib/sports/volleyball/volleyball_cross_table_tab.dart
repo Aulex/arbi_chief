@@ -38,6 +38,19 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
 
+  // Per-group scroll controllers (keyed by group name) to avoid sharing
+  // a single ScrollController across multiple ScrollPositions.
+  final Map<String, ScrollController> _groupVerticalControllers = {};
+  final Map<String, ScrollController> _groupHorizontalControllers = {};
+
+  ScrollController _getGroupVerticalController(String group) {
+    return _groupVerticalControllers.putIfAbsent(group, () => ScrollController());
+  }
+
+  ScrollController _getGroupHorizontalController(String group) {
+    return _groupHorizontalControllers.putIfAbsent(group, () => ScrollController());
+  }
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +61,12 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   void dispose() {
     _verticalController.dispose();
     _horizontalController.dispose();
+    for (final c in _groupVerticalControllers.values) {
+      c.dispose();
+    }
+    for (final c in _groupHorizontalControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -128,8 +147,12 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams, {
     Map<(int, int), _GameData>? carryOverGames,
     bool readOnlyCarryOver = false,
+    ScrollController? verticalController,
+    ScrollController? horizontalController,
   }) {
     final standings = _calculateStandings(teams);
+    final vCtrl = verticalController ?? _verticalController;
+    final hCtrl = horizontalController ?? _horizontalController;
 
     return Card(
       elevation: 0,
@@ -171,16 +194,16 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
             const SizedBox(height: 12),
             Expanded(
               child: Scrollbar(
-                controller: _verticalController,
+                controller: vCtrl,
                 thumbVisibility: true,
                 child: SingleChildScrollView(
-                  controller: _verticalController,
+                  controller: vCtrl,
                   child: Scrollbar(
-                    controller: _horizontalController,
+                    controller: hCtrl,
                     thumbVisibility: true,
                     notificationPredicate: (n) => n.depth == 1,
                     child: SingleChildScrollView(
-                      controller: _horizontalController,
+                      controller: hCtrl,
                       scrollDirection: Axis.horizontal,
                       child: _buildCrossTableGrid(teams, standings, carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
                     ),
@@ -440,7 +463,11 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
           ),
           SizedBox(
             height: _getGroupTeams(groupName).length * 40.0 + 100,
-            child: _buildSimpleCrossTable(_getGroupTeams(groupName)),
+            child: _buildSimpleCrossTable(
+              _getGroupTeams(groupName),
+              verticalController: _getGroupVerticalController(groupName),
+              horizontalController: _getGroupHorizontalController(groupName),
+            ),
           ),
         ],
       ],
