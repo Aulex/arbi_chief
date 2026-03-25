@@ -98,11 +98,25 @@ const swimmingConfig = SportTypeConfig(
   boardAbbrev: 'К',
 );
 
+/// Config for arm wrestling (5 weight categories, no draws).
+const armWrestlingConfig = SportTypeConfig(
+  boardLabel: 'Категорія',
+  boardCount: 5,
+  lastBoardWomenOnly: false,
+  hasTeamCrossTable: false,
+  hasBoardCrossTables: true,
+  boardLabelPlural: 'категоріях',
+  boardAbbrev: 'К',
+);
+
 /// Returns true if the sport type is swimming (Плавання).
 bool isSwimming(int? typeId) => typeId == 6;
 
 /// Returns true if the sport type is volleyball (Волейбол).
 bool isVolleyball(int? typeId) => typeId == 3;
+
+/// Returns true if the sport type is arm wrestling (Армрестлінг).
+bool isArmWrestling(int? typeId) => typeId == 9;
 
 /// Map type_id → config. Falls back to chess config for unknown types.
 SportTypeConfig getConfigForType(int? typeId) {
@@ -111,6 +125,7 @@ SportTypeConfig getConfigForType(int? typeId) {
     case 3: return volleyballConfig;  // Волейбол
     case 6: return swimmingConfig;    // Плавання
     case 7: return checkersConfig;    // Шашки
+    case 9: return armWrestlingConfig;  // Армрестлінг
     case 11: return tableTennisConfig; // Настільний теніс
     default: return chessConfig;
   }

@@ -7,6 +7,7 @@ import '../models/sport_type_config.dart';
 import '../sports/table_tennis/table_tennis_providers.dart';
 import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
 import '../sports/chess/chess_scoring.dart' as chess_scoring;
+import '../sports/arm_wrestling/arm_wrestling_scoring.dart' as aw_scoring;
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/standings_window_provider.dart';
@@ -46,11 +47,15 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   final ScrollController _teamsHorizontalController = ScrollController();
 
   bool get _isTableTennis => widget.tType == 11;
+  bool get _isArmWrestling => widget.tType == 9;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: widget.config.boardCount + 1, vsync: this);
+    _tabController = TabController(
+      length: widget.config.boardCount + (_isArmWrestling ? 0 : 1),
+      vsync: this,
+    );
     _loadData();
   }
 
@@ -226,7 +231,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           points: _totalPoints(boardNum, pid),
           displayPoints: _displayPoints(boardNum, pid),
           gamesPlayed: _gamesPlayed(boardNum, pid),
-          bergerCoefficient: _isTableTennis ? null : _bergerCoefficient(boardNum, pid),
+          bergerCoefficient: (_isTableTennis || _isArmWrestling) ? null : _bergerCoefficient(boardNum, pid),
           ballsScored: balls?.scored,
           ballsConceded: balls?.conceded,
         );
@@ -310,7 +315,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     final boardTabLabels = <int, String>{};
     for (int i = 1; i <= widget.config.boardCount; i++) {
-      boardTabLabels[i] = widget.config.shortTabLabel(i);
+      boardTabLabels[i] = _isArmWrestling
+          ? (aw_scoring.WeightCategory.fromId(i)?.label ?? widget.config.shortTabLabel(i))
+          : widget.config.shortTabLabel(i);
     }
 
     // Build cross-table data per board
@@ -488,6 +495,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         colPlayerName: colPlayerName,
         currentResult: currentResult,
         boardNum: boardNum,
+        onResultChanged: onResultChanged,
+      );
+      return;
+    }
+    if (_isArmWrestling) {
+      _showArmWrestlingResultPicker(
+        dialogContext,
+        rowPlayerId: rowPlayerId,
+        colPlayerId: colPlayerId,
+        rowPlayerName: rowPlayerName,
+        colPlayerName: colPlayerName,
+        currentResult: currentResult,
         onResultChanged: onResultChanged,
       );
       return;
@@ -798,6 +817,17 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       );
       return;
     }
+    if (_isArmWrestling) {
+      _showArmWrestlingResultPicker(
+        context,
+        rowPlayerId: rowPlayerId,
+        colPlayerId: colPlayerId,
+        rowPlayerName: rowPlayerName,
+        colPlayerName: colPlayerName,
+        currentResult: currentResult,
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -857,6 +887,77 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     ).then((value) {
       if (value == null) return;
       _onResultSelected(rowPlayerId, colPlayerId, value == -1.0 ? null : value);
+    });
+  }
+
+  void _showArmWrestlingResultPicker(
+    BuildContext context, {
+    required int rowPlayerId,
+    required int colPlayerId,
+    required String rowPlayerName,
+    required String colPlayerName,
+    required double? currentResult,
+    VoidCallback? onResultChanged,
+  }) {
+    showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: EdgeInsets.zero,
+        title: Container(
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  rowPlayerName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('vs', style: TextStyle(fontSize: 13, color: Colors.indigo.shade400)),
+              ),
+              Expanded(
+                child: Text(
+                  colPlayerName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.indigo.shade900),
+                ),
+              ),
+            ],
+          ),
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _resultOptionCard(ctx, label: 'Перемога', symbol: '+', color: Colors.green, value: 1.0, current: currentResult),
+            const SizedBox(height: 6),
+            _resultOptionCard(ctx, label: 'Поразка', symbol: '−', color: Colors.red, value: 0.0, current: currentResult),
+            if (currentResult != null) ...[
+              const SizedBox(height: 10),
+              Divider(height: 1, color: Colors.grey.shade200),
+              const SizedBox(height: 6),
+              _resultOptionCard(ctx, label: 'Очистити', symbol: '×', color: Colors.grey, value: -1.0, current: currentResult),
+            ],
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+        ],
+      ),
+    ).then((value) {
+      if (value == null) return;
+      _onResultSelected(rowPlayerId, colPlayerId, value == -1.0 ? null : value).then((_) {
+        onResultChanged?.call();
+      });
     });
   }
 
@@ -1330,7 +1431,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         if (aVsB > bVsA) return -1; // a won head-to-head → a ranks higher
         if (aVsB < bVsA) return 1;
       }
-      // 3. Berger coefficient (skip for table tennis, use balls diff)
+      // 3. Berger coefficient (skip for table tennis, use balls diff; skip for arm wrestling)
+      if (_isArmWrestling) {
+        // Fewer losses
+        final aLosses = (_boardResults[boardNum]?[aId] ?? {}).values.where((r) => r == 0.0).length;
+        final bLosses = (_boardResults[boardNum]?[bId] ?? {}).values.where((r) => r == 0.0).length;
+        return aLosses.compareTo(bLosses);
+      }
       if (_isTableTennis) {
         final aBalls = _totalBalls(boardNum, aId);
         final bBalls = _totalBalls(boardNum, bId);
@@ -1345,7 +1452,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     return sorted;
   }
 
-  String _formatResult(double? result) => chess_scoring.formatChessResult(result);
+  String _formatResult(double? result) => _isArmWrestling
+      ? aw_scoring.formatArmWrestlingResult(result)
+      : chess_scoring.formatChessResult(result);
 
   String _formatTTPhantomResult(double? result) => tt_scoring.formatPhantomResult(result);
 
@@ -1398,8 +1507,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 labelPadding: const EdgeInsets.symmetric(horizontal: 16),
                 tabs: [
                   for (int i = 1; i <= widget.config.boardCount; i++)
-                    Tab(text: widget.config.shortTabLabel(i), height: 36),
-                  const Tab(text: 'Команди', height: 36),
+                    Tab(text: _isArmWrestling
+                        ? (aw_scoring.WeightCategory.fromId(i)?.label ?? widget.config.shortTabLabel(i))
+                        : widget.config.shortTabLabel(i), height: 36),
+                  if (!_isArmWrestling)
+                    const Tab(text: 'Команди', height: 36),
                 ],
               ),
             ),
@@ -1412,7 +1524,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             children: [
               for (int i = 1; i <= widget.config.boardCount; i++)
                 _buildBoardTab(i),
-              _buildTeamsTab(),
+              if (!_isArmWrestling)
+                _buildTeamsTab(),
             ],
           ),
         ),
@@ -2121,7 +2234,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               ),
             _tableCell('Бали', style: headerStyle),
             _tableCell('Ігор', style: headerStyle),
-            if (!isTT) _tableCell('К.Б.', style: headerStyle),
+            if (!isTT && !_isArmWrestling) _tableCell('К.Б.', style: headerStyle),
             if (isTT) _tableCell('М.З.', style: headerStyle),
             if (isTT) _tableCell('М.П.', style: headerStyle),
             // Black separator column
@@ -2131,7 +2244,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             _tableCell('ПІБ', style: headerStyle, minWidth: 130),
             _tableCell('Команда', style: headerStyle, minWidth: 90),
             _tableCell('Бали', style: headerStyle),
-            if (!isTT) _tableCell('К.Б.', style: headerStyle),
+            if (!isTT && !_isArmWrestling) _tableCell('К.Б.', style: headerStyle),
             if (isTT) _tableCell('М.З.', style: headerStyle),
             if (isTT) _tableCell('М.П.', style: headerStyle),
             _tableCell('Місце', style: headerStyle),
@@ -2181,7 +2294,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
               _tableCell('${_gamesPlayed(boardNum, players[i].player.player_id!)}', style: cellStyle),
-              if (!isTT)
+              if (!isTT && !_isArmWrestling)
                 _tableCell(
                   _formatPoints(_bergerCoefficient(boardNum, players[i].player.player_id!)),
                   style: cellStyle,
@@ -2206,7 +2319,7 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 _formatPoints(_displayPoints(boardNum, sorted[i].player.player_id!)),
                 style: cellStyle.copyWith(fontWeight: FontWeight.bold),
               ),
-              if (!isTT)
+              if (!isTT && !_isArmWrestling)
                 _tableCell(
                   _formatPoints(_bergerCoefficient(boardNum, sorted[i].player.player_id!)),
                   style: cellStyle,
