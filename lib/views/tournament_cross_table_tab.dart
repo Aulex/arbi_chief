@@ -1445,9 +1445,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
         final bDiff = bBalls.scored - bBalls.conceded;
         return bDiff.compareTo(aDiff);
       }
-      final ba = _bergerCoefficient(boardNum, aId);
-      final bb = _bergerCoefficient(boardNum, bId);
-      return bb.compareTo(ba);
+      return chess_scoring.chessTiebreaker(
+        boardResults: _boardResults[boardNum],
+        boardNum: boardNum,
+        aId: aId,
+        bId: bId,
+        totalPointsFn: _totalPoints,
+      );
     });
     return sorted;
   }
