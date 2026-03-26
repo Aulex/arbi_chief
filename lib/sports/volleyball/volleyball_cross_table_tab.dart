@@ -490,36 +490,46 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
   Widget _buildGroupModeView() {
     final groupNames = _groupAssignments.values.toSet().toList()..sort();
+    final numGroups = groupNames.length;
+
+    // Calculate overall place ranges for each phase
+    final finalsTeamCount = _finalsPlaces.length * numGroups;
+    final crossGroupTeamCount = _crossGroupMatchPlaces.length * numGroups;
 
     // Build segments dynamically based on configured settings
     final segments = <ButtonSegment<int>>[
       const ButtonSegment(value: 0, label: Text('Групи')),
     ];
 
-    // Segment 1: Finals (places from _finalsPlaces)
+    // Segment 1: Finals
     if (_finalsPlaces.isNotEmpty) {
-      final placesLabel = _finalsPlaces.join(',');
+      final rangeLabel = finalsTeamCount == 1 ? '1' : '1–$finalsTeamCount';
       segments.add(ButtonSegment(
         value: 1,
-        label: Text('Фінал ($placesLabel місця)'),
+        label: Text('Фінальні матчі ($rangeLabel)'),
       ));
     }
 
-    // Segment 2: Cross-group match places (attr_id=11)
+    // Segment 2: Cross-group direct matches (стикові матчі)
     if (_crossGroupMatchPlaces.isNotEmpty) {
-      final placesLabel = _crossGroupMatchPlaces.join(',');
+      final start = finalsTeamCount + 1;
+      final end = finalsTeamCount + crossGroupTeamCount;
+      final rangeLabel = start == end ? '$start' : '$start–$end';
       segments.add(ButtonSegment(
         value: 2,
-        label: Text('Місця $placesLabel'),
+        label: Text('Стикові матчі ($rangeLabel)'),
       ));
     }
 
-    // Segment 3: Round-robin/cycle places (attr_id=12)
+    // Segment 3: Round-robin/cycle matches (колові матчі)
     if (_cyclePlaces.isNotEmpty) {
-      final placesLabel = _cyclePlaces.join(',');
+      final cycleTeamCount = _cyclePlaces.length * numGroups;
+      final start = finalsTeamCount + crossGroupTeamCount + 1;
+      final end = finalsTeamCount + crossGroupTeamCount + cycleTeamCount;
+      final rangeLabel = start == end ? '$start' : '$start–$end';
       segments.add(ButtonSegment(
         value: 3,
-        label: Text('Колова $placesLabel'),
+        label: Text('Колові матчі ($rangeLabel)'),
       ));
     }
 
