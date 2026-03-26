@@ -61,3 +61,19 @@ int chessTiebreaker({
   final bb = bergerCoefficient(boardResults, boardNum, bId, totalPointsFn);
   return bb.compareTo(ba);
 }
+
+/// Chess/checkers team tiebreaker: board 1 points, then board 3 (women's) points.
+///
+/// Returns negative if team [a] ranks higher, positive if [b] ranks higher, 0 if equal.
+/// Used after total team points and head-to-head match result are equal.
+int chessTeamTiebreaker({
+  required int a,
+  required int b,
+  required Map<int, double> teamBoard1Pts,
+  required Map<int, double> teamBoard3Pts,
+}) {
+  final b1a = teamBoard1Pts[a]!;
+  final b1b = teamBoard1Pts[b]!;
+  if (b1a != b1b) return b1b.compareTo(b1a);
+  return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+}

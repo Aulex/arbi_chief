@@ -1755,11 +1755,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           if (tsdA != tsdB) return tsdB.compareTo(tsdA);
           return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
         } else {
-          // Chess/checkers: board 1 points → board 3 (women's) points
-          final b1a = teamBoard1Pts[a]!;
-          final b1b = teamBoard1Pts[b]!;
-          if (b1a != b1b) return b1b.compareTo(b1a);
-          return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
+          return chess_scoring.chessTeamTiebreaker(
+            a: a, b: b,
+            teamBoard1Pts: teamBoard1Pts,
+            teamBoard3Pts: teamBoard3Pts,
+          );
         }
       });
 
