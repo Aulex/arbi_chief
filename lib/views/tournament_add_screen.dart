@@ -90,9 +90,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     final substitutes = await svc.getAttrValue(tId, 6);
     final scoringPoints = await svc.getAttrDictValueMap(tId, 7);
     final tieBreakers = await svc.getAttrDictValueList(tId, 8);
-    final finalsPlaces = await svc.getAttrValue(tId, 10);
-    final crossGroupMatchPlaces = await svc.getAttrValue(tId, 11);
-    final cyclePlaces = await svc.getAttrValue(tId, 12);
+    final finalsPlaces = await svc.getAttrValue(tId, 12);
+    final crossGroupMatchPlaces = await svc.getAttrValue(tId, 13);
+    final cyclePlaces = await svc.getAttrValue(tId, 14);
     if (!mounted) return;
     setState(() {
       if (timeControl != null) selectedTimeControl = timeControl;
@@ -184,8 +184,11 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       cyclePlaces: _cyclePlacesController.text.trim(),
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
-    ref.read(tournamentNavProvider.notifier).showList();
+    if (!widget.isEditMode) {
+      ref.read(tournamentNavProvider.notifier).showList();
+    }
   }
 
   @override

@@ -89,9 +89,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final removed = await vSvc.getRemovedTeamIds(widget.tId);
 
     // Load tournament settings for volleyball group mode
-    final finalsPlacesStr = await tSvc.getAttrValue(widget.tId, 10);
-    final crossGroupStr = await tSvc.getAttrValue(widget.tId, 11);
-    final cycleStr = await tSvc.getAttrValue(widget.tId, 12);
+    final finalsPlacesStr = await tSvc.getAttrValue(widget.tId, 12);
+    final crossGroupStr = await tSvc.getAttrValue(widget.tId, 13);
+    final cycleStr = await tSvc.getAttrValue(widget.tId, 14);
 
     // Build teams with entity_ids
     final teams = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];

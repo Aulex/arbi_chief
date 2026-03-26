@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -277,6 +277,27 @@ class DatabaseService {
             'attr_data_type': 'TEXT',
             'attr_entity_type': 3,
             'attr_t_type': 3,
+          });
+        }
+        if (oldVersion < 12) {
+          // Volleyball tournament settings: finals, cross-group matches, cycle places
+          await db.insert('CMP_ATTR', {
+            'attr_id': 12,
+            'attr_name': 'Місця до фіналу',
+            'attr_data_type': 'TEXT',
+            'attr_entity_type': 1,
+          });
+          await db.insert('CMP_ATTR', {
+            'attr_id': 13,
+            'attr_name': 'Місця для стикових матчів',
+            'attr_data_type': 'TEXT',
+            'attr_entity_type': 1,
+          });
+          await db.insert('CMP_ATTR', {
+            'attr_id': 14,
+            'attr_name': 'Місця для колових матчів',
+            'attr_data_type': 'TEXT',
+            'attr_entity_type': 1,
           });
         }
       },
@@ -636,6 +657,26 @@ class DatabaseService {
           'attr_data_type': 'TEXT',
           'attr_entity_type': 3,
           'attr_t_type': 3,
+        });
+
+        // Volleyball tournament settings (NEW in v12)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 12,
+          'attr_name': 'Місця до фіналу',
+          'attr_data_type': 'TEXT',
+          'attr_entity_type': 1,
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': 13,
+          'attr_name': 'Місця для стикових матчів',
+          'attr_data_type': 'TEXT',
+          'attr_entity_type': 1,
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': 14,
+          'attr_name': 'Місця для колових матчів',
+          'attr_data_type': 'TEXT',
+          'attr_entity_type': 1,
         });
 
         await db.insert('CMP_ATTR_DICT', {
