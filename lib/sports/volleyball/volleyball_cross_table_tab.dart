@@ -533,7 +533,11 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       ));
     }
 
-    // Ensure selected segment is valid
+    // Segment 4: Total standings (always last)
+    segments.add(const ButtonSegment(
+      value: 4,
+      label: Text('Підсумок'),
+    ));
     final validValues = segments.map((s) => s.value).toSet();
     if (!validValues.contains(_selectedSegment)) {
       _selectedSegment = 0;
@@ -566,6 +570,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         return _buildCrossGroupMatchView(groupNames);
       case 3:
         return _buildCyclePlacesView(groupNames);
+      case 4:
+        return _buildTotalStandingsView(groupNames);
       default:
         return _buildGroupsView(groupNames);
     }
@@ -812,6 +818,187 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       teams,
       carryOverGames: carryOver,
       readOnlyCarryOver: true,
+    );
+  }
+
+  /// Total standings — combines results from all phases into one ranked table.
+  Widget _buildTotalStandingsView(List<String> groupNames) {
+    final numGroups = groupNames.length;
+    final rankedTeams = <({int teamId, String teamName, int overallPlace, String phase})>[];
+    final assignedTeamIds = <int>{};
+    int nextPlace = 1;
+
+    // 1. Finals teams
+    if (_finalsPlaces.isNotEmpty) {
+      final finalists = _getTeamsAtPlaces(groupNames, _finalsPlaces);
+      final standings = _calculateStandings(finalists);
+      for (final s in standings) {
+        rankedTeams.add((
+          teamId: s.teamId,
+          teamName: s.teamName,
+          overallPlace: nextPlace++,
+          phase: 'Фінал',
+        ));
+        assignedTeamIds.add(s.teamId);
+      }
+    }
+
+    // 2. Direct match (стикові) teams — per place
+    for (int i = 0; i < _crossGroupMatchPlaces.length; i++) {
+      final place = _crossGroupMatchPlaces[i];
+      final teamsAtPlace = _getTeamsAtSinglePlace(groupNames, place);
+      if (teamsAtPlace.length >= 2) {
+        final standings = _calculateStandings(teamsAtPlace);
+        for (final s in standings) {
+          if (assignedTeamIds.contains(s.teamId)) continue;
+          rankedTeams.add((
+            teamId: s.teamId,
+            teamName: s.teamName,
+            overallPlace: nextPlace++,
+            phase: 'Стикові',
+          ));
+          assignedTeamIds.add(s.teamId);
+        }
+      } else {
+        // Not enough results yet — assign by group place
+        for (final t in teamsAtPlace) {
+          if (assignedTeamIds.contains(t.teamId)) continue;
+          rankedTeams.add((
+            teamId: t.teamId,
+            teamName: t.teamName,
+            overallPlace: nextPlace++,
+            phase: 'Стикові',
+          ));
+          assignedTeamIds.add(t.teamId);
+        }
+      }
+    }
+
+    // 3. Cycle (колові) teams
+    if (_cyclePlaces.isNotEmpty) {
+      final cycleTeams = _getTeamsAtPlaces(groupNames, _cyclePlaces);
+      final standings = _calculateStandings(cycleTeams);
+      for (final s in standings) {
+        if (assignedTeamIds.contains(s.teamId)) continue;
+        rankedTeams.add((
+          teamId: s.teamId,
+          teamName: s.teamName,
+          overallPlace: nextPlace++,
+          phase: 'Колові',
+        ));
+        assignedTeamIds.add(s.teamId);
+      }
+    }
+
+    // 4. Remaining teams (not in any phase) — ranked by group standings
+    for (final groupName in groupNames) {
+      final groupTeams = _getGroupTeams(groupName);
+      final standings = _calculateStandings(groupTeams);
+      for (final s in standings) {
+        if (assignedTeamIds.contains(s.teamId)) continue;
+        rankedTeams.add((
+          teamId: s.teamId,
+          teamName: s.teamName,
+          overallPlace: nextPlace++,
+          phase: 'Група $groupName',
+        ));
+        assignedTeamIds.add(s.teamId);
+      }
+    }
+
+    if (rankedTeams.isEmpty) {
+      return const Center(child: Text('Немає даних для підсумку'));
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
+    final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
+    final headerStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+    final cellStyle = TextStyle(
+      fontSize: 13,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: borderColor, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Загальний підсумок',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${rankedTeams.length} команд',
+              style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Table(
+                  defaultColumnWidth: const IntrinsicColumnWidth(),
+                  border: TableBorder.all(color: borderColor, width: 0.5),
+                  children: [
+                    // Header
+                    TableRow(
+                      decoration: BoxDecoration(color: headerBg),
+                      children: [
+                        _standingsHeaderCell('Місце', headerStyle),
+                        _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
+                        _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
+                      ],
+                    ),
+                    // Data rows
+                    for (int i = 0; i < rankedTeams.length; i++)
+                      TableRow(
+                        decoration: i.isEven
+                            ? null
+                            : BoxDecoration(color: isDark ? const Color(0xFF152238) : Colors.grey.shade50),
+                        children: [
+                          _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
+                          _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
+                          _standingsDataCell(rankedTeams[i].phase, cellStyle),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _standingsHeaderCell(String text, TextStyle style, {double minWidth = 48}) {
+    return Container(
+      constraints: BoxConstraints(minWidth: minWidth, minHeight: 36),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Text(text, style: style, textAlign: TextAlign.center),
+    );
+  }
+
+  Widget _standingsDataCell(String text, TextStyle style, {bool bold = false, bool leftAlign = false}) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 36),
+      alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Text(
+        text,
+        style: bold ? style.copyWith(fontWeight: FontWeight.bold) : style,
+      ),
     );
   }
 
