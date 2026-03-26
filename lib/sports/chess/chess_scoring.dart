@@ -36,3 +36,28 @@ String formatChessResult(double? result) {
   if (result == 0.5) return '½';
   return result.toString();
 }
+
+/// Format a chess result for PDF: uses "1/2" instead of "½" for font compatibility.
+String formatChessResultPdf(double? result) {
+  if (result == null) return '';
+  if (result == 1.0) return '1';
+  if (result == 0.0) return '0';
+  if (result == 0.5) return '1/2';
+  return result.toString();
+}
+
+/// Chess/checkers tiebreaker: compare two players by Berger coefficient.
+///
+/// Returns negative if [aId] ranks higher, positive if [bId] ranks higher, 0 if equal.
+/// Used after points and head-to-head are already equal.
+int chessTiebreaker({
+  required Map<int, Map<int, double>>? boardResults,
+  required int boardNum,
+  required int aId,
+  required int bId,
+  required double Function(int boardNum, int playerId) totalPointsFn,
+}) {
+  final ba = bergerCoefficient(boardResults, boardNum, aId, totalPointsFn);
+  final bb = bergerCoefficient(boardResults, boardNum, bId, totalPointsFn);
+  return bb.compareTo(ba);
+}

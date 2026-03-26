@@ -201,9 +201,13 @@ class ReportService {
         final bDiff = bBalls.scored - bBalls.conceded;
         return bDiff.compareTo(aDiff);
       }
-      final ba = bergerCoefficient(data, boardNum, aId);
-      final bb = bergerCoefficient(data, boardNum, bId);
-      return bb.compareTo(ba);
+      return chess_scoring.chessTiebreaker(
+        boardResults: data.boardResults[boardNum],
+        boardNum: boardNum,
+        aId: aId,
+        bId: bId,
+        totalPointsFn: (bn, pid) => totalPoints(data, bn, pid),
+      );
     });
     return sorted;
   }
@@ -273,14 +277,8 @@ class ReportService {
     return s;
   }
 
-  /// Format chess result for PDF: uses "1/2" instead of "½" for PDF compatibility.
-  String fmtResult(double? result) {
-    if (result == null) return '';
-    if (result == 1.0) return '1';
-    if (result == 0.0) return '0';
-    if (result == 0.5) return '1/2';
-    return result.toString();
-  }
+  /// Format chess result for PDF — delegated to chess scoring.
+  String fmtResult(double? result) => chess_scoring.formatChessResultPdf(result);
 
   /// Format table tennis result for PDF: "2:0\n(11:7, 11:4)".
   String fmtResultTT(ReportData data, int boardNum, int rowId, int colId) {
