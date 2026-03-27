@@ -7,7 +7,18 @@ import '../models/sport_type_config.dart';
 import '../sports/table_tennis/table_tennis_providers.dart';
 import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
 import '../sports/chess/chess_scoring.dart' as chess_scoring;
+import '../sports/checkers/checkers_scoring.dart' as checkers_scoring;
+import '../sports/futsal/futsal_scoring.dart' as futsal_scoring;
+import '../sports/basketball/basketball_scoring.dart' as bb_scoring;
+import '../sports/streetball/streetball_scoring.dart' as sb_scoring;
+import '../sports/volleyball/volleyball_scoring.dart' as vb_scoring;
+import '../sports/tug_of_war/tug_of_war_scoring.dart' as tow_scoring;
 import '../sports/arm_wrestling/arm_wrestling_scoring.dart' as aw_scoring;
+import '../sports/athletics/athletics_scoring.dart' as athletics_scoring;
+import '../sports/swimming/swimming_scoring.dart' as swimming_scoring;
+import '../sports/cycling/cycling_scoring.dart' as cycling_scoring;
+import '../sports/powerlifting/powerlifting_scoring.dart' as powerlifting_scoring;
+import '../sports/kettlebell/kettlebell_scoring.dart' as kettlebell_scoring;
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/standings_window_provider.dart';
@@ -48,6 +59,9 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
   bool get _isTableTennis => widget.tType == 11;
   bool get _isArmWrestling => widget.tType == 9;
+  bool get _isMatchPoints => widget.config.scoringStrategy == ScoringStrategy.matchPoints;
+  bool get _isPlaceSum => widget.config.scoringStrategy == ScoringStrategy.placeSum;
+  bool get _isIndividualMatches => widget.config.scoringStrategy == ScoringStrategy.individualMatches;
 
   @override
   void initState() {
@@ -805,6 +819,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     required double? currentResult,
     int? boardNum,
   }) {
+    if (widget.config.scoringStrategy == ScoringStrategy.matchPoints && widget.config.pointsWin != null && widget.config.pointsWin! > 1.0) {
+      _showGoalResultPicker(
+        context,
+        rowPlayerId: rowPlayerId,
+        colPlayerId: colPlayerId,
+        rowPlayerName: rowPlayerName,
+        colPlayerName: colPlayerName,
+        currentResult: currentResult,
+        boardNum: boardNum,
+      );
+      return;
+    }
     if (_isTableTennis) {
       _showTableTennisResultPicker(
         context,
@@ -888,6 +914,126 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       if (value == null) return;
       _onResultSelected(rowPlayerId, colPlayerId, value == -1.0 ? null : value);
     });
+  }
+
+  /// New picker for sports that use a simple "score1 : score2" detail (Futsal, Basketball, etc.)
+  void _showGoalResultPicker(
+    BuildContext context, {
+    required int rowPlayerId,
+    required int colPlayerId,
+    required String rowPlayerName,
+    required String colPlayerName,
+    required double? currentResult,
+    int? boardNum,
+  }) {
+    final existingDetail = boardNum != null
+        ? (_boardResultDetails[boardNum]?[rowPlayerId]?[colPlayerId])
+        : null;
+    final parts = existingDetail?.split(':') ?? [];
+    
+    final rowController = TextEditingController(text: parts.length == 2 ? parts[0] : '');
+    final colController = TextEditingController(text: parts.length == 2 ? parts[1] : '');
+    final rowFocus = FocusNode();
+    final colFocus = FocusNode();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Введіть результат: $rowPlayerName vs $colPlayerName', style: const TextStyle(fontSize: 14)),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(child: TextField(
+              controller: rowController,
+              focusNode: rowFocus,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(labelText: rowPlayerName, isDense: true),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            )),
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text(':', style: TextStyle(fontSize: 24))),
+            Expanded(child: TextField(
+              controller: colController,
+              focusNode: colFocus,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(labelText: colPlayerName, isDense: true),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            )),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+          if (currentResult != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _onResultSelected(rowPlayerId, colPlayerId, null);
+              },
+              child: const Text('Очистити', style: TextStyle(color: Colors.red)),
+            ),
+          FilledButton(
+            onPressed: () {
+              final r = int.tryParse(rowController.text);
+              final c = int.tryParse(colController.text);
+              if (r == null || c == null) return;
+              Navigator.pop(ctx);
+              _onGoalResultSaved(rowPlayerId, colPlayerId, r, c);
+            },
+            child: const Text('Зберегти'),
+          ),
+        ],
+      ),
+    ).then((_) {
+      rowController.dispose();
+      colController.dispose();
+      rowFocus.dispose();
+      colFocus.dispose();
+    });
+  }
+
+  Future<void> _onGoalResultSaved(int rowPlayerId, int colPlayerId, int rowScore, int colScore) async {
+    final rowDetail = '$rowScore:$colScore';
+    final colDetail = '$colScore:$rowScore';
+    
+    double rowResult;
+    if (rowScore > colScore) rowResult = 1.0;
+    else if (rowScore < colScore) rowResult = 0.0;
+    else rowResult = 0.5;
+
+    _applyGoalResultInMemory(rowPlayerId, colPlayerId, rowResult, rowDetail, colDetail);
+
+    final svc = ref.read(tournamentServiceProvider);
+    int? eventId = await svc.findGameBetweenPlayers(widget.tId, rowPlayerId, colPlayerId);
+    eventId ??= await svc.createGame(
+      tId: widget.tId,
+      whitePlayerId: rowPlayerId,
+      blackPlayerId: colPlayerId,
+    );
+    
+    await svc.saveResultForPlayer(eventId!, rowPlayerId, rowResult);
+    // Ideally we'd save rowDetail/colDetail to DB too. For now we use se_note or just se_result.
+    // Given "no new fields", we can't easily save details without a specialized service update.
+    
+    await _loadData();
+  }
+
+  void _applyGoalResultInMemory(int rowPlayerId, int colPlayerId, double rowResult, String rowDetail, String colDetail) {
+    for (final boardNum in _boardPlayers.keys) {
+      final players = _boardPlayers[boardNum]!;
+      if (players.any((p) => p.player.player_id == rowPlayerId) && players.any((p) => p.player.player_id == colPlayerId)) {
+        _boardResults.putIfAbsent(boardNum, () => {})[rowPlayerId] = {colPlayerId: rowResult};
+        _boardResults[boardNum]!.putIfAbsent(colPlayerId, () => {})[rowPlayerId] = 1.0 - rowResult;
+        _boardResultDetails.putIfAbsent(boardNum, () => {})[rowPlayerId] = {colPlayerId: rowDetail};
+        _boardResultDetails[boardNum]!.putIfAbsent(colPlayerId, () => {})[rowPlayerId] = colDetail;
+        break;
+      }
+    }
+    if (mounted) {
+      setState(() {});
+      _updateStandingsSnapshot();
+    }
   }
 
   void _showArmWrestlingResultPicker(
@@ -1380,13 +1526,22 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
   // --- Calculations ---
 
-  /// Raw points multiplier: delegated to sport-specific scoring.
-  int get _pointMultiplier => _isTableTennis
-      ? tt_scoring.tableTennisPointMultiplier
-      : chess_scoring.chessPointMultiplier;
+  int get _pointMultiplier => widget.config.pointsMultiplier;
 
   double _totalPoints(int boardNum, int playerId) {
-    return (_boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
+    if (_isPlaceSum) {
+      // For PlaceSum, totalPoints is sum of places (lower is better)
+      return (_boardResults[boardNum]?[playerId] ?? {}).values.fold(0.0, (sum, r) => sum + r);
+    }
+    
+    // Standard match points logic using config values
+    return (_boardResults[boardNum]?[playerId] ?? {}).entries.fold(0.0, (sum, entry) {
+      final r = entry.value;
+      if (r == 1.0) return sum + (widget.config.pointsWin ?? 1.0);
+      if (r == 0.5) return sum + (widget.config.pointsDraw ?? 0.5);
+      if (r == 0.0) return sum + (widget.config.pointsLoss ?? 0.0);
+      return sum + r;
+    });
   }
 
   double _displayPoints(int boardNum, int playerId) {
@@ -1420,45 +1575,62 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     sorted.sort((a, b) {
       final aId = a.player.player_id!;
       final bId = b.player.player_id!;
-      // 1. Total points
+      
+      // 1. Total points (Lower is better for PlaceSum, Higher for others)
       final pa = _totalPoints(boardNum, aId);
       final pb = _totalPoints(boardNum, bId);
-      if (pa != pb) return pb.compareTo(pa);
+      if (pa != pb) {
+        return _isPlaceSum ? pa.compareTo(pb) : pb.compareTo(pa);
+      }
+      
       // 2. Head-to-head result
       final aVsB = _boardResults[boardNum]?[aId]?[bId];
       final bVsA = _boardResults[boardNum]?[bId]?[aId];
       if (aVsB != null && bVsA != null) {
-        if (aVsB > bVsA) return -1; // a won head-to-head → a ranks higher
+        if (aVsB > bVsA) return -1;
         if (aVsB < bVsA) return 1;
       }
-      // 3. Berger coefficient (skip for table tennis, use balls diff; skip for arm wrestling)
+      
+      // 3. Sport-specific tie-breakers
       if (_isArmWrestling) {
-        // Fewer losses
         final aLosses = (_boardResults[boardNum]?[aId] ?? {}).values.where((r) => r == 0.0).length;
         final bLosses = (_boardResults[boardNum]?[bId] ?? {}).values.where((r) => r == 0.0).length;
         return aLosses.compareTo(bLosses);
       }
+      
       if (_isTableTennis) {
         final aBalls = _totalBalls(boardNum, aId);
         final bBalls = _totalBalls(boardNum, bId);
         final aDiff = aBalls.scored - aBalls.conceded;
         final bDiff = bBalls.scored - bBalls.conceded;
-        return bDiff.compareTo(aDiff);
+        if (aDiff != bDiff) return bDiff.compareTo(aDiff);
+        return bBalls.scored.compareTo(aBalls.scored);
       }
-      return chess_scoring.chessTiebreaker(
-        boardResults: _boardResults[boardNum],
-        boardNum: boardNum,
-        aId: aId,
-        bId: bId,
-        totalPointsFn: _totalPoints,
-      );
+
+      if (!_isPlaceSum && !_isArmWrestling && !_isTableTennis) {
+        return chess_scoring.chessTiebreaker(
+          boardResults: _boardResults[boardNum],
+          boardNum: boardNum,
+          aId: aId,
+          bId: bId,
+          totalPointsFn: _totalPoints,
+        );
+      }
+      
+      return a.teamName.compareTo(b.teamName);
     });
     return sorted;
   }
 
-  String _formatResult(double? result) => _isArmWrestling
-      ? aw_scoring.formatArmWrestlingResult(result)
-      : chess_scoring.formatChessResult(result);
+  String _formatResult(double? result) {
+    if (_isArmWrestling) return aw_scoring.formatArmWrestlingResult(result);
+    if (widget.config.pointsWin != null && widget.config.pointsWin! > 1.0) {
+      if (result == 1.0) return widget.config.pointsWin!.toStringAsFixed(0);
+      if (result == 0.5) return widget.config.pointsDraw?.toStringAsFixed(0) ?? '½';
+      if (result == 0.0) return widget.config.pointsLoss?.toStringAsFixed(0) ?? '0';
+    }
+    return chess_scoring.formatChessResult(result);
+  }
 
   String _formatTTPhantomResult(double? result) => tt_scoring.formatPhantomResult(result);
 
@@ -1673,12 +1845,18 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   }
 
   /// Convert board-level match score to team match points.
-  /// Win=2, Loss=0, Draw=1 (when missing one player per side).
   ({double a, double b}) _teamMatchPoints(int teamAId, int teamBId) {
+    if (_isPlaceSum) {
+      // In PlaceSum, we don't usually have "team match points" in a cross-table.
+      // But if we do, we might just return the sum of individual places.
+      final score = _teamMatchScore(teamAId, teamBId);
+      return (a: score.a, b: score.b);
+    }
+    
     final score = _teamMatchScore(teamAId, teamBId);
-    if (score.a > score.b) return (a: 2.0, b: 0.0);
-    if (score.b > score.a) return (a: 0.0, b: 2.0);
-    if (score.a > 0 || score.b > 0) return (a: 1.0, b: 1.0);
+    if (score.a > score.b) return (a: widget.config.pointsWin ?? 2.0, b: widget.config.pointsLoss ?? 0.0);
+    if (score.b > score.a) return (a: widget.config.pointsLoss ?? 0.0, b: widget.config.pointsWin ?? 2.0);
+    if (score.a > 0 || score.b > 0) return (a: widget.config.pointsDraw ?? 1.0, b: widget.config.pointsDraw ?? 1.0);
     return (a: 0.0, b: 0.0);
   }
 
@@ -1738,10 +1916,16 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
       ..sort((a, b) {
         final pa = teamPoints[a]!;
         final pb = teamPoints[b]!;
-        if (pa != pb) return pb.compareTo(pa);
-        final h2h = _teamMatchPoints(a, b);
-        if (h2h.a > h2h.b) return -1;
-        if (h2h.b > h2h.a) return 1;
+        if (pa != pb) {
+          return _isPlaceSum ? pa.compareTo(pb) : pb.compareTo(pa);
+        }
+        
+        if (!_isPlaceSum) {
+          final h2h = _teamMatchPoints(a, b);
+          if (h2h.a > h2h.b) return -1;
+          if (h2h.b > h2h.a) return 1;
+        }
+
         if (isTT) {
           // Table tennis: set diff → ball diff → tournament set diff → last board
           final setDiffA = _teamDirectSetDiff(a, b);
@@ -1754,13 +1938,15 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           final tsdB = teamTotalSetDiff[b]!;
           if (tsdA != tsdB) return tsdB.compareTo(tsdA);
           return teamBoard3Pts[b]!.compareTo(teamBoard3Pts[a]!);
-        } else {
+        } else if (!_isPlaceSum) {
           return chess_scoring.chessTeamTiebreaker(
             a: a, b: b,
             teamBoard1Pts: teamBoard1Pts,
             teamBoard3Pts: teamBoard3Pts,
           );
         }
+        
+        return teamMap[a]!.teamName.compareTo(teamMap[b]!.teamName);
       });
 
     final n = teamIdsByNumber.length;

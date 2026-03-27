@@ -11,6 +11,18 @@ import '../sports/swimming/swimming_team_standings_tab.dart';
 import '../sports/volleyball/volleyball_cross_table_tab.dart';
 import '../sports/volleyball/volleyball_group_management_tab.dart';
 import '../sports/arm_wrestling/arm_wrestling_team_standings_tab.dart';
+import '../sports/futsal/futsal_cross_table_tab.dart';
+import '../sports/basketball/basketball_cross_table_tab.dart';
+import '../sports/streetball/streetball_cross_table_tab.dart';
+import '../sports/tug_of_war/tug_of_war_cross_table_tab.dart';
+import '../sports/athletics/athletics_results_tab.dart';
+import '../sports/athletics/athletics_team_standings_tab.dart';
+import '../sports/powerlifting/powerlifting_results_tab.dart';
+import '../sports/powerlifting/powerlifting_team_standings_tab.dart';
+import '../sports/cycling/cycling_results_tab.dart';
+import '../sports/cycling/cycling_team_standings_tab.dart';
+import '../sports/kettlebell/kettlebell_results_tab.dart';
+import '../sports/kettlebell/kettlebell_team_standings_tab.dart';
 import '../models/tournament_model.dart';
 import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
@@ -118,7 +130,72 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
+    } else if (widget.tournament.t_type == 3) { // Athletics
+      tabCount = 5;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        AthleticsResultsTab(tId: widget.tournament.t_id!),
+        AthleticsTeamStandingsTab(tId: widget.tournament.t_id!),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
+    } else if (widget.tournament.t_type == 7) { // Cycling
+      tabCount = 5;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        CyclingResultsTab(tId: widget.tournament.t_id!),
+        CyclingTeamStandingsTab(tId: widget.tournament.t_id!),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
+    } else if (widget.tournament.t_type == 9) { // Powerlifting
+      tabCount = 5;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        PowerliftingResultsTab(tId: widget.tournament.t_id!),
+        PowerliftingTeamStandingsTab(tId: widget.tournament.t_id!),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
+    } else if (widget.tournament.t_type == 10) { // Kettlebell
+      tabCount = 5;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        KettlebellResultsTab(tId: widget.tournament.t_id!),
+        KettlebellTeamStandingsTab(tId: widget.tournament.t_id!),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
     } else if (_isVolleyball) {
+      _loadVolleyballTeamCount();
       final showGroups = _volleyballTeamCount >= 9;
       tabCount = showGroups ? 5 : 4;
       tabs = [
@@ -137,6 +214,62 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig, onTeamsChanged: _loadVolleyballTeamCount),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
+    } else if (widget.tournament.t_type == 2) { // Futsal
+      tabCount = 4;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        FutsalCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
+    } else if (widget.tournament.t_type == 4) { // Basketball
+      tabCount = 4;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        BasketballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
+    } else if (widget.tournament.t_type == 5) { // Streetball
+      tabCount = 4;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        StreetballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
+    } else if (widget.tournament.t_type == 14) { // Tug of War
+      tabCount = 4;
+      tabs = const [
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+      ];
+      tabViews = [
+        TugOfWarCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
+        TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
+      ];
     } else {
       tabCount = 4;
       tabs = const [
@@ -152,6 +285,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     }
+
 
     return DefaultTabController(
       length: tabCount,
