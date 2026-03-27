@@ -130,7 +130,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
-    } else if (widget.tournament.t_type == 3) { // Athletics
+    } else if (widget.tournament.t_type == 10) { // Athletics
       tabCount = 5;
       tabs = const [
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
@@ -146,7 +146,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
-    } else if (widget.tournament.t_type == 7) { // Cycling
+    } else if (widget.tournament.t_type == 12) { // Cycling
       tabCount = 5;
       tabs = const [
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
@@ -162,7 +162,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
-    } else if (widget.tournament.t_type == 9) { // Powerlifting
+    } else if (widget.tournament.t_type == 8) { // Powerlifting
       tabCount = 5;
       tabs = const [
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
@@ -178,7 +178,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
-    } else if (widget.tournament.t_type == 10) { // Kettlebell
+    } else if (widget.tournament.t_type == 13) { // Kettlebell
       tabCount = 5;
       tabs = const [
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),

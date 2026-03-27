@@ -1,7 +1,7 @@
 /// Streetball scoring utilities.
 ///
 /// Rules: 2 pts win, 1 pt loss, 0 pt no-show.
-/// Tie-breakers: H2H, H2H points ratio, Total points ratio.
+/// Tie-breakers: H2H result, H2H goal difference, most goals scored.
 
 class StreetballStanding {
   final int teamId;
@@ -28,7 +28,7 @@ class StreetballStanding {
     this.rank = 0,
   });
 
-  double get pointRatio => pointsConceded == 0 ? pointsScored.toDouble() : pointsScored / pointsConceded;
+  int get goalDifference => pointsScored - pointsConceded;
 }
 
 List<StreetballStanding> calculateStandings({
@@ -90,16 +90,17 @@ List<StreetballStanding> calculateStandings({
     final ptsCmp = b.matchPoints.compareTo(a.matchPoints);
     if (ptsCmp != 0) return ptsCmp;
 
-    // Tie-breaker 1: H2H match points
+    // Tie-breaker 1: H2H result
     final h2hPts = _getH2HPoints(a, b, games);
     if (h2hPts != 0) return -h2hPts;
 
-    // Tie-breaker 2: H2H points ratio
-    final h2hRatio = _getH2HRatio(a, b, games);
-    if (h2hRatio != 0) return -h2hRatio.compareTo(0);
+    // Tie-breaker 2: H2H goal difference
+    final h2hDiffA = _getH2HGoalDiff(a, b, games);
+    final h2hDiffB = _getH2HGoalDiff(b, a, games);
+    if (h2hDiffA != h2hDiffB) return h2hDiffB.compareTo(h2hDiffA);
 
-    // Tie-breaker 3: Total points ratio
-    return b.pointRatio.compareTo(a.pointRatio);
+    // Tie-breaker 3: Most goals scored overall
+    return b.pointsScored.compareTo(a.pointsScored);
   });
 
   for (int i = 0; i < result.length; i++) {
@@ -135,29 +136,29 @@ int _getH2HPoints(StreetballStanding a, StreetballStanding b, Map<(int, int), St
   return aPts - bPts;
 }
 
-double _getH2HRatio(StreetballStanding a, StreetballStanding b, Map<(int, int), String> games) {
+/// Goal difference for team [a] in H2H games against [b].
+int _getH2HGoalDiff(StreetballStanding a, StreetballStanding b, Map<(int, int), String> games) {
   if (a.entityId == null || b.entityId == null) return 0;
   final ab = games[(a.entityId!, b.entityId!)];
   final ba = games[(b.entityId!, a.entityId!)];
 
-  int aScored = 0;
-  int aConceded = 0;
+  int scored = 0;
+  int conceded = 0;
 
   if (ab != null) {
     final p = ab.split(':');
     if (p.length == 2) {
-      aScored += int.tryParse(p[0]) ?? 0;
-      aConceded += int.tryParse(p[1]) ?? 0;
+      scored += int.tryParse(p[0]) ?? 0;
+      conceded += int.tryParse(p[1]) ?? 0;
     }
   }
   if (ba != null) {
     final p = ba.split(':');
     if (p.length == 2) {
-      aScored += int.tryParse(p[1]) ?? 0;
-      aConceded += int.tryParse(p[0]) ?? 0;
+      scored += int.tryParse(p[1]) ?? 0;
+      conceded += int.tryParse(p[0]) ?? 0;
     }
   }
 
-  if (aConceded == 0) return aScored.toDouble();
-  return aScored / aConceded;
+  return scored - conceded;
 }

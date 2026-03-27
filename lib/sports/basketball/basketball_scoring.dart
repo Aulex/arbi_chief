@@ -94,9 +94,10 @@ List<BasketballStanding> calculateStandings({
     final h2hPts = _getH2HPoints(a, b, games);
     if (h2hPts != 0) return -h2hPts;
 
-    // Tie-breaker 2: H2H points ratio
-    final h2hRatio = _getH2HRatio(a, b, games);
-    if (h2hRatio != 0) return -h2hRatio.compareTo(0);
+    // Tie-breaker 2: H2H scored/conceded ratio
+    final h2hRatioA = _getH2HRatio(a, b, games);
+    final h2hRatioB = _getH2HRatio(b, a, games);
+    if (h2hRatioA != h2hRatioB) return h2hRatioB.compareTo(h2hRatioA);
 
     // Tie-breaker 3: Total points ratio
     return b.pointRatio.compareTo(a.pointRatio);
@@ -135,29 +136,30 @@ int _getH2HPoints(BasketballStanding a, BasketballStanding b, Map<(int, int), St
   return aPts - bPts;
 }
 
+/// Return scored/conceded ratio for team [a] in H2H games against [b].
 double _getH2HRatio(BasketballStanding a, BasketballStanding b, Map<(int, int), String> games) {
   if (a.entityId == null || b.entityId == null) return 0;
   final ab = games[(a.entityId!, b.entityId!)];
   final ba = games[(b.entityId!, a.entityId!)];
 
-  int aScored = 0;
-  int aConceded = 0;
+  int scored = 0;
+  int conceded = 0;
 
   if (ab != null) {
     final p = ab.split(':');
     if (p.length == 2) {
-      aScored += int.tryParse(p[0]) ?? 0;
-      aConceded += int.tryParse(p[1]) ?? 0;
+      scored += int.tryParse(p[0]) ?? 0;
+      conceded += int.tryParse(p[1]) ?? 0;
     }
   }
   if (ba != null) {
     final p = ba.split(':');
     if (p.length == 2) {
-      aScored += int.tryParse(p[1]) ?? 0;
-      aConceded += int.tryParse(p[0]) ?? 0;
+      scored += int.tryParse(p[1]) ?? 0;
+      conceded += int.tryParse(p[0]) ?? 0;
     }
   }
 
-  if (aConceded == 0) return aScored.toDouble();
-  return aScored / aConceded;
+  if (conceded == 0) return scored.toDouble();
+  return scored / conceded;
 }
