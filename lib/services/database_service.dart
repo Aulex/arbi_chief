@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -298,6 +298,29 @@ class DatabaseService {
             'attr_name': 'Місця для колових матчів',
             'attr_data_type': 'TEXT',
             'attr_entity_type': 1,
+          });
+        }
+        if (oldVersion < 13) {
+          // Категорія for individual sports (player-team level)
+          await db.insert('CMP_ATTR', {
+            'attr_id': 15,
+            'attr_name': 'Категорія',
+            'attr_data_type': 'TEXT',
+            'attr_entity_type': 2,
+          });
+          // Вага команди for tug of war (team-tournament level)
+          await db.insert('CMP_ATTR', {
+            'attr_id': 16,
+            'attr_name': 'Вага команди',
+            'attr_data_type': 'REAL',
+            'attr_entity_type': 3,
+          });
+          // Вага спортсмена for powerlifting/kettlebell (player-team level)
+          await db.insert('CMP_ATTR', {
+            'attr_id': 17,
+            'attr_name': 'Вага спортсмена',
+            'attr_data_type': 'REAL',
+            'attr_entity_type': 2,
           });
         }
       },
@@ -677,6 +700,27 @@ class DatabaseService {
           'attr_name': 'Місця для колових матчів',
           'attr_data_type': 'TEXT',
           'attr_entity_type': 1,
+        });
+        // Категорія for individual sports (player-team level) (NEW in v13)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 15,
+          'attr_name': 'Категорія',
+          'attr_data_type': 'TEXT',
+          'attr_entity_type': 2,
+        });
+        // Вага команди for tug of war (team-tournament level) (NEW in v13)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 16,
+          'attr_name': 'Вага команди',
+          'attr_data_type': 'REAL',
+          'attr_entity_type': 3,
+        });
+        // Вага спортсмена for powerlifting/kettlebell (player-team level) (NEW in v13)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 17,
+          'attr_name': 'Вага спортсмена',
+          'attr_data_type': 'REAL',
+          'attr_entity_type': 2,
         });
 
         await db.insert('CMP_ATTR_DICT', {

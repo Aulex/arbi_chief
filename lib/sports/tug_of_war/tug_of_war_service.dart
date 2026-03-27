@@ -62,4 +62,48 @@ class TugOfWarService {
       await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
     });
   }
+
+  /// Save team weight (kg) via CMP_TEAM_ATTR attr_id=16.
+  Future<void> saveTeamWeight(int tId, int teamId, double weight) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 16',
+      whereArgs: [tId, teamId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'CMP_TEAM_ATTR',
+        {'attr_value': weight.toString()},
+        where: 'ta_id = ?',
+        whereArgs: [existing.first['ta_id']],
+      );
+    } else {
+      await db.insert('CMP_TEAM_ATTR', {
+        'team_id': teamId,
+        't_id': tId,
+        'attr_id': 16,
+        'attr_value': weight.toString(),
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_tw_$teamId',
+      });
+    }
+  }
+
+  /// Get team weights for a tournament. Returns Map<teamId, weightKg>.
+  Future<Map<int, double>> getTeamWeights(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 16',
+      whereArgs: [tId],
+    );
+    final result = <int, double>{};
+    for (final r in rows) {
+      final teamId = r['team_id'] as int;
+      final w = double.tryParse(r['attr_value'] as String? ?? '');
+      if (w != null) result[teamId] = w;
+    }
+    return result;
+  }
 }

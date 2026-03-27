@@ -20,6 +20,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
   bool _loading = true;
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _teams = [];
   Map<(int, int), _GameData> _games = {};
+  Map<int, double> _teamWeights = {};
   int? _hoveredRow;
   int? _hoveredCol;
   final ScrollController _vCtrl = ScrollController();
@@ -36,6 +37,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
     final svc = ref.read(tugOfWarServiceProvider);
     final teamList = await teamSvc.getTeamListForTournament(widget.tId);
     final games = await svc.getTeamGamesForTournament(widget.tId);
+    final weights = await svc.getTeamWeights(widget.tId);
     final teams = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
     for (final t in teamList) {
       final allTeams = await teamSvc.getAllTeams();
@@ -47,7 +49,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
       gamesMap[(g.teamAEntityId, g.teamBEntityId)] = _GameData(eventId: g.eventId, eventResult: g.eventResult);
       gamesMap[(g.teamBEntityId, g.teamAEntityId)] = _GameData(eventId: g.eventId, eventResult: g.eventResult != null ? _mirror(g.eventResult!) : null);
     }
-    setState(() { _teams = teams; _games = gamesMap; _loading = false; });
+    setState(() { _teams = teams; _games = gamesMap; _teamWeights = weights; _loading = false; });
   }
 
   String _mirror(String r) { final p = r.split(':'); return p.length == 2 ? '${p[1]}:${p[0]}' : r; }
@@ -56,7 +58,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
     final eIds = teams.map((t) => t.entityId).whereType<int>().toSet();
     final fg = <(int, int), String>{}; final seen = <(int, int)>{};
     for (final e in _games.entries) { final (a, b) = e.key; if (eIds.contains(a) && eIds.contains(b)) { if (seen.contains((b, a))) continue; seen.add((a, b)); if (e.value.eventResult != null) fg[(a, b)] = e.value.eventResult!; } }
-    return scoring.calculateStandings(teams: teams.map((t) => (teamId: t.teamId, teamName: t.teamName, entityId: t.entityId, weight: null as double?)).toList(), games: fg);
+    return scoring.calculateStandings(teams: teams.map((t) => (teamId: t.teamId, teamName: t.teamName, entityId: t.entityId, weight: _teamWeights[t.teamId])).toList(), games: fg);
   }
 
   @override
@@ -74,11 +76,12 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
         const SizedBox(height: 12),
         Expanded(child: Scrollbar(controller: _vCtrl, thumbVisibility: true, child: SingleChildScrollView(controller: _vCtrl,
           child: Scrollbar(controller: _hCtrl, thumbVisibility: true, notificationPredicate: (n) => n.depth == 1, child: SingleChildScrollView(controller: _hCtrl, scrollDirection: Axis.horizontal,
-            child: Table(defaultColumnWidth: const FixedColumnWidth(56), columnWidths: {0: const FixedColumnWidth(36), 1: const FixedColumnWidth(180), n + 2: const FixedColumnWidth(56), n + 3: const FixedColumnWidth(56), n + 4: const FixedColumnWidth(15), n + 5: const FixedColumnWidth(180), n + 6: const FixedColumnWidth(56), n + 7: const FixedColumnWidth(48)},
+            child: Table(defaultColumnWidth: const FixedColumnWidth(56), columnWidths: {0: const FixedColumnWidth(36), 1: const FixedColumnWidth(180), 2: const FixedColumnWidth(60), n + 3: const FixedColumnWidth(56), n + 4: const FixedColumnWidth(56), n + 5: const FixedColumnWidth(15), n + 6: const FixedColumnWidth(180), n + 7: const FixedColumnWidth(56), n + 8: const FixedColumnWidth(48)},
               border: TableBorder.all(color: Colors.grey.shade300, width: 0.5), children: [
-                TableRow(decoration: BoxDecoration(color: Colors.grey.shade100), children: [_hc('#'), _hc('Команда'), for (int j = 0; j < n; j++) _hc('${_teams[j].teamNumber ?? j + 1}'), _hc('О'), _hc('В'), Container(height: 36, decoration: BoxDecoration(color: Colors.black, border: Border.all(color: Colors.black, width: 0.5))), _hc('Команда'), _hc('Очки'), _hc('Місце')]),
+                TableRow(decoration: BoxDecoration(color: Colors.grey.shade100), children: [_hc('#'), _hc('Команда'), _hc('Вага'), for (int j = 0; j < n; j++) _hc('${_teams[j].teamNumber ?? j + 1}'), _hc('О'), _hc('В'), Container(height: 36, decoration: BoxDecoration(color: Colors.black, border: Border.all(color: Colors.black, width: 0.5))), _hc('Команда'), _hc('Очки'), _hc('Місце')]),
                 for (int i = 0; i < n; i++) TableRow(decoration: BoxDecoration(color: _hoveredRow == i ? Colors.indigo.shade50 : null), children: [
                   _dc('${_teams[i].teamNumber ?? i + 1}', bold: true), _nc(_teams[i].teamName),
+                  _weightCell(_teams[i].teamId),
                   for (int j = 0; j < n; j++) _gc(i, j),
                   _dc('${standingsByTeam[_teams[i].teamId]?.matchPoints ?? 0}', bold: true),
                   _dc('${standingsByTeam[_teams[i].teamId]?.wins ?? 0}'),
@@ -155,6 +158,39 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
   Future<void> _del(int id) async { await ref.read(tugOfWarServiceProvider).deleteTeamGame(id); await _loadData(); }
   void _confirmClear() { showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('Очистити результати?'), content: const Text('Видалити всі результати ігор?'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red), onPressed: () { Navigator.pop(ctx); _clearAll(); }, child: const Text('Очистити', style: TextStyle(color: Colors.white)))])); }
   Future<void> _clearAll() async { final svc = ref.read(tugOfWarServiceProvider); for (final id in _games.values.map((g) => g.eventId).toSet()) { await svc.deleteTeamGame(id); } await _loadData(); }
+
+  Widget _weightCell(int teamId) {
+    final w = _teamWeights[teamId];
+    return GestureDetector(
+      onTap: () => _editWeight(teamId, w),
+      child: Container(
+        height: 36, alignment: Alignment.center,
+        child: Text(w != null ? w.toStringAsFixed(1) : '—', style: TextStyle(fontSize: 11, color: w != null ? null : Colors.grey.shade400)),
+      ),
+    );
+  }
+
+  Future<void> _editWeight(int teamId, double? current) async {
+    final controller = TextEditingController(text: current?.toStringAsFixed(1) ?? '');
+    final result = await showDialog<double?>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Вага команди (кг)', style: TextStyle(fontSize: 16)),
+      content: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(labelText: 'Вага (макс. 800 кг)', border: OutlineInputBorder()),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+        ElevatedButton(onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text)), child: const Text('Зберегти')),
+      ],
+    ));
+    controller.dispose();
+    if (result != null) {
+      await ref.read(tugOfWarServiceProvider).saveTeamWeight(widget.tId, teamId, result);
+      await _loadData();
+    }
+  }
 
   Widget _hc(String t) => Container(height: 36, alignment: Alignment.center, color: Colors.grey.shade100, child: Text(t, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)));
   Widget _dc(String t, {bool bold = false}) => Container(height: 36, alignment: Alignment.center, child: Text(t, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : null)));

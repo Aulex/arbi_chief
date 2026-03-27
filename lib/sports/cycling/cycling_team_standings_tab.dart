@@ -31,14 +31,14 @@ class _CyclingTeamStandingsTabState extends ConsumerState<CyclingTeamStandingsTa
     final removedIds = <int>{};
 
     final placesMap = await cySvc.getPlayerPlaces(widget.tId);
-    // Map playerId -> teamId
+    final categoriesMap = await cySvc.getPlayerCategories(widget.tId);
     final playerTeamsMap = await teamSvc.getPlayerTeamsMap(widget.tId);
     final playerTeams = {for (final entry in playerTeamsMap.entries) entry.key: entry.value.team_id!};
 
-    final individualResults = <({int teamId, int place})>[];
+    final individualResults = <({int teamId, int place, String? category})>[];
     for (final entry in placesMap.entries) {
       final tId = playerTeams[entry.key];
-      if (tId != null) individualResults.add((teamId: tId, place: entry.value));
+      if (tId != null) individualResults.add((teamId: tId, place: entry.value, category: categoriesMap[entry.key]));
     }
 
     final standings = scoring.calculateStandings(

@@ -31,14 +31,16 @@ class _PowerliftingTeamStandingsTabState extends ConsumerState<PowerliftingTeamS
     final removedIds = <int>{};
 
     final placesMap = await plSvc.getPlayerPlaces(widget.tId);
-    // Map playerId -> teamId
+    final categoriesMap = await plSvc.getPlayerCategories(widget.tId);
+    final weightsMap = await plSvc.getPlayerWeights(widget.tId);
     final playerTeamsMap = await teamSvc.getPlayerTeamsMap(widget.tId);
     final playerTeams = {for (final entry in playerTeamsMap.entries) entry.key: entry.value.team_id!};
 
-    final individualResults = <({int teamId, int place})>[];
+    final individualResults = <({int teamId, int place, String? category, int? playerId})>[];
     for (final entry in placesMap.entries) {
-      final tId = playerTeams[entry.key];
-      if (tId != null) individualResults.add((teamId: tId, place: entry.value));
+      final pId = entry.key;
+      final tId = playerTeams[pId];
+      if (tId != null) individualResults.add((teamId: tId, place: entry.value, category: categoriesMap[pId], playerId: pId));
     }
 
     final standings = scoring.calculateStandings(
@@ -46,6 +48,7 @@ class _PowerliftingTeamStandingsTabState extends ConsumerState<PowerliftingTeamS
       individualResults: individualResults,
       maxResultsPerTeam: 3,
       removedTeamIds: removedIds,
+      playerWeights: weightsMap,
     );
 
     setState(() { _standings = standings; _loading = false; });

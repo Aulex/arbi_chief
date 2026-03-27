@@ -17,6 +17,7 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
   bool _loading = true;
   List<({int playerId, String playerName, int teamId, String teamName})> _players = [];
   Map<int, int> _places = {};
+  Map<int, String> _categories = {};
   int? _hoveredRow;
 
   @override
@@ -32,12 +33,12 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
 
     final playerTeamsMap = await teamSvc.getPlayerTeamsMap(widget.tId);
     final allPlayers = await playerSvc.getAllPlayers();
-    
+
     final playersList = <({int playerId, String playerName, int teamId, String teamName})>[];
     for (final entry in playerTeamsMap.entries) {
       final pId = entry.key;
       final team = entry.value;
-      
+
       final pInfo = allPlayers.where((p) => p.player_id == pId).firstOrNull;
       if (pInfo != null) {
         final name = '${pInfo.player_surname ?? ''} ${pInfo.player_name ?? ''} ${pInfo.player_lastname ?? ''}'.trim();
@@ -51,49 +52,93 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
     }
 
     final places = await athSvc.getPlayerPlaces(widget.tId);
+    final categories = await athSvc.getPlayerCategories(widget.tId);
 
     setState(() {
       _players = playersList;
       _places = places;
+      _categories = categories;
       _loading = false;
     });
   }
 
-  Future<void> _editPlace(int playerId, int teamId, String playerName, int? currentPlace) async {
-    final controller = TextEditingController(text: currentPlace?.toString() ?? '');
-    
-    final result = await showDialog<int?>(
+  Future<void> _editResult(int playerId, int teamId, String playerName, int? currentPlace, String? currentCategory) async {
+    final placeCtrl = TextEditingController(text: currentPlace?.toString() ?? '');
+    final catCtrl = TextEditingController(text: currentCategory ?? '');
+
+    // Collect existing categories for suggestions
+    final existingCategories = _categories.values.toSet().toList()..sort();
+
+    final result = await showDialog<({int place, String category})?>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Місце (результат)\n$playerName', style: const TextStyle(fontSize: 16)),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            labelText: 'Зайняте місце (1, 2, 3...)',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
+        title: Text('Результат\n$playerName', style: const TextStyle(fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: placeCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'Зайняте місце (1, 2, 3...)',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            Autocomplete<String>(
+              initialValue: catCtrl.value,
+              optionsBuilder: (textEditingValue) {
+                if (textEditingValue.text.isEmpty) return existingCategories;
+                return existingCategories.where(
+                  (c) => c.toLowerCase().contains(textEditingValue.text.toLowerCase()),
+                );
+              },
+              fieldViewBuilder: (ctx, ctrl, focusNode, onSubmit) {
+                ctrl.text = catCtrl.text;
+                return TextField(
+                  controller: ctrl,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'Категорія (вікова/статева)',
+                    hintText: 'напр. Чоловіки, Жінки 18-25',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) => catCtrl.text = v,
+                );
+              },
+              onSelected: (v) => catCtrl.text = v,
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, int.tryParse(controller.text)),
+            onPressed: () {
+              final place = int.tryParse(placeCtrl.text);
+              if (place != null) {
+                Navigator.pop(ctx, (place: place, category: catCtrl.text.trim()));
+              }
+            },
             child: const Text('Зберегти'),
           ),
         ],
       ),
     );
 
-    controller.dispose();
+    placeCtrl.dispose();
+    catCtrl.dispose();
     if (result != null) {
-      await ref.read(athleticsServiceProvider).savePlayerPlace(
-        tId: widget.tId,
-        playerId: playerId,
-        teamId: teamId,
-        place: result,
+      final svc = ref.read(athleticsServiceProvider);
+      await svc.savePlayerPlace(
+        tId: widget.tId, playerId: playerId, teamId: teamId, place: result.place,
       );
+      if (result.category.isNotEmpty) {
+        await svc.savePlayerCategory(
+          playerId: playerId, tId: widget.tId, category: result.category,
+        );
+      }
       await _loadData();
     }
   }
@@ -106,7 +151,6 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
       return const Center(child: Text('Додайте гравців для введення результатів'));
     }
 
-    // Sort by place (assigned places first, then alphabetical)
     final sortedPlayers = List.of(_players);
     sortedPlayers.sort((a, b) {
       final placeA = _places[a.playerId];
@@ -128,7 +172,13 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Особисті результати', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                const Text('Особисті результати', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+              ],
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: ListView.separated(
@@ -138,12 +188,13 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
                   if (i == 0) return _buildHeader();
                   final p = sortedPlayers[i - 1];
                   final place = _places[p.playerId];
-                  
+                  final category = _categories[p.playerId];
+
                   return MouseRegion(
                     onEnter: (_) => setState(() => _hoveredRow = i),
                     onExit: (_) => setState(() => _hoveredRow = null),
                     child: InkWell(
-                      onTap: () => _editPlace(p.playerId, p.teamId, p.playerName, place),
+                      onTap: () => _editResult(p.playerId, p.teamId, p.playerName, place, category),
                       child: Container(
                         color: _hoveredRow == i ? Colors.indigo.shade50 : null,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -151,6 +202,7 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
                           children: [
                             SizedBox(width: 50, child: Text(place?.toString() ?? '-', style: TextStyle(fontWeight: place != null ? FontWeight.bold : FontWeight.normal, fontSize: 16))),
                             Expanded(flex: 2, child: Text(p.playerName)),
+                            Expanded(flex: 1, child: Text(category ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
                             Expanded(flex: 2, child: Text(p.teamName, style: TextStyle(color: Colors.grey.shade700))),
                             Icon(Icons.edit, size: 16, color: Colors.indigo.shade300),
                           ],
@@ -175,6 +227,7 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab> {
         children: [
           SizedBox(width: 50, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
           Expanded(flex: 2, child: Text('Гравець', style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
           Expanded(flex: 2, child: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(width: 16),
         ],

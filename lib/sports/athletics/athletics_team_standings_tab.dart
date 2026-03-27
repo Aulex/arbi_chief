@@ -32,28 +32,28 @@ class _AthleticsTeamStandingsTabState extends ConsumerState<AthleticsTeamStandin
     // For removed teams (not used actively but logic requires it)
     final removedIds = <int>{};
 
-    // Get individual places
+    // Get individual places and categories
     final placesMap = await athSvc.getPlayerPlaces(widget.tId);
-    
+    final categoriesMap = await athSvc.getPlayerCategories(widget.tId);
+
     // Map playerId -> teamId
     final playerTeamsMap = await teamSvc.getPlayerTeamsMap(widget.tId);
     final playerTeams = {for (final entry in playerTeamsMap.entries) entry.key: entry.value.team_id!};
 
-    // Convert to list of ({int teamId, int place})
-    final individualResults = <({int teamId, int place})>[];
+    final individualResults = <({int teamId, int place, String? category})>[];
     for (final entry in placesMap.entries) {
       final pId = entry.key;
       final place = entry.value;
       final tId = playerTeams[pId];
       if (tId != null) {
-        individualResults.add((teamId: tId, place: place));
+        individualResults.add((teamId: tId, place: place, category: categoriesMap[pId]));
       }
     }
 
     final standings = scoring.calculateStandings(
       teams: teams,
       individualResults: individualResults,
-      maxResultsPerTeam: 3, // Typically top 3 per team
+      maxResultsPerTeam: 3,
       removedTeamIds: removedIds,
     );
 
