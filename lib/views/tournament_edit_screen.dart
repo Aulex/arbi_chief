@@ -101,11 +101,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     if (_isSwimming) {
       tabCount = 5;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Результати', child: Icon(Icons.pool_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Командний залік', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         SwimmingResultsTab(tId: widget.tournament.t_id!),
@@ -117,11 +117,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (_isArmWrestling) {
       tabCount = 5;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Командний залік', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig, tType: widget.tournament.t_type),
@@ -133,11 +133,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 10) { // Athletics
       tabCount = 5;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Результати', child: Icon(Icons.pool_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Командний залік', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         AthleticsResultsTab(tId: widget.tournament.t_id!),
@@ -149,11 +149,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 12) { // Cycling
       tabCount = 5;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Результати', child: Icon(Icons.pool_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Командний залік', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         CyclingResultsTab(tId: widget.tournament.t_id!),
@@ -165,11 +165,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 8) { // Powerlifting
       tabCount = 5;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Результати', child: Icon(Icons.pool_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Командний залік', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         PowerliftingResultsTab(tId: widget.tournament.t_id!),
@@ -181,11 +181,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 13) { // Kettlebell
       tabCount = 5;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Результати', child: Icon(Icons.pool_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Командний залік', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         KettlebellResultsTab(tId: widget.tournament.t_id!),
@@ -199,12 +199,12 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
       final showGroups = _volleyballTeamCount >= 9;
       tabCount = showGroups ? 5 : 4;
       tabs = [
-        const Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
         if (showGroups)
-          const Tab(icon: Tooltip(message: 'Групи', child: Icon(Icons.group_work_outlined, size: 18))),
-        const Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        const Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        const Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+          const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.group_work_outlined, size: 18), SizedBox(width: 6), Text('Групи')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         VolleyballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
@@ -217,10 +217,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 2) { // Futsal
       tabCount = 4;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         FutsalCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
@@ -231,10 +231,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 4) { // Basketball
       tabCount = 4;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         BasketballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
@@ -245,10 +245,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 5) { // Streetball
       tabCount = 4;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         StreetballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
@@ -259,10 +259,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else if (widget.tournament.t_type == 14) { // Tug of War
       tabCount = 4;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         TugOfWarCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
@@ -273,10 +273,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     } else {
       tabCount = 4;
       tabs = const [
-        Tab(icon: Tooltip(message: 'Таблиця', child: Icon(Icons.leaderboard_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Гравці', child: Icon(Icons.people_outline, size: 18))),
-        Tab(icon: Tooltip(message: 'Команди', child: Icon(Icons.groups_outlined, size: 18))),
-        Tab(icon: Tooltip(message: 'Налаштування', child: Icon(Icons.settings_outlined, size: 18))),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig, tType: widget.tournament.t_type),
