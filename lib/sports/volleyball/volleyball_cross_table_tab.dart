@@ -447,7 +447,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       bgColor = Colors.orange.shade50;
     }
 
-    if (isCarryOver) {
+    if (isCarryOver && game == null) {
       bgColor = Colors.amber.shade50;
     }
     if (isRemoved) {
@@ -455,6 +455,27 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     }
 
     final isReadOnly = isRemoved || (isCarryOver && readOnlyCarryOver);
+
+    Widget cellWidget = Container(
+      height: 36,
+      alignment: Alignment.center,
+      color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? Colors.indigo.shade50 : null),
+      child: Text(
+        cellText,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: cellText.isNotEmpty ? FontWeight.w500 : null,
+          color: isReadOnly ? Colors.grey.shade700 : null,
+        ),
+      ),
+    );
+
+    if (isCarryOver && readOnlyCarryOver) {
+      cellWidget = Tooltip(
+        message: 'Результат перенесено з групи',
+        child: cellWidget,
+      );
+    }
 
     return MouseRegion(
       onEnter: (_) => setState(() {
@@ -469,19 +490,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         onTap: isReadOnly
             ? null
             : () => _showSetScoreDialog(teamA, teamB, game),
-        child: Container(
-          height: 36,
-          alignment: Alignment.center,
-          color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? Colors.indigo.shade50 : null),
-          child: Text(
-            cellText,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: cellText.isNotEmpty ? FontWeight.w500 : null,
-              color: isRemoved ? Colors.grey : null,
-            ),
-          ),
-        ),
+        child: cellWidget,
       ),
     );
   }
