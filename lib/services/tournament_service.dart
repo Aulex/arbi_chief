@@ -242,6 +242,16 @@ class TournamentService {
     }
   }
 
+  /// Delete all rows for one attr_id of a tournament.
+  Future<void> deleteAttrValue({required int tId, required int attrId}) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_ATTR_VALUE',
+      where: 't_id = ? AND attr_id = ?',
+      whereArgs: [tId, attrId],
+    );
+  }
+
   // --- Games (CMP_EVENT + CMP_SUBEVENT) ---
 
   /// Create a game between two players and return the event_id.

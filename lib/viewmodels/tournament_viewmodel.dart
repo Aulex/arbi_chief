@@ -124,16 +124,22 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     // attr_id=12: "Місця до фіналу" — TEXT
     if (finalsPlaces != null && finalsPlaces.isNotEmpty) {
       await svc.saveAttrValue(tId: tId, attrId: 12, attrValue: finalsPlaces);
+    } else {
+      await svc.deleteAttrValue(tId: tId, attrId: 12);
     }
 
     // attr_id=13: "Місця для стикових матчів" — TEXT
     if (crossGroupMatchPlaces != null && crossGroupMatchPlaces.isNotEmpty) {
       await svc.saveAttrValue(tId: tId, attrId: 13, attrValue: crossGroupMatchPlaces);
+    } else {
+      await svc.deleteAttrValue(tId: tId, attrId: 13);
     }
 
     // attr_id=14: "Місця для колових матчів" — TEXT
     if (cyclePlaces != null && cyclePlaces.isNotEmpty) {
       await svc.saveAttrValue(tId: tId, attrId: 14, attrValue: cyclePlaces);
+    } else {
+      await svc.deleteAttrValue(tId: tId, attrId: 14);
     }
 
     ref.invalidateSelf();

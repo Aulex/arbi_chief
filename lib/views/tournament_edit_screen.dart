@@ -40,16 +40,49 @@ class TournamentEditScreen extends ConsumerStatefulWidget {
       _TournamentEditScreenState();
 }
 
-class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
+class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
+    with TickerProviderStateMixin {
   SportTypeConfig get _sportConfig => getConfigForType(widget.tournament.t_type);
   bool get _isSwimming => isSwimming(widget.tournament.t_type);
   bool get _isVolleyball => isVolleyball(widget.tournament.t_type);
   bool get _isArmWrestling => isArmWrestling(widget.tournament.t_type);
   int _volleyballTeamCount = 0;
+  TabController? _tabController;
+
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
+  int get _currentTabCount {
+    if (_isSwimming) return 5;
+    if (_isArmWrestling) return 5;
+    if (widget.tournament.t_type == 10) return 5; // Athletics
+    if (widget.tournament.t_type == 12) return 5; // Cycling
+    if (widget.tournament.t_type == 8) return 5; // Powerlifting
+    if (widget.tournament.t_type == 13) return 5; // Kettlebell
+    if (_isVolleyball) return _volleyballTeamCount >= 9 ? 5 : 4;
+    return 4;
+  }
+
+  void _ensureTabController() {
+    final neededLength = _currentTabCount;
+    if (_tabController == null || _tabController!.length != neededLength) {
+      final oldIndex = _tabController?.index ?? 0;
+      _tabController?.dispose();
+      _tabController = TabController(
+        length: neededLength,
+        vsync: this,
+        initialIndex: oldIndex.clamp(0, neededLength - 1),
+      );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _ensureTabController();
     if (_isVolleyball) {
       _loadVolleyballTeamCount();
     }
@@ -59,7 +92,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
     final teamSvc = ref.read(teamServiceProvider);
     final teams = await teamSvc.getTeamListForTournament(widget.tournament.t_id!);
     if (mounted) {
-      setState(() => _volleyballTeamCount = teams.length);
+      setState(() {
+        _volleyballTeamCount = teams.length;
+        _ensureTabController();
+      });
     }
   }
 
@@ -195,7 +231,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (_isVolleyball) {
-      _loadVolleyballTeamCount();
       final showGroups = _volleyballTeamCount >= 9;
       tabCount = showGroups ? 5 : 4;
       tabs = [
@@ -286,10 +321,9 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
       ];
     }
 
+    _ensureTabController();
 
-    return DefaultTabController(
-      length: tabCount,
-      child: Padding(
+    return Padding(
         padding: const EdgeInsets.fromLTRB(24.0, 8.0, 24.0, 24.0),
         child: Column(
           children: [
@@ -322,6 +356,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
                       ),
                       Expanded(
                         child: TabBar(
+                          controller: _tabController,
                           isScrollable: true,
                           labelColor: Colors.indigo,
                           indicatorColor: Colors.indigo,
@@ -355,13 +390,13 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen> {
               // Tab Bar View
               Expanded(
                 child: TabBarView(
+                  controller: _tabController,
                   children: tabViews,
                 ),
               ),
             ],
           ),
-        ),
-    );
+        );
   }
 
   Widget _buildBoardsTab() {

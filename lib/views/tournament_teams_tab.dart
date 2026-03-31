@@ -44,11 +44,14 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
 
   Future<void> _loadData() async {
     final teamSvc = ref.read(teamServiceProvider);
-    final tId = widget.tournament.t_id!;
-    final data = await teamSvc.getTeamsForTournament(tId);
-
     final tournamentSvc = ref.read(tournamentServiceProvider);
+    final tId = widget.tournament.t_id!;
+    
+    final data = await teamSvc.getTeamsForTournament(tId);
+    if (!mounted) return;
+
     final participants = await tournamentSvc.getParticipants(tId);
+    if (!mounted) return;
     final pMap = <int, Player>{
       for (final p in participants)
         if (p.player_id != null) p.player_id!: p
@@ -87,7 +90,9 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
 
   void _reloadData() {
     setState(() => _loading = true);
-    _loadData().then((_) => widget.onTeamsChanged?.call());
+    _loadData().then((_) {
+      if (mounted) widget.onTeamsChanged?.call();
+    });
   }
 
   Future<void> _showBoardPlayerPicker(int boardNum, ({Team team, int? teamNumber, Map<int, int> boards}) teamData) async {
