@@ -38,8 +38,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
   Future<void> _loadData() async {
     final svc = ref.read(tournamentServiceProvider);
+    final allPlayersFuture = ref.read(playerProvider.future);
+    
     final participants = await svc.getParticipants(widget.tId);
-    final allPlayers = await ref.read(playerProvider.future);
+    if (!mounted) return;
+    
+    final allPlayers = await allPlayersFuture;
+    if (!mounted) return;
+    
     final participantIds = participants.map((p) => p.player_id).toSet();
     final available = allPlayers
         .where((p) => !participantIds.contains(p.player_id))
