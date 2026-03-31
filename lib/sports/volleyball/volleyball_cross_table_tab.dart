@@ -983,32 +983,39 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
             const SizedBox(height: 12),
             Expanded(
               child: SingleChildScrollView(
-                child: Table(
-                  defaultColumnWidth: const IntrinsicColumnWidth(),
-                  border: TableBorder.all(color: borderColor, width: 0.5),
-                  children: [
-                    // Header
-                    TableRow(
-                      decoration: BoxDecoration(color: headerBg),
-                      children: [
-                        _standingsHeaderCell('Місце', headerStyle),
-                        _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
-                        _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
-                      ],
-                    ),
-                    // Data rows
-                    for (int i = 0; i < rankedTeams.length; i++)
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Table(
+                    columnWidths: const {
+                      0: FixedColumnWidth(60),
+                      1: FlexColumnWidth(),
+                      2: FixedColumnWidth(120),
+                    },
+                    border: TableBorder.all(color: borderColor, width: 0.5),
+                    children: [
+                      // Header
                       TableRow(
-                        decoration: i.isEven
-                            ? null
-                            : BoxDecoration(color: isDark ? const Color(0xFF152238) : Colors.grey.shade50),
+                        decoration: BoxDecoration(color: headerBg),
                         children: [
-                          _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
-                          _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
-                          _standingsDataCell(rankedTeams[i].phase, cellStyle),
+                          _standingsHeaderCell('Місце', headerStyle),
+                          _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
+                          _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
                         ],
                       ),
-                  ],
+                      // Data rows
+                      for (int i = 0; i < rankedTeams.length; i++)
+                        TableRow(
+                          decoration: i.isEven
+                              ? null
+                              : BoxDecoration(color: isDark ? const Color(0xFF152238) : Colors.grey.shade50),
+                          children: [
+                            _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
+                            _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
+                            _standingsDataCell(rankedTeams[i].phase, cellStyle),
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
