@@ -66,7 +66,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     if (widget.isEditMode && widget.tournament != null) {
       final t = widget.tournament!;
       tNameController.text = t.t_name;
@@ -193,7 +193,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
 
   @override
   Widget build(BuildContext context) {
-    const _disabledTabs = {1, 2, 3}; // Б, В, Г
     return Column(
         children: [
           TabBar(
@@ -201,17 +200,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
             isScrollable: true,
             labelColor: Colors.blue,
             indicatorColor: Colors.blue,
-            onTap: (index) {
-              if (_disabledTabs.contains(index)) {
-                _tabController.index = _tabController.previousIndex;
-              }
-            },
-            tabs: [
-              const Tab(text: "А: Загальна інформація"),
-              Tab(child: Text("Б: Система проведення", style: TextStyle(color: Colors.grey.shade400))),
-              Tab(child: Text("В: Командні налаштування", style: TextStyle(color: Colors.grey.shade400))),
-              Tab(child: Text("Г: Очки та Тай-брейки", style: TextStyle(color: Colors.grey.shade400))),
-              const Tab(text: "Д: Налаштування проведення"),
+            tabs: const [
+              Tab(text: "Загальна інформація"),
+              Tab(text: "Налаштування проведення"),
             ],
           ),
           Expanded(
@@ -220,9 +211,6 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildGeneralInfoTab(),
-                _buildConductionSystemTab(),
-                _buildTeamSettingsTab(),
-                _buildScoringTab(),
                 _buildTournamentConductTab(),
               ],
             ),
