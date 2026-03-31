@@ -69,12 +69,25 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
   void _ensureTabController() {
     final neededLength = _currentTabCount;
     if (_tabController == null || _tabController!.length != neededLength) {
-      final oldIndex = _tabController?.index ?? 0;
+      int newIndex = _tabController?.index ?? 0;
+      
+      // If tab count changes for Volleyball (Groups tab added/removed), adjust index
+      if (_tabController != null && _isVolleyball) {
+        if (_tabController!.length == 4 && neededLength == 5) {
+          // Groups tab added at index 1
+          if (newIndex >= 1) newIndex++;
+        } else if (_tabController!.length == 5 && neededLength == 4) {
+          // Groups tab removed from index 1
+          if (newIndex > 1) newIndex--;
+          else if (newIndex == 1) newIndex = 0; // If they were magically on Groups, go to Table
+        }
+      }
+
       _tabController?.dispose();
       _tabController = TabController(
         length: neededLength,
         vsync: this,
-        initialIndex: oldIndex.clamp(0, neededLength - 1),
+        initialIndex: newIndex.clamp(0, neededLength - 1),
       );
     }
   }
