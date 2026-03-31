@@ -491,10 +491,11 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Widget _buildGroupModeView() {
     final groupNames = _groupAssignments.values.toSet().toList()..sort();
     final numGroups = groupNames.length;
+    final totalTeamCount = _teams.length;
 
-    // Calculate overall place ranges for each phase
-    final finalsTeamCount = _finalsPlaces.length * numGroups;
-    final crossGroupTeamCount = _crossGroupMatchPlaces.length * numGroups;
+    // Calculate overall place ranges for each phase, capped at actual team count
+    final finalsTeamCount = (_finalsPlaces.length * numGroups).clamp(0, totalTeamCount);
+    final crossGroupTeamCount = (_crossGroupMatchPlaces.length * numGroups).clamp(0, totalTeamCount - finalsTeamCount);
 
     // Build segments dynamically based on configured settings
     final segments = <ButtonSegment<int>>[
@@ -503,7 +504,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
     // Segment 1: Finals
     if (_finalsPlaces.isNotEmpty) {
-      final rangeLabel = finalsTeamCount == 1 ? '1' : '1–$finalsTeamCount';
+      final rangeLabel = finalsTeamCount == 1 ? '1' : '1\u2013$finalsTeamCount';
       segments.add(ButtonSegment(
         value: 1,
         label: Text('Фінальні матчі ($rangeLabel)'),
@@ -513,8 +514,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     // Segment 2: Cross-group direct matches (стикові матчі)
     if (_crossGroupMatchPlaces.isNotEmpty) {
       final start = finalsTeamCount + 1;
-      final end = finalsTeamCount + crossGroupTeamCount;
-      final rangeLabel = start == end ? '$start' : '$start–$end';
+      final end = (finalsTeamCount + crossGroupTeamCount).clamp(start, totalTeamCount);
+      final rangeLabel = start == end ? '$start' : '$start\u2013$end';
       segments.add(ButtonSegment(
         value: 2,
         label: Text('Стикові матчі ($rangeLabel)'),
@@ -523,10 +524,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
     // Segment 3: Round-robin/cycle matches (колові матчі)
     if (_cyclePlaces.isNotEmpty) {
-      final cycleTeamCount = _cyclePlaces.length * numGroups;
       final start = finalsTeamCount + crossGroupTeamCount + 1;
-      final end = finalsTeamCount + crossGroupTeamCount + cycleTeamCount;
-      final rangeLabel = start == end ? '$start' : '$start–$end';
+      final end = totalTeamCount;
+      final rangeLabel = start == end ? '$start' : '$start\u2013$end';
       segments.add(ButtonSegment(
         value: 3,
         label: Text('Колові матчі ($rangeLabel)'),
@@ -545,13 +545,17 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
     return Column(
       children: [
-        // Segmented control
+        // Segmented control with fixed size (showSelectedIcon:false prevents resize on select)
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: SegmentedButton<int>(
-            segments: segments,
-            selected: {_selectedSegment},
-            onSelectionChanged: (v) => setState(() => _selectedSegment = v.first),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<int>(
+              segments: segments,
+              selected: {_selectedSegment},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) => setState(() => _selectedSegment = v.first),
+            ),
           ),
         ),
         // Content
@@ -578,26 +582,38 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   }
 
   Widget _buildGroupsView(List<String> groupNames) {
-    return ListView(
-      children: [
-        for (final groupName in groupNames) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8, top: 8),
-            child: Text(
-              'Група $groupName',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-          SizedBox(
-            height: _getGroupTeams(groupName).length * 40.0 + 100,
-            child: _buildSimpleCrossTable(
-              _getGroupTeams(groupName),
-              verticalController: _getGroupVerticalController(groupName),
-              horizontalController: _getGroupHorizontalController(groupName),
-            ),
-          ),
-        ],
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // When only one group, let it fill the entire available height
+        if (groupNames.length == 1) {
+          return _buildSimpleCrossTable(
+            _getGroupTeams(groupNames.first),
+            verticalController: _getGroupVerticalController(groupNames.first),
+            horizontalController: _getGroupHorizontalController(groupNames.first),
+          );
+        }
+        return ListView(
+          children: [
+            for (final groupName in groupNames) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8, top: 8),
+                child: Text(
+                  'Група $groupName',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+              SizedBox(
+                height: _getGroupTeams(groupName).length * 40.0 + 120,
+                child: _buildSimpleCrossTable(
+                  _getGroupTeams(groupName),
+                  verticalController: _getGroupVerticalController(groupName),
+                  horizontalController: _getGroupHorizontalController(groupName),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
