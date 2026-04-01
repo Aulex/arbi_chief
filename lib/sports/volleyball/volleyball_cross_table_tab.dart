@@ -338,7 +338,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
               _headerCell('${teams[j].teamNumber ?? j + 1}'),
             _headerCell('О'),
             _headerCell('П'),
-            _headerCell('Р'),
+            _headerCell('М'),
             // Separator
             Container(
               height: 36,
@@ -868,86 +868,54 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   /// Total standings — combines results from all phases into one ranked table.
   Widget _buildTotalStandingsView(List<String> groupNames) {
     final numGroups = groupNames.length;
-    final rankedTeams = <({int teamId, String teamName, int overallPlace, String phase})>[];
+    final rankedTeams = <({
+      int teamId, String teamName, int overallPlace, String phase,
+      int matchPoints, int setsWon, int setsLost, int pointsScored, int pointsConceded,
+    })>[];
     final assignedTeamIds = <int>{};
     int nextPlace = 1;
 
-    // 1. Finals teams
-    if (_finalsPlaces.isNotEmpty) {
-      final finalists = _getTeamsAtPlaces(groupNames, _finalsPlaces);
-      final standings = _calculateStandings(finalists);
+    void addFromStandings(List<scoring.VolleyballStanding> standings, String phase) {
       for (final s in standings) {
+        if (assignedTeamIds.contains(s.teamId)) continue;
         rankedTeams.add((
           teamId: s.teamId,
           teamName: s.teamName,
           overallPlace: nextPlace++,
-          phase: 'Фінал',
+          phase: phase,
+          matchPoints: s.matchPoints,
+          setsWon: s.setsWon,
+          setsLost: s.setsLost,
+          pointsScored: s.pointsScored,
+          pointsConceded: s.pointsConceded,
         ));
         assignedTeamIds.add(s.teamId);
       }
+    }
+
+    // 1. Finals teams
+    if (_finalsPlaces.isNotEmpty) {
+      final finalists = _getTeamsAtPlaces(groupNames, _finalsPlaces);
+      addFromStandings(_calculateStandings(finalists), 'Фінал');
     }
 
     // 2. Direct match (стикові) teams — per place
     for (int i = 0; i < _crossGroupMatchPlaces.length; i++) {
       final place = _crossGroupMatchPlaces[i];
       final teamsAtPlace = _getTeamsAtSinglePlace(groupNames, place);
-      if (teamsAtPlace.length >= 2) {
-        final standings = _calculateStandings(teamsAtPlace);
-        for (final s in standings) {
-          if (assignedTeamIds.contains(s.teamId)) continue;
-          rankedTeams.add((
-            teamId: s.teamId,
-            teamName: s.teamName,
-            overallPlace: nextPlace++,
-            phase: 'Стикові',
-          ));
-          assignedTeamIds.add(s.teamId);
-        }
-      } else {
-        // Not enough results yet — assign by group place
-        for (final t in teamsAtPlace) {
-          if (assignedTeamIds.contains(t.teamId)) continue;
-          rankedTeams.add((
-            teamId: t.teamId,
-            teamName: t.teamName,
-            overallPlace: nextPlace++,
-            phase: 'Стикові',
-          ));
-          assignedTeamIds.add(t.teamId);
-        }
-      }
+      addFromStandings(_calculateStandings(teamsAtPlace), 'Стикові');
     }
 
     // 3. Cycle (колові) teams
     if (_cyclePlaces.isNotEmpty) {
       final cycleTeams = _getTeamsAtPlaces(groupNames, _cyclePlaces);
-      final standings = _calculateStandings(cycleTeams);
-      for (final s in standings) {
-        if (assignedTeamIds.contains(s.teamId)) continue;
-        rankedTeams.add((
-          teamId: s.teamId,
-          teamName: s.teamName,
-          overallPlace: nextPlace++,
-          phase: 'Колові',
-        ));
-        assignedTeamIds.add(s.teamId);
-      }
+      addFromStandings(_calculateStandings(cycleTeams), 'Колові');
     }
 
     // 4. Remaining teams (not in any phase) — ranked by group standings
     for (final groupName in groupNames) {
       final groupTeams = _getGroupTeams(groupName);
-      final standings = _calculateStandings(groupTeams);
-      for (final s in standings) {
-        if (assignedTeamIds.contains(s.teamId)) continue;
-        rankedTeams.add((
-          teamId: s.teamId,
-          teamName: s.teamName,
-          overallPlace: nextPlace++,
-          phase: 'Група $groupName',
-        ));
-        assignedTeamIds.add(s.teamId);
-      }
+      addFromStandings(_calculateStandings(groupTeams), 'Група $groupName');
     }
 
     if (rankedTeams.isEmpty) {
@@ -996,7 +964,10 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                     columnWidths: const {
                       0: FixedColumnWidth(60),
                       1: FlexColumnWidth(),
-                      2: FixedColumnWidth(120),
+                      2: FixedColumnWidth(56),
+                      3: FixedColumnWidth(72),
+                      4: FixedColumnWidth(96),
+                      5: FixedColumnWidth(120),
                     },
                     border: TableBorder.all(color: borderColor, width: 0.5),
                     children: [
@@ -1006,6 +977,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                         children: [
                           _standingsHeaderCell('Місце', headerStyle),
                           _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
+                          _standingsHeaderCell('О', headerStyle),
+                          _standingsHeaderCell('П', headerStyle),
+                          _standingsHeaderCell('М', headerStyle),
                           _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
                         ],
                       ),
@@ -1018,6 +992,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                           children: [
                             _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
                             _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
+                            _standingsDataCell('${rankedTeams[i].matchPoints}', cellStyle, bold: true),
+                            _standingsDataCell('${rankedTeams[i].setsWon}:${rankedTeams[i].setsLost}', cellStyle),
+                            _standingsDataCell('${rankedTeams[i].pointsScored}:${rankedTeams[i].pointsConceded}', cellStyle),
                             _standingsDataCell(rankedTeams[i].phase, cellStyle),
                           ],
                         ),
