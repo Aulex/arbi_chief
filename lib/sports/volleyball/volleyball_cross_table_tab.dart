@@ -874,6 +874,10 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Widget _buildTotalStandingsView(List<String> groupNames) {
     final numGroups = groupNames.length;
 
+    // Compute cumulative stats across ALL tournament games for each team
+    final allStandings = _calculateStandings(_teams);
+    final cumulativeByTeam = {for (final s in allStandings) s.teamId: s};
+
     final rankedTeams = <({
       int teamId, String teamName, int overallPlace, String phase,
       int matchPoints, int setsWon, int setsLost, int pointsScored, int pointsConceded,
@@ -881,23 +885,22 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final assignedTeamIds = <int>{};
     int nextPlace = 1;
 
-    // Use phase-specific stats (not cumulative) — these include carry-over
-    // games per the rules and correctly reflect what determined each place.
     void addFromStandings(List<scoring.VolleyballStanding> standings, String phase) {
       for (final s in standings) {
         if (assignedTeamIds.contains(s.teamId)) continue;
         // Removed teams (2nd no-show) don't get a place
         if (s.isRemoved) continue;
+        final cumulative = cumulativeByTeam[s.teamId];
         rankedTeams.add((
           teamId: s.teamId,
           teamName: s.teamName,
           overallPlace: nextPlace++,
           phase: phase,
-          matchPoints: s.matchPoints,
-          setsWon: s.setsWon,
-          setsLost: s.setsLost,
-          pointsScored: s.pointsScored,
-          pointsConceded: s.pointsConceded,
+          matchPoints: cumulative?.matchPoints ?? s.matchPoints,
+          setsWon: cumulative?.setsWon ?? s.setsWon,
+          setsLost: cumulative?.setsLost ?? s.setsLost,
+          pointsScored: cumulative?.pointsScored ?? s.pointsScored,
+          pointsConceded: cumulative?.pointsConceded ?? s.pointsConceded,
         ));
         assignedTeamIds.add(s.teamId);
       }
