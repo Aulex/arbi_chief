@@ -307,6 +307,20 @@ class VolleyballService {
 
   /// Mark a team as removed (after 2nd no-show).
   /// Uses CMP_TEAM_ATTR with attr_id=10 (Неявка), attr_value='removed'.
+
+  /// Get team IDs that had at least one no-show event in this tournament.
+  /// Used by tiebreaker logic to exclude games against no-show teams.
+  Future<Set<int>> getNoShowTeamIds(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT t.team_id FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
+      JOIN CMP_TEAM t ON t.entity_id = se.entity_id
+      WHERE e.t_id = ? AND e.es_id = 4
+    ''', [tId]);
+    return rows.map((r) => r['team_id'] as int).toSet();
+  }
+
   Future<void> markTeamRemoved(int tId, int teamId) async {
     final db = await _dbService.database;
     final existing = await db.query(

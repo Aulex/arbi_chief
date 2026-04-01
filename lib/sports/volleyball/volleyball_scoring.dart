@@ -102,15 +102,19 @@ class VolleyballStanding {
 /// [teams] — list of (teamId, teamName, entityId) tuples.
 /// [games] — map of (teamAEntityId, teamBEntityId) → detail string from teamA's perspective.
 /// [removedTeamIds] — set of team IDs that have been removed (2nd no-show).
-/// [noShowEventTeamIds] — set of team IDs with no-show events (for 0pts).
+/// [noShowTeamIds] — set of team IDs that had at least one no-show (their games
+///   are excluded from tiebreaker calculations per the rules).
 List<VolleyballStanding> calculateStandings({
   required List<({int teamId, String teamName, int? entityId})> teams,
   required Map<(int, int), String> games,
   Set<int> removedTeamIds = const {},
   Map<int, int> noShowCounts = const {},
+  Set<int> noShowTeamIds = const {},
 }) {
   final standings = <int, VolleyballStanding>{};
 
+  // Build entity→teamId lookup
+  final entityToTeamId = <int, int>{};
   for (final team in teams) {
     standings[team.teamId] = VolleyballStanding(
       teamId: team.teamId,
@@ -118,6 +122,9 @@ List<VolleyballStanding> calculateStandings({
       entityId: team.entityId,
       isRemoved: removedTeamIds.contains(team.teamId),
     );
+    if (team.entityId != null) {
+      entityToTeamId[team.entityId!] = team.teamId;
+    }
   }
 
   // Process all games
@@ -125,15 +132,14 @@ List<VolleyballStanding> calculateStandings({
     final (aEntId, bEntId) = entry.key;
     final detail = entry.value;
 
-    // Find teams by entity_id
-    final teamA = teams.where((t) => t.entityId == aEntId).firstOrNull;
-    final teamB = teams.where((t) => t.entityId == bEntId).firstOrNull;
-    if (teamA == null || teamB == null) continue;
+    final aTeamId = entityToTeamId[aEntId];
+    final bTeamId = entityToTeamId[bEntId];
+    if (aTeamId == null || bTeamId == null) continue;
 
-    final standingA = standings[teamA.teamId]!;
-    final standingB = standings[teamB.teamId]!;
+    final standingA = standings[aTeamId]!;
+    final standingB = standings[bTeamId]!;
 
-    // Skip removed teams' results
+    // Skip removed teams' results (2nd no-show — all results annulled)
     if (standingA.isRemoved || standingB.isRemoved) continue;
 
     final sets = countSetsFromDetail(detail);
@@ -172,7 +178,7 @@ List<VolleyballStanding> calculateStandings({
   // Sort: removed teams last, then by match points desc, then tiebreakers.
   //
   // Rules: when 2+ teams are tied on points, break tie using games
-  // **between the tied teams only**:
+  // **between the tied teams only**, excluding games against no-show teams:
   //   1. Head-to-head points among tied group
   //   2. Set ratio in games among tied group
   //   3. Point ratio in games among tied group
@@ -200,7 +206,7 @@ List<VolleyballStanding> calculateStandings({
     if (j - i > 1) {
       // Multiple teams tied — resolve using head-to-head mini-tournament
       final tiedGroup = result.sublist(i, j);
-      final resolved = _resolveTiedGroup(tiedGroup, games, teams);
+      final resolved = _resolveTiedGroup(tiedGroup, games, teams, noShowTeamIds);
       result.replaceRange(i, j, resolved);
     }
 
@@ -218,17 +224,26 @@ List<VolleyballStanding> calculateStandings({
 /// Resolve a group of teams tied on match points.
 ///
 /// Computes head-to-head stats using only games between teams in the group,
-/// then sorts by: h2h points → h2h set ratio → h2h point ratio.
-/// For sub-ties within, recurses.
+/// excluding games involving no-show teams per the rules:
+/// "результати ігор з командами, які не з'явилися на ігри, не зараховуються"
+///
+/// Sorts by: h2h points → h2h set ratio → h2h point ratio.
 List<VolleyballStanding> _resolveTiedGroup(
   List<VolleyballStanding> group,
   Map<(int, int), String> allGames,
   List<({int teamId, String teamName, int? entityId})> allTeams,
+  Set<int> noShowTeamIds,
 ) {
   if (group.length <= 1) return group;
 
-  // Compute head-to-head stats among this group
+  // Compute head-to-head stats among this group, excluding no-show teams
   final entityIds = group.map((s) => s.entityId).whereType<int>().toSet();
+  // Build entity→teamId for this group
+  final entToTeam = <int, int>{};
+  for (final s in group) {
+    if (s.entityId != null) entToTeam[s.entityId!] = s.teamId;
+  }
+
   final h2hStats = <int, ({int points, int setsWon, int setsLost, int ptScored, int ptConceded})>{};
 
   for (final s in group) {
@@ -238,19 +253,22 @@ List<VolleyballStanding> _resolveTiedGroup(
   for (final entry in allGames.entries) {
     final (aEntId, bEntId) = entry.key;
     if (!entityIds.contains(aEntId) || !entityIds.contains(bEntId)) continue;
+
+    final aTeamId = entToTeam[aEntId];
+    final bTeamId = entToTeam[bEntId];
+    if (aTeamId == null || bTeamId == null) continue;
+
+    // Exclude games involving no-show teams from tiebreaker
+    if (noShowTeamIds.contains(aTeamId) || noShowTeamIds.contains(bTeamId)) continue;
+
     final detail = entry.value;
-
-    final teamA = group.where((s) => s.entityId == aEntId).firstOrNull;
-    final teamB = group.where((s) => s.entityId == bEntId).firstOrNull;
-    if (teamA == null || teamB == null) continue;
-
     final sets = countSetsFromDetail(detail);
     final pts = countPointsFromDetail(detail);
     final mirrorSets = countSetsFromDetail(_mirrorDetail(detail));
     final mirrorPts = countPointsFromDetail(_mirrorDetail(detail));
 
-    final aOld = h2hStats[teamA.teamId]!;
-    final bOld = h2hStats[teamB.teamId]!;
+    final aOld = h2hStats[aTeamId]!;
+    final bOld = h2hStats[bTeamId]!;
 
     int aWinPts = 0, bWinPts = 0;
     if (sets.won > sets.lost) {
@@ -261,14 +279,14 @@ List<VolleyballStanding> _resolveTiedGroup(
       aWinPts = volleyballLossPoints;
     }
 
-    h2hStats[teamA.teamId] = (
+    h2hStats[aTeamId] = (
       points: aOld.points + aWinPts,
       setsWon: aOld.setsWon + sets.won,
       setsLost: aOld.setsLost + sets.lost,
       ptScored: aOld.ptScored + pts.scored,
       ptConceded: aOld.ptConceded + pts.conceded,
     );
-    h2hStats[teamB.teamId] = (
+    h2hStats[bTeamId] = (
       points: bOld.points + bWinPts,
       setsWon: bOld.setsWon + mirrorSets.won,
       setsLost: bOld.setsLost + mirrorSets.lost,

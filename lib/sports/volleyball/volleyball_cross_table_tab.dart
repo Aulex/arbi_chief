@@ -31,6 +31,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Map<(int, int), _GameData> _games = {}; // (teamAEntityId, teamBEntityId) → data
   Map<int, String> _groupAssignments = {};
   Set<int> _removedTeamIds = {};
+  Set<int> _noShowTeamIds = {};
   int _selectedSegment = 0; // 0=Групи, 1=Фінал, 2=Місця(матчі), 3=Місця(колова)
 
   /// Places from each group that advance to finals (attr_id=10), e.g. [1,2,3].
@@ -87,6 +88,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final games = await vSvc.getTeamGamesForTournament(widget.tId);
     final groups = await vSvc.getGroupAssignments(widget.tId);
     final removed = await vSvc.getRemovedTeamIds(widget.tId);
+    final noShowTeams = await vSvc.getNoShowTeamIds(widget.tId);
 
     // Load tournament settings for volleyball group mode
     final finalsPlacesStr = await tSvc.getAttrValue(widget.tId, 12);
@@ -137,6 +139,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       _games = gamesMap;
       _groupAssignments = groups;
       _removedTeamIds = removed;
+      _noShowTeamIds = noShowTeams;
       _finalsPlaces = _parsePlaces(finalsPlacesStr, defaultPlaces: [1, 2]);
       _crossGroupMatchPlaces = _parsePlaces(crossGroupStr);
       _cyclePlaces = _parsePlaces(cycleStr);
@@ -871,18 +874,33 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Widget _buildTotalStandingsView(List<String> groupNames) {
     final numGroups = groupNames.length;
 
-    final rankedTeams = <({int teamId, String teamName, int overallPlace, String phase})>[];
+    // Compute cumulative stats across ALL tournament games for each team
+    final allStandings = _calculateStandings(_teams);
+    final cumulativeByTeam = {for (final s in allStandings) s.teamId: s};
+
+    final rankedTeams = <({
+      int teamId, String teamName, int overallPlace, String phase,
+      int matchPoints, int setsWon, int setsLost, int pointsScored, int pointsConceded,
+    })>[];
     final assignedTeamIds = <int>{};
     int nextPlace = 1;
 
     void addFromStandings(List<scoring.VolleyballStanding> standings, String phase) {
       for (final s in standings) {
         if (assignedTeamIds.contains(s.teamId)) continue;
+        // Removed teams (2nd no-show) don't get a place
+        if (s.isRemoved) continue;
+        final cumulative = cumulativeByTeam[s.teamId];
         rankedTeams.add((
           teamId: s.teamId,
           teamName: s.teamName,
           overallPlace: nextPlace++,
           phase: phase,
+          matchPoints: cumulative?.matchPoints ?? s.matchPoints,
+          setsWon: cumulative?.setsWon ?? s.setsWon,
+          setsLost: cumulative?.setsLost ?? s.setsLost,
+          pointsScored: cumulative?.pointsScored ?? s.pointsScored,
+          pointsConceded: cumulative?.pointsConceded ?? s.pointsConceded,
         ));
         assignedTeamIds.add(s.teamId);
       }
@@ -959,7 +977,10 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                     columnWidths: const {
                       0: FixedColumnWidth(60),
                       1: FlexColumnWidth(),
-                      2: FixedColumnWidth(120),
+                      2: FixedColumnWidth(56),
+                      3: FixedColumnWidth(72),
+                      4: FixedColumnWidth(96),
+                      5: FixedColumnWidth(100),
                     },
                     border: TableBorder.all(color: borderColor, width: 0.5),
                     children: [
@@ -969,6 +990,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                         children: [
                           _standingsHeaderCell('Місце', headerStyle),
                           _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
+                          _standingsHeaderCell('О', headerStyle),
+                          _standingsHeaderCell('П', headerStyle),
+                          _standingsHeaderCell('М', headerStyle),
                           _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
                         ],
                       ),
@@ -981,6 +1005,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                           children: [
                             _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
                             _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
+                            _standingsDataCell('${rankedTeams[i].matchPoints}', cellStyle, bold: true),
+                            _standingsDataCell('${rankedTeams[i].setsWon}:${rankedTeams[i].setsLost}', cellStyle),
+                            _standingsDataCell('${rankedTeams[i].pointsScored}:${rankedTeams[i].pointsConceded}', cellStyle),
                             _standingsDataCell(rankedTeams[i].phase, cellStyle),
                           ],
                         ),
@@ -1047,6 +1074,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       teams: teams.map((t) => (teamId: t.teamId, teamName: t.teamName, entityId: t.entityId)).toList(),
       games: filteredGames,
       removedTeamIds: _removedTeamIds,
+      noShowTeamIds: _noShowTeamIds,
     );
   }
 
