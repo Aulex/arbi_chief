@@ -690,4 +690,25 @@ class TournamentService {
       });
     }
   }
+
+  /// Check if a tournament has any game results (CMP_EVENT rows).
+  Future<bool> hasGameResults(int tId) async {
+    final db = await _dbService.database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM CMP_EVENT WHERE t_id = ?', [tId],
+    );
+    return (result.first['cnt'] as int) > 0;
+  }
+
+  /// Delete all game results (CMP_EVENT + CMP_SUBEVENT) for a tournament.
+  Future<void> clearAllGameResults(int tId) async {
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      final events = await txn.query('CMP_EVENT', columns: ['event_id'], where: 't_id = ?', whereArgs: [tId]);
+      for (final e in events) {
+        await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [e['event_id']]);
+      }
+      await txn.delete('CMP_EVENT', where: 't_id = ?', whereArgs: [tId]);
+    });
+  }
 }

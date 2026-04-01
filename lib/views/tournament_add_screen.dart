@@ -39,6 +39,11 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
   final _crossGroupMatchPlacesController = TextEditingController();
   final _cyclePlacesController = TextEditingController();
 
+  // Initial values to detect changes that require result reset
+  String _initialFinalsPlaces = '1,2';
+  String _initialCrossGroupMatchPlaces = '';
+  String _initialCyclePlaces = '';
+
   final _winPointsController = TextEditingController(text: '1');
   final _drawPointsController = TextEditingController(text: '0,5');
   final _lossPointsController = TextEditingController(text: '0');
@@ -116,6 +121,10 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       if (finalsPlaces != null) _finalsPlacesController.text = finalsPlaces;
       if (crossGroupMatchPlaces != null) _crossGroupMatchPlacesController.text = crossGroupMatchPlaces;
       if (cyclePlaces != null) _cyclePlacesController.text = cyclePlaces;
+
+      _initialFinalsPlaces = _finalsPlacesController.text;
+      _initialCrossGroupMatchPlaces = _crossGroupMatchPlacesController.text;
+      _initialCyclePlaces = _cyclePlacesController.text;
     });
   }
 
@@ -145,8 +154,45 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     super.dispose();
   }
 
+  bool get _placesChanged =>
+      _finalsPlacesController.text.trim() != _initialFinalsPlaces.trim() ||
+      _crossGroupMatchPlacesController.text.trim() != _initialCrossGroupMatchPlaces.trim() ||
+      _cyclePlacesController.text.trim() != _initialCyclePlaces.trim();
+
   Future<void> _saveTournament() async {
     if (tNameController.text.trim().isEmpty) return;
+
+    // In edit mode, if place settings changed and there are game results, confirm reset
+    if (widget.isEditMode && widget.tournament?.t_id != null && _placesChanged) {
+      final svc = ref.read(tournamentServiceProvider);
+      final hasResults = await svc.hasGameResults(widget.tournament!.t_id!);
+      if (hasResults && mounted) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Скинути результати?'),
+            content: const Text(
+              'Ви змінили налаштування місць для етапів турніру. '
+              'Всі існуючі результати ігор будуть видалені.\n\n'
+              'Продовжити?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Скасувати'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Скинути і зберегти', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+        await svc.clearAllGameResults(widget.tournament!.t_id!);
+      }
+    }
 
     setState(() => _isLoading = true);
 
@@ -186,6 +232,12 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
 
     if (!mounted) return;
     setState(() => _isLoading = false);
+
+    // Update initial values after successful save
+    _initialFinalsPlaces = _finalsPlacesController.text;
+    _initialCrossGroupMatchPlaces = _crossGroupMatchPlacesController.text;
+    _initialCyclePlaces = _cyclePlacesController.text;
+
     if (!widget.isEditMode) {
       ref.read(tournamentNavProvider.notifier).showList();
     }
