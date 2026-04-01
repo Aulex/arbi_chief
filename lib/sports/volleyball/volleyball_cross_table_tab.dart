@@ -676,15 +676,35 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final numGroups = groupNames.length;
     final finalsTeamCount = _finalsPlaces.length * numGroups;
 
-    // Build match cards for each place
-    final matchCards = <Widget>[];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
+    final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
+    final headerStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+    final cellStyle = TextStyle(
+      fontSize: 13,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+
+    // Collect all direct match rows
+    final matchRows = <({
+      String placeLabel, String subtitle,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamA,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamB,
+      _GameData? gameData,
+    })>[];
+    // Collect 3+ team round-robin groups
+    final roundRobinWidgets = <Widget>[];
+
     for (int i = 0; i < _crossGroupMatchPlaces.length; i++) {
       final place = _crossGroupMatchPlaces[i];
       final teamsAtPlace = _getTeamsAtSinglePlace(groupNames, place);
 
       if (teamsAtPlace.length < 2) continue;
 
-      // Calculate overall placement being contested
       final overallStart = finalsTeamCount + 1 + i * numGroups;
       final overallEnd = overallStart + numGroups - 1;
       final placeLabel = overallStart == overallEnd
@@ -692,16 +712,19 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
           : 'За $overallStart–$overallEnd місце';
 
       if (teamsAtPlace.length == 2) {
-        // Direct match between two teams
-        matchCards.add(_buildDirectMatchCard(
-          teamsAtPlace[0],
-          teamsAtPlace[1],
-          title: placeLabel,
+        _GameData? gameData;
+        if (teamsAtPlace[0].entityId != null && teamsAtPlace[1].entityId != null) {
+          gameData = _games[(teamsAtPlace[0].entityId!, teamsAtPlace[1].entityId!)];
+        }
+        matchRows.add((
+          placeLabel: placeLabel,
           subtitle: '($place місце з груп)',
+          teamA: teamsAtPlace[0],
+          teamB: teamsAtPlace[1],
+          gameData: gameData,
         ));
       } else {
-        // 3+ groups at same place: small round-robin
-        matchCards.add(Padding(
+        roundRobinWidgets.add(Padding(
           padding: const EdgeInsets.only(bottom: 8, top: 8),
           child: Text(
             '$placeLabel ($place місце з груп)',
@@ -709,8 +732,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
           ),
         ));
         final carryOver = _buildCarryOverGames(teamsAtPlace);
-        matchCards.add(SizedBox(
-          height: teamsAtPlace.length * 40.0 + 100,
+        roundRobinWidgets.add(SizedBox(
+          height: teamsAtPlace.length * 40.0 + 120,
           child: _buildSimpleCrossTable(
             teamsAtPlace,
             carryOverGames: carryOver,
@@ -720,13 +743,105 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       }
     }
 
-    if (matchCards.isEmpty) {
+    if (matchRows.isEmpty && roundRobinWidgets.isEmpty) {
       return const Center(child: Text('Немає команд для розіграшу'));
     }
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      children: matchCards,
+      children: [
+        if (matchRows.isNotEmpty)
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: borderColor, width: 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Стикові матчі',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: Table(
+                      columnWidths: const {
+                        0: FixedColumnWidth(140),
+                        1: FlexColumnWidth(),
+                        2: FixedColumnWidth(60),
+                        3: FlexColumnWidth(),
+                        4: FixedColumnWidth(100),
+                      },
+                      border: TableBorder.all(color: borderColor, width: 0.5),
+                      children: [
+                        TableRow(
+                          decoration: BoxDecoration(color: headerBg),
+                          children: [
+                            _standingsHeaderCell('Розіграш', headerStyle, minWidth: 100),
+                            _standingsHeaderCell('Команда А', headerStyle, minWidth: 100),
+                            _standingsHeaderCell('Рахунок', headerStyle),
+                            _standingsHeaderCell('Команда Б', headerStyle, minWidth: 100),
+                            _standingsHeaderCell('Партії', headerStyle),
+                          ],
+                        ),
+                        for (int i = 0; i < matchRows.length; i++)
+                          _buildDirectMatchRow(i, matchRows[i], cellStyle, isDark),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ...roundRobinWidgets,
+      ],
+    );
+  }
+
+  TableRow _buildDirectMatchRow(
+    int index,
+    ({
+      String placeLabel, String subtitle,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamA,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamB,
+      _GameData? gameData,
+    }) match,
+    TextStyle cellStyle,
+    bool isDark,
+  ) {
+    final gameData = match.gameData;
+    String scoreDisplay = '—';
+    String setDetails = '';
+    if (gameData?.detail != null && gameData!.detail!.isNotEmpty) {
+      scoreDisplay = scoring.formatVolleyballCell(gameData.detail!);
+      setDetails = gameData.detail!;
+    }
+
+    return TableRow(
+      decoration: index.isOdd
+          ? BoxDecoration(color: isDark ? const Color(0xFF152238) : Colors.grey.shade50)
+          : null,
+      children: [
+        _standingsDataCell(match.placeLabel, cellStyle, bold: true),
+        GestureDetector(
+          onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
+          child: _standingsDataCell(match.teamA.teamName, cellStyle, leftAlign: true),
+        ),
+        GestureDetector(
+          onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
+          child: _standingsDataCell(scoreDisplay, cellStyle, bold: true),
+        ),
+        GestureDetector(
+          onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
+          child: _standingsDataCell(match.teamB.teamName, cellStyle, leftAlign: true),
+        ),
+        _standingsDataCell(setDetails, cellStyle),
+      ],
     );
   }
 
@@ -745,116 +860,6 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       }
     }
     return result;
-  }
-
-  /// Build a card for a single direct match between two teams.
-  Widget _buildDirectMatchCard(
-    ({int teamId, String teamName, int? teamNumber, int? entityId}) teamA,
-    ({int teamId, String teamName, int? teamNumber, int? entityId}) teamB, {
-    required String title,
-    String? subtitle,
-  }) {
-    // Look up existing game data
-    _GameData? gameData;
-    if (teamA.entityId != null && teamB.entityId != null) {
-      gameData = _games[(teamA.entityId!, teamB.entityId!)];
-    }
-
-    // Parse set details for display
-    String scoreDisplay = '—';
-    String setDetails = '';
-    Color? cardColor;
-    if (gameData?.detail != null && gameData!.detail!.isNotEmpty) {
-      final detail = gameData.detail!;
-      final setResult = scoring.formatVolleyballCell(detail);
-      scoreDisplay = setResult;
-      setDetails = detail.replaceAll(' ', '  ·  ');
-      // Determine winner color
-      if (scoring.isMatchWinner(detail)) {
-        cardColor = Colors.green.withValues(alpha: 0.08);
-      }
-    }
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: cardColor,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _showSetScoreDialog(teamA, teamB, gameData),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title row
-              Row(
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      subtitle,
-                      style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Match row: Team A — score — Team B
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      teamA.teamName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1B2838) : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        scoreDisplay,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      teamB.teamName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.left,
-                    ),
-                  ),
-                ],
-              ),
-              // Set details
-              if (setDetails.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    setDetails,
-                    style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   /// Round-robin/cycle system for specified places (attr_id=12).
