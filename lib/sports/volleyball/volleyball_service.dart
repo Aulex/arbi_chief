@@ -350,6 +350,12 @@ class VolleyballService {
     return _dbService.ensureTeamEntity(db, teamId);
   }
 
+  /// Public wrapper to ensure a team has an entity_id.
+  Future<int> ensureTeamEntity(int teamId) async {
+    final db = await _dbService.database;
+    return _dbService.ensureTeamEntity(db, teamId);
+  }
+
   /// Find or create a game between two teams. Returns the event_id.
   Future<int> findOrCreateTeamGame({
     required int tId,

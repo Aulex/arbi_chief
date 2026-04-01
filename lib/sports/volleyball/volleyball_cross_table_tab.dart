@@ -94,16 +94,23 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final cycleStr = await tSvc.getAttrValue(widget.tId, 14);
 
     // Build teams with entity_ids
+    final allTeams = await teamSvc.getAllTeams();
     final teams = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
     for (final t in teamList) {
       // Look up entity_id
-      final allTeams = await teamSvc.getAllTeams();
       final team = allTeams.where((at) => at.team_id == t.teamId).firstOrNull;
+      var entityId = team?.entity_id;
+
+      // Auto-create missing entity for teams that lack one
+      if (entityId == null && team != null) {
+        entityId = await vSvc.ensureTeamEntity(t.teamId);
+      }
+
       teams.add((
         teamId: t.teamId,
         teamName: t.teamName,
         teamNumber: t.teamNumber,
-        entityId: team?.entity_id,
+        entityId: entityId,
       ));
     }
 
