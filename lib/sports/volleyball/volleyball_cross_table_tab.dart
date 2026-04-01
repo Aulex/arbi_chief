@@ -977,10 +977,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                     columnWidths: const {
                       0: FixedColumnWidth(60),
                       1: FlexColumnWidth(),
-                      2: FixedColumnWidth(56),
-                      3: FixedColumnWidth(72),
-                      4: FixedColumnWidth(96),
-                      5: FixedColumnWidth(100),
+                      2: FixedColumnWidth(100),
                     },
                     border: TableBorder.all(color: borderColor, width: 0.5),
                     children: [
@@ -990,9 +987,6 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                         children: [
                           _standingsHeaderCell('Місце', headerStyle),
                           _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
-                          _standingsHeaderCell('О', headerStyle),
-                          _standingsHeaderCell('П', headerStyle),
-                          _standingsHeaderCell('М', headerStyle),
                           _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
                         ],
                       ),
@@ -1005,9 +999,6 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                           children: [
                             _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
                             _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
-                            _standingsDataCell('${rankedTeams[i].matchPoints}', cellStyle, bold: true),
-                            _standingsDataCell('${rankedTeams[i].setsWon}:${rankedTeams[i].setsLost}', cellStyle),
-                            _standingsDataCell('${rankedTeams[i].pointsScored}:${rankedTeams[i].pointsConceded}', cellStyle),
                             _standingsDataCell(rankedTeams[i].phase, cellStyle),
                           ],
                         ),
