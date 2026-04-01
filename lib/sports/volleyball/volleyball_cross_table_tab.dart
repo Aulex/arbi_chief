@@ -767,33 +767,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: Table(
-                      columnWidths: const {
-                        0: FixedColumnWidth(140),
-                        1: FlexColumnWidth(),
-                        2: FixedColumnWidth(60),
-                        3: FlexColumnWidth(),
-                        4: FixedColumnWidth(100),
-                      },
-                      border: TableBorder.all(color: borderColor, width: 0.5),
-                      children: [
-                        TableRow(
-                          decoration: BoxDecoration(color: headerBg),
-                          children: [
-                            _standingsHeaderCell('Розіграш', headerStyle, minWidth: 100),
-                            _standingsHeaderCell('Команда А', headerStyle, minWidth: 100),
-                            _standingsHeaderCell('Рахунок', headerStyle),
-                            _standingsHeaderCell('Команда Б', headerStyle, minWidth: 100),
-                            _standingsHeaderCell('Партії', headerStyle),
-                          ],
-                        ),
-                        for (int i = 0; i < matchRows.length; i++)
-                          _buildDirectMatchRow(i, matchRows[i], cellStyle, isDark),
-                      ],
-                    ),
-                  ),
+                  for (int i = 0; i < matchRows.length; i++)
+                    _buildDirectMatchRow(i, matchRows[i], cellStyle, borderColor, isDark),
                 ],
               ),
             ),
@@ -803,7 +778,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     );
   }
 
-  TableRow _buildDirectMatchRow(
+  Widget _buildDirectMatchRow(
     int index,
     ({
       String placeLabel, String subtitle,
@@ -812,6 +787,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       _GameData? gameData,
     }) match,
     TextStyle cellStyle,
+    Color borderColor,
     bool isDark,
   ) {
     final gameData = match.gameData;
@@ -819,29 +795,42 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     String setDetails = '';
     if (gameData?.detail != null && gameData!.detail!.isNotEmpty) {
       scoreDisplay = scoring.formatVolleyballCell(gameData.detail!);
-      setDetails = gameData.detail!;
+      setDetails = gameData.detail!.replaceAll(' ', ' · ');
     }
 
-    return TableRow(
-      decoration: index.isOdd
-          ? BoxDecoration(color: isDark ? const Color(0xFF152238) : Colors.grey.shade50)
-          : null,
-      children: [
-        _standingsDataCell(match.placeLabel, cellStyle, bold: true),
-        GestureDetector(
-          onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
-          child: _standingsDataCell(match.teamA.teamName, cellStyle, leftAlign: true),
+    final bgColor = index.isOdd
+        ? (isDark ? const Color(0xFF152238) : Colors.grey.shade50)
+        : null;
+
+    return InkWell(
+      onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
         ),
-        GestureDetector(
-          onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
-          child: _standingsDataCell(scoreDisplay, cellStyle, bold: true),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 130,
+              child: Text(match.placeLabel, style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
+            ),
+            Expanded(
+              child: Text(match.teamA.teamName, style: cellStyle, textAlign: TextAlign.right),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(scoreDisplay, style: cellStyle.copyWith(fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            Expanded(
+              child: Text(match.teamB.teamName, style: cellStyle),
+            ),
+            if (setDetails.isNotEmpty)
+              Text(setDetails, style: cellStyle.copyWith(fontSize: 11, color: Colors.grey)),
+          ],
         ),
-        GestureDetector(
-          onTap: () => _showSetScoreDialog(match.teamA, match.teamB, gameData),
-          child: _standingsDataCell(match.teamB.teamName, cellStyle, leftAlign: true),
-        ),
-        _standingsDataCell(setDetails, cellStyle),
-      ],
+      ),
     );
   }
 
@@ -981,7 +970,6 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                           _standingsHeaderCell('Місце', headerStyle),
                           _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
                           _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
-                          _standingsHeaderCell('П', headerStyle),
                         ],
                       ),
                       // Data rows
