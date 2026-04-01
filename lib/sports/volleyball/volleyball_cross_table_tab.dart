@@ -309,8 +309,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final standingsByTeam = {for (final s in standings) s.teamId: s};
 
     // Column indices:
-    // 0: rank, 1: name, 2..n+1: opponent cells, n+2: О, n+3: П, n+4: Р
-    // n+5: separator, n+6: команда, n+7: очки, n+8: місце
+    // 0: rank, 1: name, 2..n+1: opponent cells, n+2: О, n+3: П, n+4: М
+    // n+5: separator, n+6: команда, n+7: О, n+8: П, n+9: М, n+10: місце
     final n = teams.length;
 
     return Table(
@@ -324,7 +324,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         n + 5: const FixedColumnWidth(separatorWidth),
         n + 6: const FixedColumnWidth(nameWidth),
         n + 7: const FixedColumnWidth(statsWidth),
-        n + 8: const FixedColumnWidth(placeWidth),
+        n + 8: const FixedColumnWidth(statsWidth),
+        n + 9: const FixedColumnWidth(statsWidth),
+        n + 10: const FixedColumnWidth(placeWidth),
       },
       border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
       children: [
@@ -349,7 +351,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
             ),
             // Standings headers
             _headerCell('Команда'),
-            _headerCell('Очки'),
+            _headerCell('О'),
+            _headerCell('П'),
+            _headerCell('М'),
             _headerCell('Місце'),
           ],
         ),
@@ -375,13 +379,15 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     // Standings row (sorted by place)
     final standingRow = i < sortedStandings.length ? sortedStandings[i] : null;
 
+    final standingRowBg = i.isEven ? null : Colors.grey.shade50;
+
     return TableRow(
       decoration: BoxDecoration(
         color: isRemoved
             ? Colors.grey.shade200
             : _hoveredRow == i
                 ? Colors.indigo.shade50
-                : null,
+                : standingRowBg,
       ),
       children: [
         // Rank (team number from team tab)
@@ -405,9 +411,11 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
             border: Border.all(color: Colors.black, width: 0.5),
           ),
         ),
-        // Standings: team name, points, place
+        // Standings: team name, О, П, М, place
         _teamNameCell(standingRow?.teamName ?? ''),
         _dataCell('${standingRow?.matchPoints ?? 0}', bold: true),
+        _dataCell('${standingRow?.setsWon ?? 0}:${standingRow?.setsLost ?? 0}'),
+        _dataCell('${standingRow?.pointsScored ?? 0}:${standingRow?.pointsConceded ?? 0}'),
         _dataCell('${standingRow?.rank ?? i + 1}', bold: true),
       ],
     );
@@ -868,6 +876,11 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   /// Total standings — combines results from all phases into one ranked table.
   Widget _buildTotalStandingsView(List<String> groupNames) {
     final numGroups = groupNames.length;
+
+    // Calculate cumulative stats across ALL games for every team
+    final allStandings = _calculateStandings(_teams);
+    final cumulativeByTeam = {for (final s in allStandings) s.teamId: s};
+
     final rankedTeams = <({
       int teamId, String teamName, int overallPlace, String phase,
       int matchPoints, int setsWon, int setsLost, int pointsScored, int pointsConceded,
@@ -878,16 +891,17 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     void addFromStandings(List<scoring.VolleyballStanding> standings, String phase) {
       for (final s in standings) {
         if (assignedTeamIds.contains(s.teamId)) continue;
+        final cumulative = cumulativeByTeam[s.teamId];
         rankedTeams.add((
           teamId: s.teamId,
           teamName: s.teamName,
           overallPlace: nextPlace++,
           phase: phase,
-          matchPoints: s.matchPoints,
-          setsWon: s.setsWon,
-          setsLost: s.setsLost,
-          pointsScored: s.pointsScored,
-          pointsConceded: s.pointsConceded,
+          matchPoints: cumulative?.matchPoints ?? s.matchPoints,
+          setsWon: cumulative?.setsWon ?? s.setsWon,
+          setsLost: cumulative?.setsLost ?? s.setsLost,
+          pointsScored: cumulative?.pointsScored ?? s.pointsScored,
+          pointsConceded: cumulative?.pointsConceded ?? s.pointsConceded,
         ));
         assignedTeamIds.add(s.teamId);
       }
