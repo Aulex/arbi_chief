@@ -169,23 +169,43 @@ List<VolleyballStanding> calculateStandings({
 
   final result = standings.values.toList();
 
-  // Sort: removed teams last, then by match points desc, then tiebreakers
+  // Sort: removed teams last, then by match points desc, then tiebreakers.
+  //
+  // Rules: when 2+ teams are tied on points, break tie using games
+  // **between the tied teams only**:
+  //   1. Head-to-head points among tied group
+  //   2. Set ratio in games among tied group
+  //   3. Point ratio in games among tied group
+
+  // Step 1: sort by removed flag and match points
   result.sort((a, b) {
     if (a.isRemoved != b.isRemoved) return a.isRemoved ? 1 : -1;
-    final ptsCmp = b.matchPoints.compareTo(a.matchPoints);
-    if (ptsCmp != 0) return ptsCmp;
-
-    // Tiebreaker 1: Head-to-head
-    final h2h = _headToHeadPoints(a, b, games, teams);
-    if (h2h != 0) return -h2h; // positive = a wins
-
-    // Tiebreaker 2: Set ratio
-    final setRatioCmp = b.setRatio.compareTo(a.setRatio);
-    if (setRatioCmp != 0) return setRatioCmp;
-
-    // Tiebreaker 3: Point ratio
-    return b.pointRatio.compareTo(a.pointRatio);
+    return b.matchPoints.compareTo(a.matchPoints);
   });
+
+  // Step 2: identify groups of teams tied on match points and resolve each
+  int i = 0;
+  while (i < result.length) {
+    // Skip removed teams
+    if (result[i].isRemoved) { i++; continue; }
+
+    // Find the extent of this tied group
+    int j = i + 1;
+    while (j < result.length &&
+           !result[j].isRemoved &&
+           result[j].matchPoints == result[i].matchPoints) {
+      j++;
+    }
+
+    if (j - i > 1) {
+      // Multiple teams tied — resolve using head-to-head mini-tournament
+      final tiedGroup = result.sublist(i, j);
+      final resolved = _resolveTiedGroup(tiedGroup, games, teams);
+      result.replaceRange(i, j, resolved);
+    }
+
+    i = j;
+  }
 
   // Assign ranks
   for (int i = 0; i < result.length; i++) {
@@ -195,46 +215,90 @@ List<VolleyballStanding> calculateStandings({
   return result;
 }
 
-/// Head-to-head point comparison between two teams.
-/// Returns positive if teamA wins h2h, negative if teamB wins, 0 if tied.
-int _headToHeadPoints(
-  VolleyballStanding a,
-  VolleyballStanding b,
-  Map<(int, int), String> games,
-  List<({int teamId, String teamName, int? entityId})> teams,
+/// Resolve a group of teams tied on match points.
+///
+/// Computes head-to-head stats using only games between teams in the group,
+/// then sorts by: h2h points → h2h set ratio → h2h point ratio.
+/// For sub-ties within, recurses.
+List<VolleyballStanding> _resolveTiedGroup(
+  List<VolleyballStanding> group,
+  Map<(int, int), String> allGames,
+  List<({int teamId, String teamName, int? entityId})> allTeams,
 ) {
-  if (a.entityId == null || b.entityId == null) return 0;
+  if (group.length <= 1) return group;
 
-  // Check both directions
-  final abDetail = games[(a.entityId!, b.entityId!)];
-  final baDetail = games[(b.entityId!, a.entityId!)];
+  // Compute head-to-head stats among this group
+  final entityIds = group.map((s) => s.entityId).whereType<int>().toSet();
+  final h2hStats = <int, ({int points, int setsWon, int setsLost, int ptScored, int ptConceded})>{};
 
-  int aPoints = 0;
-  int bPoints = 0;
-
-  if (abDetail != null) {
-    final sets = countSetsFromDetail(abDetail);
-    if (sets.won > sets.lost) {
-      aPoints += volleyballWinPoints;
-      bPoints += volleyballLossPoints;
-    } else {
-      bPoints += volleyballWinPoints;
-      aPoints += volleyballLossPoints;
-    }
+  for (final s in group) {
+    h2hStats[s.teamId] = (points: 0, setsWon: 0, setsLost: 0, ptScored: 0, ptConceded: 0);
   }
 
-  if (baDetail != null) {
-    final sets = countSetsFromDetail(baDetail);
+  for (final entry in allGames.entries) {
+    final (aEntId, bEntId) = entry.key;
+    if (!entityIds.contains(aEntId) || !entityIds.contains(bEntId)) continue;
+    final detail = entry.value;
+
+    final teamA = group.where((s) => s.entityId == aEntId).firstOrNull;
+    final teamB = group.where((s) => s.entityId == bEntId).firstOrNull;
+    if (teamA == null || teamB == null) continue;
+
+    final sets = countSetsFromDetail(detail);
+    final pts = countPointsFromDetail(detail);
+    final mirrorSets = countSetsFromDetail(_mirrorDetail(detail));
+    final mirrorPts = countPointsFromDetail(_mirrorDetail(detail));
+
+    final aOld = h2hStats[teamA.teamId]!;
+    final bOld = h2hStats[teamB.teamId]!;
+
+    int aWinPts = 0, bWinPts = 0;
     if (sets.won > sets.lost) {
-      bPoints += volleyballWinPoints;
-      aPoints += volleyballLossPoints;
+      aWinPts = volleyballWinPoints;
+      bWinPts = volleyballLossPoints;
     } else {
-      aPoints += volleyballWinPoints;
-      bPoints += volleyballLossPoints;
+      bWinPts = volleyballWinPoints;
+      aWinPts = volleyballLossPoints;
     }
+
+    h2hStats[teamA.teamId] = (
+      points: aOld.points + aWinPts,
+      setsWon: aOld.setsWon + sets.won,
+      setsLost: aOld.setsLost + sets.lost,
+      ptScored: aOld.ptScored + pts.scored,
+      ptConceded: aOld.ptConceded + pts.conceded,
+    );
+    h2hStats[teamB.teamId] = (
+      points: bOld.points + bWinPts,
+      setsWon: bOld.setsWon + mirrorSets.won,
+      setsLost: bOld.setsLost + mirrorSets.lost,
+      ptScored: bOld.ptScored + mirrorPts.scored,
+      ptConceded: bOld.ptConceded + mirrorPts.conceded,
+    );
   }
 
-  return aPoints - bPoints;
+  // Sort by h2h points → h2h set ratio → h2h point ratio
+  group.sort((a, b) {
+    final aH = h2hStats[a.teamId]!;
+    final bH = h2hStats[b.teamId]!;
+
+    // 1. Head-to-head points
+    final ptsCmp = bH.points.compareTo(aH.points);
+    if (ptsCmp != 0) return ptsCmp;
+
+    // 2. Set ratio among tied group
+    final aSetRatio = aH.setsLost == 0 ? aH.setsWon.toDouble() : aH.setsWon / aH.setsLost;
+    final bSetRatio = bH.setsLost == 0 ? bH.setsWon.toDouble() : bH.setsWon / bH.setsLost;
+    final setCmp = bSetRatio.compareTo(aSetRatio);
+    if (setCmp != 0) return setCmp;
+
+    // 3. Point ratio among tied group
+    final aPtRatio = aH.ptConceded == 0 ? aH.ptScored.toDouble() : aH.ptScored / aH.ptConceded;
+    final bPtRatio = bH.ptConceded == 0 ? bH.ptScored.toDouble() : bH.ptScored / bH.ptConceded;
+    return bPtRatio.compareTo(aPtRatio);
+  });
+
+  return group;
 }
 
 /// Mirror a detail string: "25:20 25:18" → "20:25 18:25".
