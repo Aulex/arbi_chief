@@ -31,7 +31,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   Map<(int, int), _GameData> _games = {}; // (teamAEntityId, teamBEntityId) → data
   Map<int, String> _groupAssignments = {};
   Set<int> _removedTeamIds = {};
-  Set<int> _noShowTeamIds = {};
+  Set<(int, int)> _noShowGamePairs = {};
   int _selectedSegment = 0; // 0=Групи, 1=Фінал, 2=Місця(матчі), 3=Місця(колова)
 
   /// Places from each group that advance to finals (attr_id=10), e.g. [1,2,3].
@@ -88,7 +88,6 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final games = await vSvc.getTeamGamesForTournament(widget.tId);
     final groups = await vSvc.getGroupAssignments(widget.tId);
     final removed = await vSvc.getRemovedTeamIds(widget.tId);
-    final noShowTeams = await vSvc.getNoShowTeamIds(widget.tId);
 
     // Load tournament settings for volleyball group mode
     final finalsPlacesStr = await tSvc.getAttrValue(widget.tId, 12);
@@ -117,7 +116,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     }
 
     // Build games map (both directions for mirrored display)
+    // and collect no-show game pairs (es_id=4)
     final gamesMap = <(int, int), _GameData>{};
+    final noShowPairs = <(int, int)>{};
     for (final g in games) {
       gamesMap[(g.teamAEntityId, g.teamBEntityId)] = _GameData(
         eventId: g.eventId,
@@ -132,6 +133,10 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         eventResult: g.eventResult,
         esId: g.esId,
       );
+      // Track forfeited games for tiebreaker exclusion
+      if (g.esId == 4) {
+        noShowPairs.add((g.teamAEntityId, g.teamBEntityId));
+      }
     }
 
     setState(() {
@@ -139,7 +144,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       _games = gamesMap;
       _groupAssignments = groups;
       _removedTeamIds = removed;
-      _noShowTeamIds = noShowTeams;
+      _noShowGamePairs = noShowPairs;
       _finalsPlaces = _parsePlaces(finalsPlacesStr, defaultPlaces: [1, 2]);
       _crossGroupMatchPlaces = _parsePlaces(crossGroupStr);
       _cyclePlaces = _parsePlaces(cycleStr);
@@ -1065,7 +1070,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       teams: teams.map((t) => (teamId: t.teamId, teamName: t.teamName, entityId: t.entityId)).toList(),
       games: filteredGames,
       removedTeamIds: _removedTeamIds,
-      noShowTeamIds: _noShowTeamIds,
+      noShowGamePairs: _noShowGamePairs,
     );
   }
 

@@ -102,14 +102,13 @@ class VolleyballStanding {
 /// [teams] — list of (teamId, teamName, entityId) tuples.
 /// [games] — map of (teamAEntityId, teamBEntityId) → detail string from teamA's perspective.
 /// [removedTeamIds] — set of team IDs that have been removed (2nd no-show).
-/// [noShowTeamIds] — set of team IDs that had at least one no-show (their games
-///   are excluded from tiebreaker calculations per the rules).
+/// [noShowGamePairs] — set of (entityA, entityB) pairs for forfeited games (es_id=4).
+///   These specific games are excluded from tiebreaker calculations per the rules.
 List<VolleyballStanding> calculateStandings({
   required List<({int teamId, String teamName, int? entityId})> teams,
   required Map<(int, int), String> games,
   Set<int> removedTeamIds = const {},
-  Map<int, int> noShowCounts = const {},
-  Set<int> noShowTeamIds = const {},
+  Set<(int, int)> noShowGamePairs = const {},
 }) {
   final standings = <int, VolleyballStanding>{};
 
@@ -206,7 +205,7 @@ List<VolleyballStanding> calculateStandings({
     if (j - i > 1) {
       // Multiple teams tied — resolve using head-to-head mini-tournament
       final tiedGroup = result.sublist(i, j);
-      final resolved = _resolveTiedGroup(tiedGroup, games, teams, noShowTeamIds);
+      final resolved = _resolveTiedGroup(tiedGroup, games, teams, noShowGamePairs);
       result.replaceRange(i, j, resolved);
     }
 
@@ -224,7 +223,7 @@ List<VolleyballStanding> calculateStandings({
 /// Resolve a group of teams tied on match points.
 ///
 /// Computes head-to-head stats using only games between teams in the group,
-/// excluding games involving no-show teams per the rules:
+/// excluding forfeited (no-show) games per the rules:
 /// "результати ігор з командами, які не з'явилися на ігри, не зараховуються"
 ///
 /// Sorts by: h2h points → h2h set ratio → h2h point ratio.
@@ -232,7 +231,7 @@ List<VolleyballStanding> _resolveTiedGroup(
   List<VolleyballStanding> group,
   Map<(int, int), String> allGames,
   List<({int teamId, String teamName, int? entityId})> allTeams,
-  Set<int> noShowTeamIds,
+  Set<(int, int)> noShowGamePairs,
 ) {
   if (group.length <= 1) return group;
 
@@ -258,8 +257,9 @@ List<VolleyballStanding> _resolveTiedGroup(
     final bTeamId = entToTeam[bEntId];
     if (aTeamId == null || bTeamId == null) continue;
 
-    // Exclude games involving no-show teams from tiebreaker
-    if (noShowTeamIds.contains(aTeamId) || noShowTeamIds.contains(bTeamId)) continue;
+    // Exclude specific forfeited (no-show) games from tiebreaker
+    if (noShowGamePairs.contains((aEntId, bEntId)) ||
+        noShowGamePairs.contains((bEntId, aEntId))) continue;
 
     final detail = entry.value;
     final sets = countSetsFromDetail(detail);
