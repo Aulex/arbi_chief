@@ -24,18 +24,21 @@ class ReportView extends ConsumerStatefulWidget {
 }
 
 class _ReportViewState extends ConsumerState<ReportView> {
+  ({int tId, int? sportType}) get _reportParams =>
+      (tId: widget.tournament.t_id!, sportType: widget.tournament.t_type);
+
   @override
   void initState() {
     super.initState();
     // Invalidate cached report data so fresh results are loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.invalidate(reportDataProvider(widget.tournament.t_id!));
+      ref.invalidate(reportDataProvider(_reportParams));
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final dataAsync = ref.watch(reportDataProvider(widget.tournament.t_id!));
+    final dataAsync = ref.watch(reportDataProvider(_reportParams));
 
     return dataAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -95,7 +98,9 @@ class _ReportViewState extends ConsumerState<ReportView> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Додайте учасників та розподіліть їх по ${widget.config.boardLabelPlural}.',
+                        widget.config.hasBoardCrossTables
+                            ? 'Додайте учасників та розподіліть їх по ${widget.config.boardLabelPlural}.'
+                            : 'Додайте команди та створіть ігри.',
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                       ),
                     ],

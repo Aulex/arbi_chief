@@ -10,17 +10,36 @@ import '../models/sport_type_config.dart';
 import '../models/tournament_model.dart';
 import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
 import '../sports/chess/chess_scoring.dart' as chess_scoring;
+import '../sports/volleyball/volleyball_report_builder.dart';
+import '../sports/volleyball/volleyball_service.dart';
 import 'team_service.dart';
 import 'tournament_service.dart';
 
 class ReportService {
   final TeamService _teamService;
   final TournamentService _tournamentService;
+  final VolleyballService _volleyballService;
 
-  ReportService(this._teamService, this._tournamentService);
+  ReportService(this._teamService, this._tournamentService, this._volleyballService);
 
   /// Load all data needed for a tournament report.
-  Future<ReportData> loadReportData(int tId) async {
+  ///
+  /// For team-based sports (volleyball, futsal, etc.) this returns a
+  /// lightweight [ReportData] with [hasTeamData] set — the actual PDF
+  /// content is built by the sport-specific report builder.
+  Future<ReportData> loadReportData(int tId, {int? sportType}) async {
+    // Team-match sports: delegate data check to sport-specific builder
+    final config = getConfigForType(sportType);
+    if (config.hasTeamCrossTable && !config.hasBoardCrossTables) {
+      final hasData = await _checkTeamSportData(tId, sportType);
+      return ReportData(
+        boardPlayers: {},
+        boardResults: {},
+        boardResultDetails: {},
+        hasTeamData: hasData,
+      );
+    }
+
     final boards = await _teamService.getBoardAssignmentsForTournament(tId);
     final games = await _tournamentService.getGamesGroupedByBoard(tId);
     final allTeams = await _teamService.getTeamListForTournament(tId);
@@ -295,7 +314,21 @@ class ReportService {
   // PDF generation
   // ---------------------------------------------------------------------------
 
+  /// Check if a team-based sport tournament has reportable data.
+  Future<bool> _checkTeamSportData(int tId, int? sportType) async {
+    if (isVolleyball(sportType)) {
+      return VolleyballReportBuilder(_volleyballService, _teamService).hasData(tId);
+    }
+    // Other team sports: not yet implemented — return false
+    return false;
+  }
+
   Future<pw.Document> buildPdf(Tournament tournament, SportTypeConfig config, ReportData data) async {
+    // Delegate to sport-specific builders for team sports
+    if (config.hasTeamCrossTable && !config.hasBoardCrossTables) {
+      return _buildTeamSportPdf(tournament, config);
+    }
+
     final pdf = pw.Document();
     final tournamentName = tournament.t_name;
     final boards = data.boardPlayers.keys.toList()..sort();
@@ -646,6 +679,16 @@ class ReportService {
     }
 
     return pdf;
+  }
+
+  /// Build PDF using sport-specific builder for team-based sports.
+  Future<pw.Document> _buildTeamSportPdf(Tournament tournament, SportTypeConfig config) async {
+    if (isVolleyball(tournament.t_type)) {
+      return VolleyballReportBuilder(_volleyballService, _teamService)
+          .buildPdf(tournament, config);
+    }
+    // Fallback: return empty document for unimplemented team sports
+    return pw.Document();
   }
 
   Future<void> exportPdf(Tournament tournament, SportTypeConfig config, ReportData data) async {
