@@ -1137,7 +1137,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       ]);
     }
 
-    final result = await showDialog<List<({int a, int b})>?>(
+    final result = await showDialog<_ScoreDialogResult?>(
       context: context,
       builder: (ctx) => _SetScoreDialog(
         teamAName: teamA.teamName,
@@ -1148,19 +1148,48 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
     if (result == null) return;
 
-    // Filter out empty sets
-    final validSets = result.where((s) => s.a > 0 || s.b > 0).toList();
+    final vSvc = ref.read(volleyballServiceProvider);
+
+    // Handle no-show
+    if (result.noShowTeam != null) {
+      final eventId = existingGame?.eventId ??
+          await vSvc.findOrCreateTeamGame(
+            tId: widget.tId,
+            teamAId: teamA.teamId,
+            teamBId: teamB.teamId,
+          );
+
+      // No-show team loses 0:2 (0:25 0:25), opponent wins 2:0 (25:0 25:0)
+      final noShowIsA = result.noShowTeam == 'A';
+      await vSvc.saveSetResults(
+        eventId: eventId,
+        teamAEntityId: teamA.entityId!,
+        teamBEntityId: teamB.entityId!,
+        sets: [
+          (a: noShowIsA ? 0 : 25, b: noShowIsA ? 25 : 0),
+          (a: noShowIsA ? 0 : 25, b: noShowIsA ? 25 : 0),
+        ],
+        esId: 4, // no-show marker
+      );
+
+      await _checkNoShows(teamA.teamId);
+      await _checkNoShows(teamB.teamId);
+      await _loadData();
+      return;
+    }
+
+    // Normal set scores
+    final sets = result.sets!;
+    final validSets = sets.where((s) => s.a > 0 || s.b > 0).toList();
     if (validSets.isEmpty) {
       // Delete existing game if it exists
       if (existingGame != null) {
-        final vSvc = ref.read(volleyballServiceProvider);
         await vSvc.deleteTeamGame(existingGame.eventId);
       }
       await _loadData();
       return;
     }
 
-    final vSvc = ref.read(volleyballServiceProvider);
     final eventId = existingGame?.eventId ??
         await vSvc.findOrCreateTeamGame(
           tId: widget.tId,
@@ -1257,6 +1286,17 @@ class _GameData {
 
 // --- Set Score Dialog ---
 
+/// Result from the score dialog.
+/// Either a list of set scores, or a no-show indicator for one team.
+class _ScoreDialogResult {
+  final List<({int a, int b})>? sets;
+  /// Which team didn't show: 'A' or 'B', or null for normal result.
+  final String? noShowTeam;
+
+  _ScoreDialogResult.sets(this.sets) : noShowTeam = null;
+  _ScoreDialogResult.noShow(this.noShowTeam) : sets = null;
+}
+
 class _SetScoreDialog extends StatefulWidget {
   final String teamAName;
   final String teamBName;
@@ -1326,22 +1366,62 @@ class _SetScoreDialogState extends State<_SetScoreDialog> {
           ],
         ),
       ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Скасувати'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final sets = <({int a, int b})>[];
-            for (int i = 0; i < 3; i++) {
-              final a = int.tryParse(widget.controllers[i][0].text) ?? 0;
-              final b = int.tryParse(widget.controllers[i][1].text) ?? 0;
-              sets.add((a: a, b: b));
-            }
-            Navigator.pop(context, sets);
+        // No-show button with dropdown
+        PopupMenuButton<String>(
+          tooltip: 'Неявка команди',
+          offset: const Offset(0, -100),
+          onSelected: (team) {
+            Navigator.pop(context, _ScoreDialogResult.noShow(team));
           },
-          child: const Text('Зберегти'),
+          itemBuilder: (ctx) => [
+            PopupMenuItem(
+              value: 'A',
+              child: Text('Неявка: ${widget.teamAName}'),
+            ),
+            PopupMenuItem(
+              value: 'B',
+              child: Text('Неявка: ${widget.teamBName}'),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.orange.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.person_off, size: 16, color: Colors.orange.shade700),
+                const SizedBox(width: 4),
+                Text('Неявка', style: TextStyle(color: Colors.orange.shade700)),
+              ],
+            ),
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Скасувати'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                final sets = <({int a, int b})>[];
+                for (int i = 0; i < 3; i++) {
+                  final a = int.tryParse(widget.controllers[i][0].text) ?? 0;
+                  final b = int.tryParse(widget.controllers[i][1].text) ?? 0;
+                  sets.add((a: a, b: b));
+                }
+                Navigator.pop(context, _ScoreDialogResult.sets(sets));
+              },
+              child: const Text('Зберегти'),
+            ),
+          ],
         ),
       ],
     );
