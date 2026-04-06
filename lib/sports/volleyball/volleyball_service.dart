@@ -401,6 +401,39 @@ class VolleyballService {
     return createTeamGame(tId: tId, teamAId: teamAId, teamBId: teamBId);
   }
 
+  /// Delete all games involving a specific team in a tournament.
+  Future<void> deleteAllTeamGames(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final teamRows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [teamId]);
+    if (teamRows.isEmpty) return;
+    final entityId = teamRows.first['entity_id'] as int?;
+    if (entityId == null) return;
+
+    final events = await db.rawQuery('''
+      SELECT DISTINCT e.event_id FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
+      WHERE e.t_id = ? AND e.et_id = 2 AND se.entity_id = ?
+    ''', [tId, entityId]);
+
+    await db.transaction((txn) async {
+      for (final row in events) {
+        final eventId = row['event_id'] as int;
+        await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+        await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+      }
+    });
+  }
+
+  /// Clear all no-show/removed state for all teams in a tournament.
+  Future<void> clearAllRemovedState(int tId) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 10',
+      whereArgs: [tId],
+    );
+  }
+
   /// Delete a team game and its subevents.
   Future<void> deleteTeamGame(int eventId) async {
     final db = await _dbService.database;

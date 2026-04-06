@@ -1101,6 +1101,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     for (final id in eventIds) {
       await vSvc.deleteTeamGame(id);
     }
+    // Also clear all no-show/removed state
+    await vSvc.clearAllRemovedState(widget.tId);
     await _loadData();
   }
 
@@ -1215,6 +1217,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final vSvc = ref.read(volleyballServiceProvider);
     final count = await vSvc.countNoShows(widget.tId, teamId);
     if (count >= 2) {
+      // 2nd no-show: remove team and delete all their game results
+      await vSvc.deleteAllTeamGames(widget.tId, teamId);
       await vSvc.markTeamRemoved(widget.tId, teamId);
     } else {
       // Un-remove if no longer at 2+ no-shows (e.g. no-show was undone)
