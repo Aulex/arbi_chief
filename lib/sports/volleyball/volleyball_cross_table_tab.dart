@@ -400,8 +400,13 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       children: [
         // Rank (team number from team tab)
         _dataCell('${team.teamNumber ?? i + 1}', bold: true),
-        // Team name
-        _teamNameCell(team.teamName, isRemoved: isRemoved),
+        // Team name (tappable when removed to undo)
+        isRemoved
+            ? GestureDetector(
+                onTap: () => _confirmUndoRemoval(team.teamId, team.teamName),
+                child: _teamNameCell(team.teamName, isRemoved: true),
+              )
+            : _teamNameCell(team.teamName),
         // Opponent cells
         for (int j = 0; j < teams.length; j++)
           _buildGameCell(i, j, teams, carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
@@ -1210,6 +1215,33 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     await _checkNoShows(teamA.teamId);
     await _checkNoShows(teamB.teamId);
 
+    await _loadData();
+  }
+
+  Future<void> _confirmUndoRemoval(int teamId, String teamName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Повернути команду?'),
+        content: Text('Зняти статус неявки для "$teamName"?\n'
+            'Команда буде повернена до турніру, але її попередні результати ігор були видалені.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Скасувати'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Повернути'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final vSvc = ref.read(volleyballServiceProvider);
+    await vSvc.unmarkTeamRemoved(widget.tId, teamId);
     await _loadData();
   }
 
