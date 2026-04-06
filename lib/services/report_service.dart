@@ -317,7 +317,7 @@ class ReportService {
   /// Check if a team-based sport tournament has reportable data.
   Future<bool> _checkTeamSportData(int tId, int? sportType) async {
     if (isVolleyball(sportType)) {
-      return VolleyballReportBuilder(_volleyballService, _teamService).hasData(tId);
+      return VolleyballReportBuilder(_volleyballService, _teamService, _tournamentService).hasData(tId);
     }
     // Other team sports: not yet implemented — return false
     return false;
@@ -684,7 +684,7 @@ class ReportService {
   /// Build PDF using sport-specific builder for team-based sports.
   Future<pw.Document> _buildTeamSportPdf(Tournament tournament, SportTypeConfig config) async {
     if (isVolleyball(tournament.t_type)) {
-      return VolleyballReportBuilder(_volleyballService, _teamService)
+      return VolleyballReportBuilder(_volleyballService, _teamService, _tournamentService)
           .buildPdf(tournament, config);
     }
     // Fallback: return empty document for unimplemented team sports
