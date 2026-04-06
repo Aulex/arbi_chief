@@ -1216,6 +1216,9 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final count = await vSvc.countNoShows(widget.tId, teamId);
     if (count >= 2) {
       await vSvc.markTeamRemoved(widget.tId, teamId);
+    } else {
+      // Un-remove if no longer at 2+ no-shows (e.g. no-show was undone)
+      await vSvc.unmarkTeamRemoved(widget.tId, teamId);
     }
   }
 

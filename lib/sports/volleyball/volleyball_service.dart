@@ -288,7 +288,8 @@ class VolleyballService {
   // --- No-Show Handling ---
 
   /// Count no-show events for a team in a tournament.
-  /// A no-show is an event where es_id=4 and the team participated.
+  /// A no-show is an event where es_id=4 and the team was the **losing** side
+  /// (all their set results are 0).
   Future<int> countNoShows(int tId, int teamId) async {
     final db = await _dbService.database;
     final teamRows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [teamId]);
@@ -296,11 +297,18 @@ class VolleyballService {
     final entityId = teamRows.first['entity_id'] as int?;
     if (entityId == null) return 0;
 
+    // Count distinct no-show events where this team scored 0 in all sets
+    // (i.e. they were the team that didn't show up, not the winner)
     final rows = await db.rawQuery('''
-      SELECT COUNT(*) as cnt FROM CMP_EVENT e
-      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
-      WHERE e.t_id = ? AND e.es_id = 4 AND se.entity_id = ?
-    ''', [tId, entityId]);
+      SELECT COUNT(DISTINCT e.event_id) as cnt FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id AND se.entity_id = ?
+      WHERE e.t_id = ? AND e.es_id = 4
+      AND NOT EXISTS (
+        SELECT 1 FROM CMP_SUBEVENT se2
+        WHERE se2.ev_id = e.event_id AND se2.entity_id = ?
+        AND se2.se_result > 0
+      )
+    ''', [entityId, tId, entityId]);
 
     return (rows.first['cnt'] as int?) ?? 0;
   }
@@ -331,6 +339,16 @@ class VolleyballService {
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_rem_$teamId',
       });
     }
+  }
+
+  /// Un-remove a team (e.g. when a no-show is undone and count drops below 2).
+  Future<void> unmarkTeamRemoved(int tId, int teamId) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 10 AND attr_value = ?',
+      whereArgs: [tId, teamId, 'removed'],
+    );
   }
 
   /// Get set of removed team IDs for a tournament.
