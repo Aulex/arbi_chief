@@ -386,36 +386,39 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
     // Standings row (sorted by place)
     final standingRow = i < sortedStandings.length ? sortedStandings[i] : null;
+    final isStandingRemoved = standingRow != null && _removedTeamIds.contains(standingRow.teamId);
 
-    final standingRowBg = i.isEven ? null : Colors.grey.shade50;
+    final defaultBg = _hoveredRow == i
+        ? Colors.indigo.shade50
+        : i.isOdd
+            ? Colors.grey.shade50
+            : null;
+    final leftBg = isRemoved ? Colors.grey.shade200 : defaultBg;
+    final rightBg = isStandingRemoved ? Colors.grey.shade200 : defaultBg;
 
     return TableRow(
-      decoration: BoxDecoration(
-        color: isRemoved
-            ? Colors.grey.shade200
-            : _hoveredRow == i
-                ? Colors.indigo.shade50
-                : standingRowBg,
-      ),
       children: [
         // Rank (team number from team tab)
-        _dataCell('${team.teamNumber ?? i + 1}', bold: true),
+        _bgCell(_dataCell('${team.teamNumber ?? i + 1}', bold: true), leftBg),
         // Team name (tappable when removed to undo)
-        isRemoved
-            ? GestureDetector(
-                onTap: () => _confirmUndoRemoval(team.teamId, team.teamName),
-                child: _teamNameCell(team.teamName, isRemoved: true),
-              )
-            : _teamNameCell(team.teamName),
+        _bgCell(
+          isRemoved
+              ? GestureDetector(
+                  onTap: () => _confirmUndoRemoval(team.teamId, team.teamName),
+                  child: _teamNameCell(team.teamName, isRemoved: true),
+                )
+              : _teamNameCell(team.teamName),
+          leftBg,
+        ),
         // Opponent cells
         for (int j = 0; j < teams.length; j++)
           _buildGameCell(i, j, teams, carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
         // Points
-        _dataCell('${standing?.matchPoints ?? 0}', bold: true),
+        _bgCell(_dataCell('${standing?.matchPoints ?? 0}', bold: true), leftBg),
         // Set ratio
-        _dataCell('${standing?.setsWon ?? 0}:${standing?.setsLost ?? 0}'),
+        _bgCell(_dataCell('${standing?.setsWon ?? 0}:${standing?.setsLost ?? 0}'), leftBg),
         // Point ratio
-        _dataCell('${standing?.pointsScored ?? 0}:${standing?.pointsConceded ?? 0}'),
+        _bgCell(_dataCell('${standing?.pointsScored ?? 0}:${standing?.pointsConceded ?? 0}'), leftBg),
         // Black separator
         Container(
           height: 36,
@@ -425,11 +428,19 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
           ),
         ),
         // Standings: team name, О, П, М, place
-        _teamNameCell(standingRow?.teamName ?? ''),
-        _dataCell('${standingRow?.matchPoints ?? 0}', bold: true),
-        _dataCell('${standingRow?.setsWon ?? 0}:${standingRow?.setsLost ?? 0}'),
-        _dataCell('${standingRow?.pointsScored ?? 0}:${standingRow?.pointsConceded ?? 0}'),
-        _dataCell('${standingRow?.rank ?? i + 1}', bold: true),
+        _bgCell(
+          isStandingRemoved
+              ? GestureDetector(
+                  onTap: () => _confirmUndoRemoval(standingRow!.teamId, standingRow.teamName),
+                  child: _teamNameCell(standingRow?.teamName ?? '', isRemoved: true),
+                )
+              : _teamNameCell(standingRow?.teamName ?? ''),
+          rightBg,
+        ),
+        _bgCell(_dataCell('${standingRow?.matchPoints ?? 0}', bold: true), rightBg),
+        _bgCell(_dataCell('${standingRow?.setsWon ?? 0}:${standingRow?.setsLost ?? 0}'), rightBg),
+        _bgCell(_dataCell('${standingRow?.pointsScored ?? 0}:${standingRow?.pointsConceded ?? 0}'), rightBg),
+        _bgCell(_dataCell('${standingRow?.rank ?? i + 1}', bold: true), rightBg),
       ],
     );
   }
@@ -1303,6 +1314,12 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         overflow: TextOverflow.ellipsis,
       ),
     );
+  }
+
+  /// Wrap a cell widget with a background color.
+  Widget _bgCell(Widget child, Color? color) {
+    if (color == null) return child;
+    return Container(color: color, child: child);
   }
 
 }
