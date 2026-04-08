@@ -63,6 +63,13 @@ class _StreetballCrossTableTabState extends ConsumerState<StreetballCrossTableTa
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_teams.isEmpty) return const Center(child: Text('Додайте команди для відображення таблиці'));
     final standings = _calcStandings(_teams);
+    final conductionSystem = scoring.pickStreetballConductionSystem(_teams.length);
+    final systemLabel = conductionSystem == scoring.StreetballConductionSystem.roundRobin
+        ? 'Колова система (1 коло)'
+        : 'Змішана система (групи + фінальні ігри)';
+    final systemDescription = conductionSystem == scoring.StreetballConductionSystem.roundRobin
+        ? 'Для 8 команд і менше: усі команди грають між собою в одне коло.'
+        : 'Для 9+ команд: команди діляться на групи 3–5, по 2 кращі виходять у фінальний етап.';
     final n = _teams.length;
     final standingsByTeam = {for (final s in standings) s.teamId: s};
     return Card(elevation: 0, shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey.shade300, width: 1), borderRadius: BorderRadius.circular(8)),
@@ -70,6 +77,29 @@ class _StreetballCrossTableTabState extends ConsumerState<StreetballCrossTableTa
         Row(children: [const Text('Турнірна таблиця', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), const Spacer(),
           if (_games.isNotEmpty) TextButton.icon(icon: const Icon(Icons.delete_sweep_outlined, size: 14), label: const Text('Очистити', style: TextStyle(fontSize: 11)), style: TextButton.styleFrom(foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap), onPressed: _confirmClear),
           const SizedBox(width: 8), Text('$n команд', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))]),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.indigo.shade50,
+            border: Border.all(color: Colors.indigo.shade100),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Система проведення: $systemLabel', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(systemDescription, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+              const SizedBox(height: 4),
+              Text(
+                'Нюанси стрітболу: матч до 10 хв або 21 очка; за нічиєї після 10 хв — додатковий період до 2 очок.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 12),
         Expanded(child: Scrollbar(controller: _vCtrl, thumbVisibility: true, child: SingleChildScrollView(controller: _vCtrl,
           child: Scrollbar(controller: _hCtrl, thumbVisibility: true, notificationPredicate: (n) => n.depth == 1, child: SingleChildScrollView(controller: _hCtrl, scrollDirection: Axis.horizontal,
