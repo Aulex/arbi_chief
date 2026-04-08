@@ -18,30 +18,31 @@ class StreetballService {
     return eventId;
   }
 
-  Future<void> saveGoalResult({required int eventId, required int teamAEntityId, required int teamBEntityId, required int goalsA, required int goalsB}) async {
+  Future<void> saveGoalResult({required int eventId, required int teamAEntityId, required int teamBEntityId, required int goalsA, required int goalsB, int? esId}) async {
     final db = await _dbService.database;
     await db.transaction((txn) async {
       await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
       await txn.insert('CMP_SUBEVENT', {'ev_id': eventId, 'entity_id': teamAEntityId, 'se_result': goalsA.toDouble(), 'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_sa_r'});
       await txn.insert('CMP_SUBEVENT', {'ev_id': eventId, 'entity_id': teamBEntityId, 'se_result': goalsB.toDouble(), 'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_sb_r'});
-      await txn.update('CMP_EVENT', {'event_result': '$goalsA:$goalsB'}, where: 'event_id = ?', whereArgs: [eventId]);
+      await txn.update('CMP_EVENT', {'event_result': '$goalsA:$goalsB', 'es_id': esId}, where: 'event_id = ?', whereArgs: [eventId]);
     });
   }
 
-  Future<List<({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult})>> getTeamGamesForTournament(int tId) async {
+  Future<List<({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult, int? esId})>> getTeamGamesForTournament(int tId) async {
     final db = await _dbService.database;
     final events = await db.query('CMP_EVENT', where: 't_id = ? AND et_id = 2', whereArgs: [tId], orderBy: 'event_id');
-    final result = <({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult})>[];
+    final result = <({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult, int? esId})>[];
     for (final event in events) {
       final eventId = event['event_id'] as int;
       final eventResult = event['event_result'] as String?;
+      final esId = event['es_id'] as int?;
       final subevents = await db.query('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId], orderBy: 'se_id');
       if (subevents.isEmpty) continue;
       final entityIds = subevents.map((s) => s['entity_id'] as int).toSet().toList();
       if (entityIds.length < 2) continue;
       final aTeam = await db.query('CMP_TEAM', columns: ['team_id'], where: 'entity_id = ?', whereArgs: [entityIds[0]]);
       final bTeam = await db.query('CMP_TEAM', columns: ['team_id'], where: 'entity_id = ?', whereArgs: [entityIds[1]]);
-      result.add((eventId: eventId, teamAEntityId: entityIds[0], teamBEntityId: entityIds[1], teamAId: aTeam.isNotEmpty ? aTeam.first['team_id'] as int? : null, teamBId: bTeam.isNotEmpty ? bTeam.first['team_id'] as int? : null, eventResult: eventResult));
+      result.add((eventId: eventId, teamAEntityId: entityIds[0], teamBEntityId: entityIds[1], teamAId: aTeam.isNotEmpty ? aTeam.first['team_id'] as int? : null, teamBId: bTeam.isNotEmpty ? bTeam.first['team_id'] as int? : null, eventResult: eventResult, esId: esId));
     }
     return result;
   }
@@ -53,6 +54,98 @@ class StreetballService {
     final existing = await db.rawQuery('SELECT e.event_id FROM CMP_EVENT e JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id AND se1.entity_id = ? JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id = ? WHERE e.t_id = ? AND e.et_id = 2 GROUP BY e.event_id LIMIT 1', [aEntId, bEntId, tId]);
     if (existing.isNotEmpty) return existing.first['event_id'] as int;
     return createTeamGame(tId: tId, teamAId: teamAId, teamBId: teamBId);
+  }
+
+  Future<int> countNoShows(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final teamRows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [teamId]);
+    if (teamRows.isEmpty) return 0;
+    final entityId = teamRows.first['entity_id'] as int?;
+    if (entityId == null) return 0;
+
+    final rows = await db.rawQuery('''
+      SELECT COUNT(DISTINCT e.event_id) as cnt FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id AND se.entity_id = ?
+      WHERE e.t_id = ? AND e.es_id = 4
+      AND NOT EXISTS (
+        SELECT 1 FROM CMP_SUBEVENT se2
+        WHERE se2.ev_id = e.event_id AND se2.entity_id = ?
+        AND se2.se_result > 0
+      )
+    ''', [entityId, tId, entityId]);
+    return (rows.first['cnt'] as int?) ?? 0;
+  }
+
+  Future<void> markTeamRemoved(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 10',
+      whereArgs: [tId, teamId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update('CMP_TEAM_ATTR', {'attr_value': 'removed'}, where: 'ta_id = ?', whereArgs: [existing.first['ta_id']]);
+    } else {
+      await db.insert('CMP_TEAM_ATTR', {
+        'team_id': teamId,
+        't_id': tId,
+        'attr_id': 10,
+        'attr_value': 'removed',
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_sb_rem_$teamId',
+      });
+    }
+  }
+
+  Future<void> unmarkTeamRemoved(int tId, int teamId) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 10 AND attr_value = ?',
+      whereArgs: [tId, teamId, 'removed'],
+    );
+  }
+
+  Future<Set<int>> getRemovedTeamIds(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 10 AND attr_value = ?',
+      whereArgs: [tId, 'removed'],
+    );
+    return rows.map((r) => r['team_id'] as int).toSet();
+  }
+
+  Future<void> deleteAllTeamGames(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final teamRows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [teamId]);
+    if (teamRows.isEmpty) return;
+    final entityId = teamRows.first['entity_id'] as int?;
+    if (entityId == null) return;
+
+    final events = await db.rawQuery('''
+      SELECT DISTINCT e.event_id FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
+      WHERE e.t_id = ? AND e.et_id = 2 AND se.entity_id = ?
+    ''', [tId, entityId]);
+
+    await db.transaction((txn) async {
+      for (final row in events) {
+        final eventId = row['event_id'] as int;
+        await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+        await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+      }
+    });
+  }
+
+  Future<void> clearAllRemovedState(int tId) async {
+    final db = await _dbService.database;
+    await db.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 10', whereArgs: [tId]);
+  }
+
+  Future<int> ensureTeamEntity(int teamId) async {
+    final db = await _dbService.database;
+    return _dbService.ensureTeamEntity(db, teamId);
   }
 
   Future<void> deleteTeamGame(int eventId) async {
