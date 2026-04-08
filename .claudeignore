@@ -1,38 +1,29 @@
-# Build artifacts
+# Build outputs
 build/
 .dart_tool/
-.pub-cache/
+
+# Dependencies
 .pub/
+.pub-cache/
 
-# Generated files
-pubspec.lock
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.metadata
-
-# Platform-specific generated files
+# Platform build artifacts
 android/.gradle/
-android/local.properties
-android/**/GeneratedPluginRegistrant.java
+android/app/build/
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/Flutter.framework
-ios/Flutter/Flutter.podspec
-ios/Flutter/Generated.xcconfig
-ios/Flutter/app.flx
 ios/Flutter/build/
 windows/build/
-windows/flutter/generated_plugin_registrant.cc
-windows/flutter/generated_plugin_registrant.h
-windows/flutter/generated_plugins.cmake
-linux/flutter/generated_plugin_registrant.cc
-linux/flutter/generated_plugin_registrant.h
-linux/flutter/generated_plugins.cmake
-macos/Flutter/GeneratedPluginRegistrant.swift
-macos/Pods/
+linux/build/
+macos/build/
 
-# IDE
+# Generated files
+android/**/GeneratedPluginRegistrant.java
+ios/**/GeneratedPluginRegistrant.*
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE files
 .vscode/
 .idea/
 *.iml
@@ -41,14 +32,20 @@ macos/Pods/
 .DS_Store
 Thumbs.db
 
+# Lock file (large, not useful for code understanding)
+pubspec.lock
 
-# Binary and media assets not useful for code context
-*.png
-*.jpg
-*.jpeg
-*.ico
-*.icns
-*.svg
+# Platform-specific project configs (auto-generated, rarely need editing)
+android/app/build.gradle.kts
+ios/Runner.xcodeproj/project.pbxproj
+ios/Runner.xcworkspace/
+macos/Runner.xcodeproj/project.pbxproj
+macos/Runner.xcworkspace/
+windows/runner/*.g.cpp
+windows/runner/*.g.h
 
-# Git
-.git/
+# Database files
+*.db
+
+# Test coverage
+coverage/
