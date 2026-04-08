@@ -31,6 +31,17 @@ class StreetballStanding {
   int get goalDifference => pointsScored - pointsConceded;
 }
 
+enum StreetballConductionSystem {
+  roundRobin,
+  mixedGroupsAndFinals,
+}
+
+StreetballConductionSystem pickStreetballConductionSystem(int teamCount) {
+  return teamCount <= 8
+      ? StreetballConductionSystem.roundRobin
+      : StreetballConductionSystem.mixedGroupsAndFinals;
+}
+
 List<StreetballStanding> calculateStandings({
   required List<({int teamId, String teamName, int? entityId})> teams,
   required Map<(int, int), String> games,
@@ -89,76 +100,94 @@ List<StreetballStanding> calculateStandings({
     if (a.isRemoved != b.isRemoved) return a.isRemoved ? 1 : -1;
     final ptsCmp = b.matchPoints.compareTo(a.matchPoints);
     if (ptsCmp != 0) return ptsCmp;
-
-    // Tie-breaker 1: H2H result
-    final h2hPts = _getH2HPoints(a, b, games);
-    if (h2hPts != 0) return -h2hPts;
-
-    // Tie-breaker 2: H2H goal difference
-    final h2hDiffA = _getH2HGoalDiff(a, b, games);
-    final h2hDiffB = _getH2HGoalDiff(b, a, games);
-    if (h2hDiffA != h2hDiffB) return h2hDiffB.compareTo(h2hDiffA);
-
-    // Tie-breaker 3: Most goals scored overall
-    return b.pointsScored.compareTo(a.pointsScored);
+    return 0;
   });
 
-  for (int i = 0; i < result.length; i++) {
-    result[i].rank = i + 1;
-  }
-
-  return result;
-}
-
-int _getH2HPoints(StreetballStanding a, StreetballStanding b, Map<(int, int), String> games) {
-  if (a.entityId == null || b.entityId == null) return 0;
-  final ab = games[(a.entityId!, b.entityId!)];
-  final ba = games[(b.entityId!, a.entityId!)];
-
-  int aPts = 0;
-  int bPts = 0;
-
-  void add(String? detail, bool isAB) {
-    if (detail == null) return;
-    final p = detail.split(':');
-    if (p.length != 2) return;
-    final g1 = int.tryParse(p[0]) ?? 0;
-    final g2 = int.tryParse(p[1]) ?? 0;
-    if (g1 > g2) {
-      if (isAB) { aPts += 2; bPts += 1; } else { bPts += 2; aPts += 1; }
+  // Resolve ties by rules:
+  // 1) head-to-head result,
+  // 2) better scored/conceded difference in games among tied teams,
+  // 3) more scored points.
+  final resolved = <StreetballStanding>[];
+  int i = 0;
+  while (i < result.length) {
+    final tied = <StreetballStanding>[result[i]];
+    int j = i + 1;
+    while (j < result.length && result[j].matchPoints == result[i].matchPoints) {
+      tied.add(result[j]);
+      j++;
+    }
+    if (tied.length == 1) {
+      resolved.add(tied.first);
     } else {
-      if (isAB) { bPts += 2; aPts += 1; } else { aPts += 2; bPts += 1; }
+      resolved.addAll(_resolveTieGroup(tied, games));
     }
+    i = j;
   }
 
-  add(ab, true);
-  add(ba, false);
-  return aPts - bPts;
+  for (int k = 0; k < resolved.length; k++) {
+    resolved[k].rank = k + 1;
+  }
+
+  return resolved;
 }
 
-/// Goal difference for team [a] in H2H games against [b].
-int _getH2HGoalDiff(StreetballStanding a, StreetballStanding b, Map<(int, int), String> games) {
-  if (a.entityId == null || b.entityId == null) return 0;
-  final ab = games[(a.entityId!, b.entityId!)];
-  final ba = games[(b.entityId!, a.entityId!)];
+List<StreetballStanding> _resolveTieGroup(
+  List<StreetballStanding> group,
+  Map<(int, int), String> games,
+) {
+  if (group.length <= 1) return group;
 
-  int scored = 0;
-  int conceded = 0;
+  final inGroupEntityIds = group.map((s) => s.entityId).whereType<int>().toSet();
+  final h2hPoints = <int, int>{};
+  final h2hDiff = <int, int>{};
+  final scored = <int, int>{};
 
-  if (ab != null) {
-    final p = ab.split(':');
-    if (p.length == 2) {
-      scored += int.tryParse(p[0]) ?? 0;
-      conceded += int.tryParse(p[1]) ?? 0;
-    }
-  }
-  if (ba != null) {
-    final p = ba.split(':');
-    if (p.length == 2) {
-      scored += int.tryParse(p[1]) ?? 0;
-      conceded += int.tryParse(p[0]) ?? 0;
-    }
+  for (final s in group) {
+    if (s.entityId == null) continue;
+    h2hPoints[s.entityId!] = 0;
+    h2hDiff[s.entityId!] = 0;
+    scored[s.entityId!] = 0;
   }
 
-  return scored - conceded;
+  for (final entry in games.entries) {
+    final (aEntId, bEntId) = entry.key;
+    if (!inGroupEntityIds.contains(aEntId) || !inGroupEntityIds.contains(bEntId)) {
+      continue;
+    }
+    if (aEntId == bEntId) continue;
+
+    final parts = entry.value.split(':');
+    if (parts.length != 2) continue;
+    final aPts = int.tryParse(parts[0]) ?? 0;
+    final bPts = int.tryParse(parts[1]) ?? 0;
+
+    h2hDiff[aEntId] = (h2hDiff[aEntId] ?? 0) + (aPts - bPts);
+    h2hDiff[bEntId] = (h2hDiff[bEntId] ?? 0) + (bPts - aPts);
+    scored[aEntId] = (scored[aEntId] ?? 0) + aPts;
+    scored[bEntId] = (scored[bEntId] ?? 0) + bPts;
+
+    if (aPts > bPts) {
+      h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 2;
+      h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 1;
+    } else {
+      h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 2;
+      h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 1;
+    }
+  }
+
+  group.sort((a, b) {
+    final aEnt = a.entityId;
+    final bEnt = b.entityId;
+    if (aEnt == null || bEnt == null) return b.pointsScored.compareTo(a.pointsScored);
+
+    final h2hPtsCmp = (h2hPoints[bEnt] ?? 0).compareTo(h2hPoints[aEnt] ?? 0);
+    if (h2hPtsCmp != 0) return h2hPtsCmp;
+
+    final h2hDiffCmp = (h2hDiff[bEnt] ?? 0).compareTo(h2hDiff[aEnt] ?? 0);
+    if (h2hDiffCmp != 0) return h2hDiffCmp;
+
+    return (scored[bEnt] ?? 0).compareTo(scored[aEnt] ?? 0);
+  });
+
+  return group;
 }
