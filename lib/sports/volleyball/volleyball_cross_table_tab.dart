@@ -139,15 +139,26 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
       }
     }
 
+    final groupMode = teams.length >= 9;
+
     setState(() {
       _teams = teams;
       _games = gamesMap;
       _groupAssignments = groups;
       _removedTeamIds = removed;
       _noShowGamePairs = noShowPairs;
-      _finalsPlaces = _parsePlaces(finalsPlacesStr, defaultPlaces: [1, 2]);
-      _crossGroupMatchPlaces = _parsePlaces(crossGroupStr);
-      _cyclePlaces = _parsePlaces(cycleStr);
+      _finalsPlaces = _parsePlaces(
+        finalsPlacesStr,
+        defaultPlaces: groupMode ? [1, 2] : const [],
+      );
+      _crossGroupMatchPlaces = _parsePlaces(
+        crossGroupStr,
+        defaultPlaces: groupMode ? [3, 4] : const [],
+      );
+      _cyclePlaces = _parsePlaces(
+        cycleStr,
+        defaultPlaces: groupMode ? [5, 6] : const [],
+      );
       _loading = false;
     });
   }
@@ -204,7 +215,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     return carryOver;
   }
 
-  bool get _useGroupMode => _teams.length >= 9 && _groupAssignments.isNotEmpty;
+  bool get _useGroupMode => _teams.length >= 9;
 
   @override
   Widget build(BuildContext context) {
@@ -632,6 +643,26 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
   }
 
   Widget _buildGroupsView(List<String> groupNames) {
+    if (groupNames.isEmpty) {
+      return Center(
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Colors.grey.shade300, width: 1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text(
+              'Призначте команди до груп у вкладці "Групи", щоб відкрити'
+              ' фінальні, стикові та колові етапи.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
     if (groupNames.length == 1) {
       final groupName = groupNames.first;
       return Column(
