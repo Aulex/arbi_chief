@@ -33,6 +33,8 @@ class _StreetballCrossTableTabState
       [];
   Map<(int, int), _GameData> _games = {};
   Map<int, String> _groupAssignments = {};
+  Set<int> _removedTeamIds = {};
+  Set<(int, int)> _noShowGamePairs = {};
 
   /// Places from each group that advance to finals (attr_id=12).
   List<int> _finalsPlaces = [1, 2];
@@ -89,6 +91,7 @@ class _StreetballCrossTableTabState
     final teamList = await teamSvc.getTeamListForTournament(widget.tId);
     final games = await svc.getTeamGamesForTournament(widget.tId);
     final groups = await svc.getGroupAssignments(widget.tId);
+    final removed = await svc.getRemovedTeamIds(widget.tId);
 
     final finalsPlacesStr = await tSvc.getAttrValue(widget.tId, 12);
     final crossGroupStr = await tSvc.getAttrValue(widget.tId, 13);
@@ -99,24 +102,32 @@ class _StreetballCrossTableTabState
         <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
     for (final t in teamList) {
       final team = allTeams.where((at) => at.team_id == t.teamId).firstOrNull;
+      var entityId = team?.entity_id;
+      if (entityId == null) {
+        entityId = await svc.ensureTeamEntity(t.teamId);
+      }
       teams.add((
         teamId: t.teamId,
         teamName: t.teamName,
         teamNumber: t.teamNumber,
-        entityId: team?.entity_id,
+        entityId: entityId,
       ));
     }
 
     final gamesMap = <(int, int), _GameData>{};
+    final noShowPairs = <(int, int)>{};
     for (final g in games) {
       gamesMap[(g.teamAEntityId, g.teamBEntityId)] = _GameData(
         eventId: g.eventId,
         eventResult: g.eventResult,
+        esId: g.esId,
       );
       gamesMap[(g.teamBEntityId, g.teamAEntityId)] = _GameData(
         eventId: g.eventId,
         eventResult: g.eventResult != null ? _mirror(g.eventResult!) : null,
+        esId: g.esId,
       );
+      if (g.esId == 4) noShowPairs.add((g.teamAEntityId, g.teamBEntityId));
     }
 
     final groupMode = teams.length >= 9;
@@ -125,6 +136,8 @@ class _StreetballCrossTableTabState
       _teams = teams;
       _games = gamesMap;
       _groupAssignments = groups;
+      _removedTeamIds = removed;
+      _noShowGamePairs = noShowPairs;
       _finalsPlaces = _parsePlaces(
         finalsPlacesStr,
         defaultPlaces: groupMode ? [1, 2] : const [],
@@ -188,6 +201,26 @@ class _StreetballCrossTableTabState
     return result;
   }
 
+  Map<(int, int), _GameData> _buildCarryOverGames(
+    List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
+  ) {
+    final carryOver = <(int, int), _GameData>{};
+    for (int i = 0; i < teams.length; i++) {
+      for (int j = i + 1; j < teams.length; j++) {
+        final a = teams[i];
+        final b = teams[j];
+        if (a.entityId == null || b.entityId == null) continue;
+        final ga = _groupAssignments[a.teamId];
+        final gb = _groupAssignments[b.teamId];
+        if (ga == gb && ga != null) {
+          final game = _games[(a.entityId!, b.entityId!)];
+          if (game != null) carryOver[(a.entityId!, b.entityId!)] = game;
+        }
+      }
+    }
+    return carryOver;
+  }
+
   List<scoring.StreetballStanding> _calcStandings(
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
   ) {
@@ -214,6 +247,8 @@ class _StreetballCrossTableTabState
               ))
           .toList(),
       games: fg,
+      removedTeamIds: _removedTeamIds,
+      noShowGamePairs: _noShowGamePairs,
     );
   }
 
@@ -385,7 +420,12 @@ class _StreetballCrossTableTabState
     if (finalists.isEmpty) {
       return const Center(child: Text('Спочатку проведіть груповий етап'));
     }
-    return _buildSimpleCrossTable(finalists, showSystemBanner: false);
+    return _buildSimpleCrossTable(
+      finalists,
+      showSystemBanner: false,
+      carryOverGames: _buildCarryOverGames(finalists),
+      readOnlyCarryOver: true,
+    );
   }
 
   Widget _buildCrossGroupMatchView(List<String> groupNames) {
@@ -414,7 +454,12 @@ class _StreetballCrossTableTabState
               }
               return SizedBox(
                 height: teams.length * 40.0 + 120,
-                child: _buildSimpleCrossTable(teams, showSystemBanner: false),
+                child: _buildSimpleCrossTable(
+                  teams,
+                  showSystemBanner: false,
+                  carryOverGames: _buildCarryOverGames(teams),
+                  readOnlyCarryOver: teams.length > 2,
+                ),
               );
             },
           ),
@@ -433,7 +478,12 @@ class _StreetballCrossTableTabState
       return const Center(child: Text('Недостатньо команд для колової стадії'));
     }
 
-    return _buildSimpleCrossTable(teams, showSystemBanner: false);
+    return _buildSimpleCrossTable(
+      teams,
+      showSystemBanner: false,
+      carryOverGames: _buildCarryOverGames(teams),
+      readOnlyCarryOver: true,
+    );
   }
 
   Widget _buildTotalStandingsView(List<String> groupNames) {
@@ -452,7 +502,41 @@ class _StreetballCrossTableTabState
       return const Center(child: Text('Немає даних для підсумкової таблиці'));
     }
 
-    return _buildSimpleCrossTable(unique, showSystemBanner: false);
+    final standings = _calcStandings(_teams);
+    final phaseLabel = <int, String>{};
+    for (final t in _getTeamsAtPlaces(groupNames, _finalsPlaces)) {
+      phaseLabel[t.teamId] = 'Фінал';
+    }
+    for (final t in _getTeamsAtPlaces(groupNames, _crossGroupMatchPlaces)) {
+      phaseLabel.putIfAbsent(t.teamId, () => 'Стикові');
+    }
+    for (final t in _getTeamsAtPlaces(groupNames, _cyclePlaces)) {
+      phaseLabel.putIfAbsent(t.teamId, () => 'Колова');
+    }
+    return Card(
+      elevation: 0,
+      child: ListView(
+        children: [
+          DataTable(
+            columns: const [
+              DataColumn(label: Text('Місце')),
+              DataColumn(label: Text('Команда')),
+              DataColumn(label: Text('Етап')),
+              DataColumn(label: Text('О')),
+            ],
+            rows: [
+              for (final s in standings)
+                DataRow(cells: [
+                  DataCell(Text('${s.rank}')),
+                  DataCell(Text(s.teamName)),
+                  DataCell(Text(phaseLabel[s.teamId] ?? 'Група')),
+                  DataCell(Text('${s.matchPoints}')),
+                ]),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSimpleCrossTable(
@@ -460,6 +544,8 @@ class _StreetballCrossTableTabState
     ScrollController? verticalController,
     ScrollController? horizontalController,
     bool showSystemBanner = true,
+    Map<(int, int), _GameData>? carryOverGames,
+    bool readOnlyCarryOver = false,
   }) {
     final standings = _calcStandings(teams);
     final n = teams.length;
@@ -603,8 +689,20 @@ class _StreetballCrossTableTabState
                               ),
                               children: [
                                 _dc('${teams[i].teamNumber ?? i + 1}', bold: true),
-                                _nc(teams[i].teamName),
-                                for (int j = 0; j < n; j++) _gc(i, j, teams),
+                                _removedTeamIds.contains(teams[i].teamId)
+                                    ? GestureDetector(
+                                        onTap: () => _confirmUndoRemoval(teams[i].teamId, teams[i].teamName),
+                                        child: _nc(teams[i].teamName, isRemoved: true),
+                                      )
+                                    : _nc(teams[i].teamName),
+                                for (int j = 0; j < n; j++)
+                                  _gc(
+                                    i,
+                                    j,
+                                    teams,
+                                    carryOverGames: carryOverGames,
+                                    readOnlyCarryOver: readOnlyCarryOver,
+                                  ),
                                 _dc(
                                   '${standingsByTeam[teams[i].teamId]?.matchPoints ?? 0}',
                                   bold: true,
@@ -622,7 +720,10 @@ class _StreetballCrossTableTabState
                                     border: Border.all(color: Colors.black, width: 0.5),
                                   ),
                                 ),
-                                _nc(i < standings.length ? standings[i].teamName : ''),
+                                _nc(
+                                  i < standings.length ? standings[i].teamName : '',
+                                  isRemoved: i < standings.length && _removedTeamIds.contains(standings[i].teamId),
+                                ),
                                 _dc(
                                   '${i < standings.length ? standings[i].matchPoints : 0}',
                                   bold: true,
@@ -650,6 +751,7 @@ class _StreetballCrossTableTabState
     int i,
     int j,
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
+    {Map<(int, int), _GameData>? carryOverGames, bool readOnlyCarryOver = false,}
   ) {
     if (i == j) return Container(height: 36, color: Colors.grey.shade300);
     final tA = teams[i];
@@ -657,10 +759,15 @@ class _StreetballCrossTableTabState
     if (tA.entityId == null || tB.entityId == null) return const SizedBox(height: 36);
 
     final game = _games[(tA.entityId!, tB.entityId!)];
+    final isCarryOver = carryOverGames != null && carryOverGames.containsKey((tA.entityId!, tB.entityId!));
+    final isRemoved = _removedTeamIds.contains(tA.teamId) || _removedTeamIds.contains(tB.teamId);
     String cellText = '';
     Color? bg;
 
-    if (game?.eventResult != null) {
+    if (game?.esId == 4) {
+      cellText = '-';
+      bg = Colors.orange.shade100;
+    } else if (game?.eventResult != null) {
       cellText = game!.eventResult!;
       final p = cellText.split(':');
       if (p.length == 2) {
@@ -673,6 +780,9 @@ class _StreetballCrossTableTabState
                 : Colors.amber.shade50;
       }
     }
+    if (isCarryOver && game == null) bg = Colors.amber.shade50;
+    if (isRemoved) bg = Colors.grey.shade200;
+    final readOnly = isRemoved || (isCarryOver && readOnlyCarryOver);
 
     return MouseRegion(
       onEnter: (_) => setState(() {
@@ -684,7 +794,7 @@ class _StreetballCrossTableTabState
         _hoveredCol = null;
       }),
       child: GestureDetector(
-        onTap: () => _showDialog(tA, tB, game),
+        onTap: readOnly ? null : () => _showDialog(tA, tB, game),
         child: Container(
           height: 36,
           alignment: Alignment.center,
@@ -715,7 +825,7 @@ class _StreetballCrossTableTabState
     final cA = TextEditingController(text: eA > 0 ? '$eA' : '');
     final cB = TextEditingController(text: eB > 0 ? '$eB' : '');
 
-    final result = await showDialog<({int goalsA, int goalsB})?>(
+    final result = await showDialog<({int goalsA, int goalsB, String? noShowTeam})?>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${tA.teamName}  vs  ${tB.teamName}', style: const TextStyle(fontSize: 16)),
@@ -756,6 +866,33 @@ class _StreetballCrossTableTabState
           ],
         ),
         actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Неявка команди',
+            onSelected: (team) => Navigator.pop(ctx, (
+              goalsA: team == 'A' ? 0 : 21,
+              goalsB: team == 'A' ? 21 : 0,
+              noShowTeam: team,
+            )),
+            itemBuilder: (ctx) => [
+              PopupMenuItem(value: 'A', child: Text('Неявка: ${tA.teamName}')),
+              PopupMenuItem(value: 'B', child: Text('Неявка: ${tB.teamName}')),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.orange.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.person_off, size: 16, color: Colors.orange.shade700),
+                  const SizedBox(width: 4),
+                  Text('Неявка', style: TextStyle(color: Colors.orange.shade700)),
+                ],
+              ),
+            ),
+          ),
           if (existing != null)
             TextButton(
               onPressed: () {
@@ -772,7 +909,7 @@ class _StreetballCrossTableTabState
             onPressed: () {
               Navigator.pop(
                 ctx,
-                (goalsA: int.tryParse(cA.text) ?? 0, goalsB: int.tryParse(cB.text) ?? 0),
+                (goalsA: int.tryParse(cA.text) ?? 0, goalsB: int.tryParse(cB.text) ?? 0, noShowTeam: null),
               );
             },
             child: const Text('Зберегти'),
@@ -800,8 +937,11 @@ class _StreetballCrossTableTabState
       teamBEntityId: tB.entityId!,
       goalsA: result.goalsA,
       goalsB: result.goalsB,
+      esId: result.noShowTeam != null ? 4 : null,
     );
 
+    await _checkNoShows(tA.teamId);
+    await _checkNoShows(tB.teamId);
     await _loadData();
   }
 
@@ -839,7 +979,36 @@ class _StreetballCrossTableTabState
     for (final id in _games.values.map((g) => g.eventId).toSet()) {
       await svc.deleteTeamGame(id);
     }
+    await svc.clearAllRemovedState(widget.tId);
     await _loadData();
+  }
+
+  Future<void> _confirmUndoRemoval(int teamId, String teamName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Повернути команду?'),
+        content: Text('Зняти статус неявки для "$teamName"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Скасувати')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Повернути')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(streetballServiceProvider).unmarkTeamRemoved(widget.tId, teamId);
+    await _loadData();
+  }
+
+  Future<void> _checkNoShows(int teamId) async {
+    final svc = ref.read(streetballServiceProvider);
+    final count = await svc.countNoShows(widget.tId, teamId);
+    if (count >= 2) {
+      await svc.deleteAllTeamGames(widget.tId, teamId);
+      await svc.markTeamRemoved(widget.tId, teamId);
+    } else {
+      await svc.unmarkTeamRemoved(widget.tId, teamId);
+    }
   }
 
   Widget _hc(String t) => Container(
@@ -861,13 +1030,17 @@ class _StreetballCrossTableTabState
         ),
       );
 
-  Widget _nc(String n) => Container(
+  Widget _nc(String n, {bool isRemoved = false}) => Container(
         height: 36,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Text(
           n,
-          style: const TextStyle(fontSize: 12),
+          style: TextStyle(
+            fontSize: 12,
+            color: isRemoved ? Colors.grey : null,
+            decoration: isRemoved ? TextDecoration.lineThrough : null,
+          ),
           overflow: TextOverflow.ellipsis,
         ),
       );
@@ -876,6 +1049,7 @@ class _StreetballCrossTableTabState
 class _GameData {
   final int eventId;
   final String? eventResult;
+  final int? esId;
 
-  _GameData({required this.eventId, this.eventResult});
+  _GameData({required this.eventId, this.eventResult, this.esId});
 }

@@ -31,6 +31,9 @@ class StreetballStanding {
   int get goalDifference => pointsScored - pointsConceded;
 }
 
+const String noShowWinScore = '21:0';
+const String noShowLossScore = '0:21';
+
 enum StreetballConductionSystem {
   roundRobin,
   mixedGroupsAndFinals,
@@ -46,6 +49,7 @@ List<StreetballStanding> calculateStandings({
   required List<({int teamId, String teamName, int? entityId})> teams,
   required Map<(int, int), String> games,
   Set<int> removedTeamIds = const {},
+  Set<(int, int)> noShowGamePairs = const {},
 }) {
   final standings = <int, StreetballStanding>{};
 
@@ -119,7 +123,7 @@ List<StreetballStanding> calculateStandings({
     if (tied.length == 1) {
       resolved.add(tied.first);
     } else {
-      resolved.addAll(_resolveTieGroup(tied, games));
+      resolved.addAll(_resolveTieGroup(tied, games, noShowGamePairs));
     }
     i = j;
   }
@@ -134,6 +138,7 @@ List<StreetballStanding> calculateStandings({
 List<StreetballStanding> _resolveTieGroup(
   List<StreetballStanding> group,
   Map<(int, int), String> games,
+  Set<(int, int)> noShowGamePairs,
 ) {
   if (group.length <= 1) return group;
 
@@ -155,6 +160,10 @@ List<StreetballStanding> _resolveTieGroup(
       continue;
     }
     if (aEntId == bEntId) continue;
+    if (noShowGamePairs.contains((aEntId, bEntId)) ||
+        noShowGamePairs.contains((bEntId, aEntId))) {
+      continue;
+    }
 
     final parts = entry.value.split(':');
     if (parts.length != 2) continue;
