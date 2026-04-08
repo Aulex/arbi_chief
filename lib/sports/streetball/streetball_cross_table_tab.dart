@@ -433,38 +433,153 @@ class _StreetballCrossTableTabState
       return const Center(child: Text('Налаштуйте групи та місця для стикових матчів'));
     }
 
+    final numGroups = groupNames.length;
+    final finalsTeamCount = _finalsPlaces.length * numGroups;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
+    final cellStyle = TextStyle(
+      fontSize: 13,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+
+    // Collect 2-team direct match rows and 3+ team round-robin groups
+    final matchRows = <({
+      String placeLabel, String subtitle,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamA,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamB,
+      _GameData? gameData,
+    })>[];
+    final roundRobinWidgets = <Widget>[];
+
+    for (int i = 0; i < _crossGroupMatchPlaces.length; i++) {
+      final place = _crossGroupMatchPlaces[i];
+      final teamsAtPlace = _getTeamsAtSinglePlace(groupNames, place);
+      if (teamsAtPlace.length < 2) continue;
+
+      final overallStart = finalsTeamCount + 1 + i * numGroups;
+      final overallEnd = overallStart + numGroups - 1;
+      final placeLabel = overallStart == overallEnd
+          ? 'За $overallStart місце'
+          : 'За $overallStart–$overallEnd місце';
+
+      if (teamsAtPlace.length == 2) {
+        _GameData? gameData;
+        if (teamsAtPlace[0].entityId != null && teamsAtPlace[1].entityId != null) {
+          gameData = _games[(teamsAtPlace[0].entityId!, teamsAtPlace[1].entityId!)];
+        }
+        matchRows.add((
+          placeLabel: placeLabel,
+          subtitle: '($place місце з груп)',
+          teamA: teamsAtPlace[0],
+          teamB: teamsAtPlace[1],
+          gameData: gameData,
+        ));
+      } else {
+        roundRobinWidgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8, top: 8),
+          child: Text(
+            '$placeLabel ($place місце з груп)',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ));
+        final carryOver = _buildCarryOverGames(teamsAtPlace);
+        roundRobinWidgets.add(SizedBox(
+          height: teamsAtPlace.length * 40.0 + 120,
+          child: _buildSimpleCrossTable(
+            teamsAtPlace,
+            showSystemBanner: false,
+            carryOverGames: carryOver,
+            readOnlyCarryOver: true,
+          ),
+        ));
+      }
+    }
+
+    if (matchRows.isEmpty && roundRobinWidgets.isEmpty) {
+      return const Center(child: Text('Немає команд для розіграшу'));
+    }
+
     return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       children: [
-        for (final place in _crossGroupMatchPlaces) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8, top: 8),
-            child: Text(
-              '$place місце з груп',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        if (matchRows.isNotEmpty)
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: borderColor, width: 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Стикові матчі',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  for (int i = 0; i < matchRows.length; i++)
+                    _buildDirectMatchRow(i, matchRows[i], cellStyle, borderColor, isDark),
+                ],
+              ),
             ),
           ),
-          Builder(
-            builder: (context) {
-              final teams = _getTeamsAtSinglePlace(groupNames, place);
-              if (teams.length < 2) {
-                return const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text('Недостатньо команд для цієї стадії'),
-                );
-              }
-              return SizedBox(
-                height: teams.length * 40.0 + 120,
-                child: _buildSimpleCrossTable(
-                  teams,
-                  showSystemBanner: false,
-                  carryOverGames: _buildCarryOverGames(teams),
-                  readOnlyCarryOver: teams.length > 2,
-                ),
-              );
-            },
-          ),
-        ],
+        ...roundRobinWidgets,
       ],
+    );
+  }
+
+  Widget _buildDirectMatchRow(
+    int index,
+    ({
+      String placeLabel, String subtitle,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamA,
+      ({int teamId, String teamName, int? teamNumber, int? entityId}) teamB,
+      _GameData? gameData,
+    }) match,
+    TextStyle cellStyle,
+    Color borderColor,
+    bool isDark,
+  ) {
+    final gameData = match.gameData;
+    String scoreDisplay = '—';
+    if (gameData?.eventResult != null && gameData!.eventResult!.isNotEmpty) {
+      scoreDisplay = gameData.eventResult!;
+    }
+
+    final bgColor = index.isOdd
+        ? (isDark ? const Color(0xFF152238) : Colors.grey.shade50)
+        : null;
+
+    return InkWell(
+      onTap: () => _showDialog(match.teamA, match.teamB, gameData),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 130,
+              child: Text(match.placeLabel, style: cellStyle.copyWith(fontWeight: FontWeight.bold)),
+            ),
+            Expanded(
+              child: Text(match.teamA.teamName, style: cellStyle, textAlign: TextAlign.right),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(scoreDisplay, style: cellStyle.copyWith(fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            Expanded(
+              child: Text(match.teamB.teamName, style: cellStyle),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -491,50 +606,157 @@ class _StreetballCrossTableTabState
       return const Center(child: Text('Призначте команди до груп'));
     }
 
-    final combined = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
-    combined.addAll(_getTeamsAtPlaces(groupNames, _finalsPlaces));
-    combined.addAll(_getTeamsAtPlaces(groupNames, _crossGroupMatchPlaces));
-    combined.addAll(_getTeamsAtPlaces(groupNames, _cyclePlaces));
+    // Compute cumulative stats across ALL tournament games for each team
+    final allStandings = _calcStandings(_teams);
+    final cumulativeByTeam = {for (final s in allStandings) s.teamId: s};
 
-    final seen = <int>{};
-    final unique = combined.where((t) => seen.add(t.teamId)).toList();
-    if (unique.isEmpty) {
-      return const Center(child: Text('Немає даних для підсумкової таблиці'));
+    final rankedTeams = <({
+      int teamId, String teamName, int overallPlace, String phase,
+      int matchPoints, int pointsScored, int pointsConceded,
+    })>[];
+    final assignedTeamIds = <int>{};
+    int nextPlace = 1;
+
+    void addFromStandings(List<scoring.StreetballStanding> standings, String phase) {
+      for (final s in standings) {
+        if (assignedTeamIds.contains(s.teamId)) continue;
+        if (s.isRemoved) continue;
+        final cumulative = cumulativeByTeam[s.teamId];
+        rankedTeams.add((
+          teamId: s.teamId,
+          teamName: s.teamName,
+          overallPlace: nextPlace++,
+          phase: phase,
+          matchPoints: cumulative?.matchPoints ?? s.matchPoints,
+          pointsScored: cumulative?.pointsScored ?? s.pointsScored,
+          pointsConceded: cumulative?.pointsConceded ?? s.pointsConceded,
+        ));
+        assignedTeamIds.add(s.teamId);
+      }
     }
 
-    final standings = _calcStandings(_teams);
-    final phaseLabel = <int, String>{};
-    for (final t in _getTeamsAtPlaces(groupNames, _finalsPlaces)) {
-      phaseLabel[t.teamId] = 'Фінал';
+    // 1. Finals teams
+    if (_finalsPlaces.isNotEmpty) {
+      final finalists = _getTeamsAtPlaces(groupNames, _finalsPlaces);
+      addFromStandings(_calcStandings(finalists), 'Фінал');
     }
-    for (final t in _getTeamsAtPlaces(groupNames, _crossGroupMatchPlaces)) {
-      phaseLabel.putIfAbsent(t.teamId, () => 'Стикові');
+
+    // 2. Direct match (стикові) teams — per place
+    for (int i = 0; i < _crossGroupMatchPlaces.length; i++) {
+      final place = _crossGroupMatchPlaces[i];
+      final teamsAtPlace = _getTeamsAtSinglePlace(groupNames, place);
+      addFromStandings(_calcStandings(teamsAtPlace), 'Стикові');
     }
-    for (final t in _getTeamsAtPlaces(groupNames, _cyclePlaces)) {
-      phaseLabel.putIfAbsent(t.teamId, () => 'Колова');
+
+    // 3. Cycle (колові) teams
+    if (_cyclePlaces.isNotEmpty) {
+      final cycleTeams = _getTeamsAtPlaces(groupNames, _cyclePlaces);
+      addFromStandings(_calcStandings(cycleTeams), 'Колові');
     }
+
+    // 4. Remaining teams (not in any phase) — ranked by group standings
+    for (final groupName in groupNames) {
+      final groupTeams = _getGroupTeams(groupName);
+      addFromStandings(_calcStandings(groupTeams), 'Група $groupName');
+    }
+
+    if (rankedTeams.isEmpty) {
+      return const Center(child: Text('Немає даних для підсумку'));
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerBg = isDark ? const Color(0xFF1B2838) : Colors.grey.shade100;
+    final borderColor = isDark ? const Color(0xFF2A3A4E) : Colors.grey.shade300;
+    final headerStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+    final cellStyle = TextStyle(
+      fontSize: 13,
+      color: isDark ? Colors.grey.shade300 : Colors.black87,
+    );
+
     return Card(
       elevation: 0,
-      child: ListView(
-        children: [
-          DataTable(
-            columns: const [
-              DataColumn(label: Text('Місце')),
-              DataColumn(label: Text('Команда')),
-              DataColumn(label: Text('Етап')),
-              DataColumn(label: Text('О')),
-            ],
-            rows: [
-              for (final s in standings)
-                DataRow(cells: [
-                  DataCell(Text('${s.rank}')),
-                  DataCell(Text(s.teamName)),
-                  DataCell(Text(phaseLabel[s.teamId] ?? 'Група')),
-                  DataCell(Text('${s.matchPoints}')),
-                ]),
-            ],
-          ),
-        ],
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: borderColor, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Загальний підсумок',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${rankedTeams.length} команд',
+              style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Table(
+                    columnWidths: const {
+                      0: FixedColumnWidth(60),
+                      1: FlexColumnWidth(),
+                      2: FixedColumnWidth(100),
+                    },
+                    border: TableBorder.all(color: borderColor, width: 0.5),
+                    children: [
+                      TableRow(
+                        decoration: BoxDecoration(color: headerBg),
+                        children: [
+                          _standingsHeaderCell('Місце', headerStyle),
+                          _standingsHeaderCell('Команда', headerStyle, minWidth: 200),
+                          _standingsHeaderCell('Етап', headerStyle, minWidth: 80),
+                        ],
+                      ),
+                      for (int i = 0; i < rankedTeams.length; i++)
+                        TableRow(
+                          decoration: i.isEven
+                              ? null
+                              : BoxDecoration(color: isDark ? const Color(0xFF152238) : Colors.grey.shade50),
+                          children: [
+                            _standingsDataCell('${rankedTeams[i].overallPlace}', cellStyle, bold: true),
+                            _standingsDataCell(rankedTeams[i].teamName, cellStyle, leftAlign: true),
+                            _standingsDataCell(rankedTeams[i].phase, cellStyle),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _standingsHeaderCell(String text, TextStyle style, {double minWidth = 48}) {
+    return Container(
+      constraints: BoxConstraints(minWidth: minWidth, minHeight: 36),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Text(text, style: style, textAlign: TextAlign.center),
+    );
+  }
+
+  Widget _standingsDataCell(String text, TextStyle style, {bool bold = false, bool leftAlign = false}) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 36),
+      alignment: leftAlign ? Alignment.centerLeft : Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Text(
+        text,
+        style: bold ? style.copyWith(fontWeight: FontWeight.bold) : style,
       ),
     );
   }
@@ -814,8 +1036,8 @@ class _StreetballCrossTableTabState
   Future<void> _showDialog(dynamic tA, dynamic tB, _GameData? existing) async {
     int eA = 0;
     int eB = 0;
-    if (existing?.eventResult != null) {
-      final p = existing!.eventResult!.split(':');
+    if (existing?.eventResult != null && existing!.esId != 4) {
+      final p = existing.eventResult!.split(':');
       if (p.length == 2) {
         eA = int.tryParse(p[0]) ?? 0;
         eB = int.tryParse(p[1]) ?? 0;
@@ -825,96 +1047,18 @@ class _StreetballCrossTableTabState
     final cA = TextEditingController(text: eA > 0 ? '$eA' : '');
     final cB = TextEditingController(text: eB > 0 ? '$eB' : '');
 
-    final result = await showDialog<({int goalsA, int goalsB, String? noShowTeam})?>(
+    final result = await showDialog<_ScoreDialogResult?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${tA.teamName}  vs  ${tB.teamName}', style: const TextStyle(fontSize: 16)),
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: cA,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  labelText: tA.teamName.length > 10 ? tA.teamName.substring(0, 10) : tA.teamName,
-                  border: const OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(':', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            ),
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: cB,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  labelText: tB.teamName.length > 10 ? tB.teamName.substring(0, 10) : tB.teamName,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Неявка команди',
-            onSelected: (team) => Navigator.pop(ctx, (
-              goalsA: team == 'A' ? 0 : 21,
-              goalsB: team == 'A' ? 21 : 0,
-              noShowTeam: team,
-            )),
-            itemBuilder: (ctx) => [
-              PopupMenuItem(value: 'A', child: Text('Неявка: ${tA.teamName}')),
-              PopupMenuItem(value: 'B', child: Text('Неявка: ${tB.teamName}')),
-            ],
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.orange.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.person_off, size: 16, color: Colors.orange.shade700),
-                  const SizedBox(width: 4),
-                  Text('Неявка', style: TextStyle(color: Colors.orange.shade700)),
-                ],
-              ),
-            ),
-          ),
-          if (existing != null)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _del(existing.eventId);
-              },
-              child: const Text('Видалити', style: TextStyle(color: Colors.red)),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Скасувати'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(
-                ctx,
-                (goalsA: int.tryParse(cA.text) ?? 0, goalsB: int.tryParse(cB.text) ?? 0, noShowTeam: null),
-              );
-            },
-            child: const Text('Зберегти'),
-          ),
-        ],
+      builder: (ctx) => _StreetballScoreDialog(
+        teamAName: tA.teamName as String,
+        teamBName: tB.teamName as String,
+        controllerA: cA,
+        controllerB: cB,
+        hasExisting: existing != null,
+        onDelete: existing != null ? () {
+          Navigator.pop(ctx);
+          _del(existing.eventId);
+        } : null,
       ),
     );
 
@@ -924,6 +1068,45 @@ class _StreetballCrossTableTabState
     if (result == null) return;
 
     final svc = ref.read(streetballServiceProvider);
+
+    // Handle no-show
+    if (result.noShowTeam != null) {
+      final eventId = existing?.eventId ??
+          await svc.findOrCreateTeamGame(
+            tId: widget.tId,
+            teamAId: tA.teamId,
+            teamBId: tB.teamId,
+          );
+
+      final noShowIsA = result.noShowTeam == 'A';
+      await svc.saveGoalResult(
+        eventId: eventId,
+        teamAEntityId: tA.entityId!,
+        teamBEntityId: tB.entityId!,
+        goalsA: noShowIsA ? 0 : 21,
+        goalsB: noShowIsA ? 21 : 0,
+        esId: 4,
+      );
+
+      await _checkNoShows(tA.teamId);
+      await _checkNoShows(tB.teamId);
+      await _loadData();
+      return;
+    }
+
+    // Normal score
+    final goalsA = result.goalsA!;
+    final goalsB = result.goalsB!;
+
+    if (goalsA == 0 && goalsB == 0) {
+      // Delete existing game if both scores are 0
+      if (existing != null) {
+        await svc.deleteTeamGame(existing.eventId);
+      }
+      await _loadData();
+      return;
+    }
+
     final eventId = existing?.eventId ??
         await svc.findOrCreateTeamGame(
           tId: widget.tId,
@@ -935,9 +1118,8 @@ class _StreetballCrossTableTabState
       eventId: eventId,
       teamAEntityId: tA.entityId!,
       teamBEntityId: tB.entityId!,
-      goalsA: result.goalsA,
-      goalsB: result.goalsB,
-      esId: result.noShowTeam != null ? 4 : null,
+      goalsA: goalsA,
+      goalsB: goalsB,
     );
 
     await _checkNoShows(tA.teamId);
@@ -1051,5 +1233,186 @@ class _GameData {
   final String? eventResult;
   final int? esId;
 
-  _GameData({required this.eventId, this.eventResult, this.esId});
+  const _GameData({required this.eventId, this.eventResult, this.esId});
+}
+
+/// Result from the score dialog.
+/// Either a pair of goal scores, or a no-show indicator for one team.
+class _ScoreDialogResult {
+  final int? goalsA;
+  final int? goalsB;
+  /// Which team didn't show: 'A' or 'B', or null for normal result.
+  final String? noShowTeam;
+
+  _ScoreDialogResult.goals(this.goalsA, this.goalsB) : noShowTeam = null;
+  _ScoreDialogResult.noShow(this.noShowTeam) : goalsA = null, goalsB = null;
+}
+
+class _StreetballScoreDialog extends StatelessWidget {
+  final String teamAName;
+  final String teamBName;
+  final TextEditingController controllerA;
+  final TextEditingController controllerB;
+  final bool hasExisting;
+  final VoidCallback? onDelete;
+
+  const _StreetballScoreDialog({
+    required this.teamAName,
+    required this.teamBName,
+    required this.controllerA,
+    required this.controllerB,
+    required this.hasExisting,
+    this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        '$teamAName — $teamBName',
+        style: const TextStyle(fontSize: 16),
+      ),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header with team names
+            Row(
+              children: [
+                const SizedBox(width: 60),
+                Expanded(
+                  child: Text(
+                    teamAName,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    teamBName,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Score input row
+            Row(
+              children: [
+                const SizedBox(
+                  width: 60,
+                  child: Text(
+                    'Рахунок',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: controllerA,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textAlign: TextAlign.center,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(':', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: controllerB,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textAlign: TextAlign.center,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        // No-show button with dropdown (left side)
+        PopupMenuButton<String>(
+          tooltip: 'Неявка команди',
+          offset: const Offset(0, -100),
+          onSelected: (team) {
+            Navigator.pop(context, _ScoreDialogResult.noShow(team));
+          },
+          itemBuilder: (ctx) => [
+            PopupMenuItem(
+              value: 'A',
+              child: Text('Неявка: $teamAName'),
+            ),
+            PopupMenuItem(
+              value: 'B',
+              child: Text('Неявка: $teamBName'),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.orange.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.person_off, size: 16, color: Colors.orange.shade700),
+                const SizedBox(width: 4),
+                Text('Неявка', style: TextStyle(color: Colors.orange.shade700)),
+              ],
+            ),
+          ),
+        ),
+        // Right side: delete + cancel + save
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasExisting && onDelete != null)
+              TextButton(
+                onPressed: onDelete,
+                child: const Text('Видалити', style: TextStyle(color: Colors.red)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Скасувати'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () {
+                final a = int.tryParse(controllerA.text) ?? 0;
+                final b = int.tryParse(controllerB.text) ?? 0;
+                Navigator.pop(context, _ScoreDialogResult.goals(a, b));
+              },
+              child: const Text('Зберегти'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
