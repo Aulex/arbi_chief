@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../../services/database_service.dart';
 
 /// Streetball-specific database operations.
@@ -58,6 +60,97 @@ class StreetballService {
     await db.transaction((txn) async {
       await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
       await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+    });
+  }
+
+  // --- Group Management (same approach as Volleyball) ---
+
+  /// Get group assignments for all teams in a tournament.
+  /// Returns Map<teamId, groupName>.
+  Future<Map<int, String>> getGroupAssignments(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 11',
+      whereArgs: [tId],
+    );
+    final result = <int, String>{};
+    for (final row in rows) {
+      final teamId = row['team_id'] as int;
+      final group = row['attr_value'] as String? ?? '';
+      if (group.isNotEmpty) result[teamId] = group;
+    }
+    return result;
+  }
+
+  /// Set group assignment for a team.
+  Future<void> setGroupAssignment(int tId, int teamId, String group) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 11',
+      whereArgs: [tId, teamId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'CMP_TEAM_ATTR',
+        {'attr_value': group},
+        where: 'ta_id = ?',
+        whereArgs: [existing.first['ta_id']],
+      );
+    } else {
+      await db.insert('CMP_TEAM_ATTR', {
+        'team_id': teamId,
+        't_id': tId,
+        'attr_id': 11,
+        'attr_value': group,
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_sb_grp_$teamId',
+      });
+    }
+  }
+
+  /// Clear all group assignments for a tournament.
+  Future<void> clearGroupAssignments(int tId) async {
+    final db = await _dbService.database;
+    await db.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 11', whereArgs: [tId]);
+  }
+
+  /// Auto-assign groups: for 9+ teams create balanced groups of 3-5 teams.
+  Future<void> autoAssignGroups(int tId, List<int> teamIds) async {
+    if (teamIds.isEmpty) return;
+    final db = await _dbService.database;
+
+    final teamCount = teamIds.length;
+    int groupCount;
+    if (teamCount <= 8) {
+      groupCount = 1;
+    } else {
+      groupCount = (teamCount / 4).ceil();
+      while (groupCount > 1 && (teamCount / groupCount) < 3) {
+        groupCount--;
+      }
+      while ((teamCount / groupCount) > 5) {
+        groupCount++;
+      }
+    }
+
+    final shuffled = List<int>.from(teamIds)..shuffle(Random());
+    final groupNames = List.generate(groupCount, (i) => String.fromCharCode(65 + i));
+
+    await db.transaction((txn) async {
+      await txn.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 11', whereArgs: [tId]);
+
+      for (int i = 0; i < shuffled.length; i++) {
+        final groupName = groupNames[i % groupCount];
+        await txn.insert('CMP_TEAM_ATTR', {
+          'team_id': shuffled[i],
+          't_id': tId,
+          'attr_id': 11,
+          'attr_value': groupName,
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_sb_grp_${shuffled[i]}',
+        });
+      }
     });
   }
 }
