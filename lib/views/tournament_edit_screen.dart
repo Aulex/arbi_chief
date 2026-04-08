@@ -14,6 +14,7 @@ import '../sports/arm_wrestling/arm_wrestling_team_standings_tab.dart';
 import '../sports/futsal/futsal_cross_table_tab.dart';
 import '../sports/basketball/basketball_cross_table_tab.dart';
 import '../sports/streetball/streetball_cross_table_tab.dart';
+import '../sports/streetball/streetball_group_management_tab.dart';
 import '../sports/tug_of_war/tug_of_war_cross_table_tab.dart';
 import '../sports/athletics/athletics_results_tab.dart';
 import '../sports/athletics/athletics_team_standings_tab.dart';
@@ -45,8 +46,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
   SportTypeConfig get _sportConfig => getConfigForType(widget.tournament.t_type);
   bool get _isSwimming => isSwimming(widget.tournament.t_type);
   bool get _isVolleyball => isVolleyball(widget.tournament.t_type);
+  bool get _isStreetball => widget.tournament.t_type == 5;
   bool get _isArmWrestling => isArmWrestling(widget.tournament.t_type);
   int _volleyballTeamCount = 0;
+  int _streetballTeamCount = 0;
   TabController? _tabController;
 
   @override
@@ -63,6 +66,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (widget.tournament.t_type == 8) return 5; // Powerlifting
     if (widget.tournament.t_type == 13) return 5; // Kettlebell
     if (_isVolleyball) return _volleyballTeamCount >= 9 ? 5 : 4;
+    if (_isStreetball) return _streetballTeamCount >= 9 ? 5 : 4;
     return 4;
   }
 
@@ -72,7 +76,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
       int newIndex = _tabController?.index ?? 0;
       
       // If tab count changes for Volleyball (Groups tab added/removed), adjust index
-      if (_tabController != null && _isVolleyball) {
+      if (_tabController != null && (_isVolleyball || _isStreetball)) {
         if (_tabController!.length == 4 && neededLength == 5) {
           // Groups tab added at index 1
           if (newIndex >= 1) newIndex++;
@@ -99,6 +103,9 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (_isVolleyball) {
       _loadVolleyballTeamCount();
     }
+    if (_isStreetball) {
+      _loadStreetballTeamCount();
+    }
   }
 
   Future<void> _loadVolleyballTeamCount() async {
@@ -107,6 +114,17 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (mounted) {
       setState(() {
         _volleyballTeamCount = teams.length;
+        _ensureTabController();
+      });
+    }
+  }
+
+  Future<void> _loadStreetballTeamCount() async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final teams = await teamSvc.getTeamListForTournament(widget.tournament.t_id!);
+    if (mounted) {
+      setState(() {
+        _streetballTeamCount = teams.length;
         _ensureTabController();
       });
     }
@@ -291,17 +309,22 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (widget.tournament.t_type == 5) { // Streetball
-      tabCount = 4;
-      tabs = const [
+      final showGroups = _streetballTeamCount >= 9;
+      tabCount = showGroups ? 5 : 4;
+      tabs = [
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+        if (showGroups)
+          const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.group_work_outlined, size: 18), SizedBox(width: 6), Text('Групи')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         StreetballCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
+        if (showGroups)
+          StreetballGroupManagementTab(tId: widget.tournament.t_id!),
         TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
-        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig, onTeamsChanged: _loadStreetballTeamCount),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (widget.tournament.t_type == 14) { // Tug of War
