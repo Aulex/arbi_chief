@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "arbi_chief" "\0"
+            VALUE "FileDescription", "\u041c\u0435\u043d\u0435\u0434\u0436\u0435\u0440 \u0442\u0443\u0440\u043d\u0456\u0440\u0456\u0432" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "arbi_chief" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "arbi_chief.exe" "\0"
-            VALUE "ProductName", "arbi_chief" "\0"
+            VALUE "ProductName", "\u041c\u0435\u043d\u0435\u0434\u0436\u0435\u0440 \u0442\u0443\u0440\u043d\u0456\u0440\u0456\u0432" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

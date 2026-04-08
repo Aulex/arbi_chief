@@ -3,6 +3,7 @@ import '../models/tournament_model.dart';
 import '../models/player_model.dart';
 import '../services/tournament_service.dart';
 import 'shared_providers.dart';
+import 'sport_type_provider.dart';
 
 // --- Service Provider ---
 final tournamentServiceProvider = Provider(
@@ -13,8 +14,8 @@ final tournamentServiceProvider = Provider(
 class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
   @override
   Future<List<Tournament>> build() async {
-    // Watching the service ensures we refresh if the database connection changes
-    return ref.watch(tournamentServiceProvider).getAllTournaments();
+    final tType = ref.watch(selectedSportTypeProvider);
+    return ref.watch(tournamentServiceProvider).getAllTournaments(tType: tType);
   }
 
   Future<void> addTournament({
@@ -33,15 +34,19 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     bool? allowSubstitutes,
     Map<String, String>? scoringPoints,
     List<String>? selectedTieBreakers,
+    String? finalsPlaces,
+    String? crossGroupMatchPlaces,
+    String? cyclePlaces,
   }) async {
     final svc = ref.read(tournamentServiceProvider);
+    final effectiveTypeId = typeId ?? ref.read(selectedSportTypeProvider);
 
     final t = Tournament(
       t_id: existingId,
       t_name: name,
       t_date_begin: Tournament.formatForDB(dateBegin),
       t_date_end: Tournament.formatForDB(dateEnd),
-      t_type: typeId,
+      t_type: effectiveTypeId,
       t_location: locationId,
       t_org: organizerId,
     );
@@ -114,6 +119,27 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
         }
       }
       await svc.saveAttrValues(tId: tId, attrId: 8, values: values);
+    }
+
+    // attr_id=12: "Місця до фіналу" — TEXT
+    if (finalsPlaces != null && finalsPlaces.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 12, attrValue: finalsPlaces);
+    } else {
+      await svc.deleteAttrValue(tId: tId, attrId: 12);
+    }
+
+    // attr_id=13: "Місця для стикових матчів" — TEXT
+    if (crossGroupMatchPlaces != null && crossGroupMatchPlaces.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 13, attrValue: crossGroupMatchPlaces);
+    } else {
+      await svc.deleteAttrValue(tId: tId, attrId: 13);
+    }
+
+    // attr_id=14: "Місця для колових матчів" — TEXT
+    if (cyclePlaces != null && cyclePlaces.isNotEmpty) {
+      await svc.saveAttrValue(tId: tId, attrId: 14, attrValue: cyclePlaces);
+    } else {
+      await svc.deleteAttrValue(tId: tId, attrId: 14);
     }
 
     ref.invalidateSelf();

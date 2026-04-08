@@ -1,0 +1,54 @@
+# Build artifacts
+build/
+.dart_tool/
+.pub-cache/
+.pub/
+
+# Generated files
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.metadata
+
+# Platform-specific generated files
+android/.gradle/
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/build/
+windows/build/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+linux/flutter/generated_plugins.cmake
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Pods/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+
+# Binary and media assets not useful for code context
+*.png
+*.jpg
+*.jpeg
+*.ico
+*.icns
+*.svg
+
+# Git
+.git/

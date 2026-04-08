@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../viewmodels/navigation_viewmodel.dart';
-import '../viewmodels/nav_provider.dart'; // Import the new one
-import 'player_view.dart';
-import 'team_view.dart';
+import '../viewmodels/nav_provider.dart';
+import '../viewmodels/sport_type_provider.dart';
+import '../viewmodels/tournament_viewmodel.dart';
 import 'tournament_view.dart';
 import 'tournament_add_screen.dart';
 import 'tournament_edit_screen.dart';
+import 'reports_list_view.dart';
+import 'settings_view.dart';
+import 'sport_selection_screen.dart';
 
 class MainView extends ConsumerWidget {
   const MainView({super.key});
@@ -32,18 +36,35 @@ class MainView extends ConsumerWidget {
 
     final List<Widget> screens = [
       tournamentScreen,
-      const PlayerView(),
-      const TeamView(),
+      const ReportsListView(),
+      const SettingsView(),
     ];
 
+    final appBarTitle = tournamentNav.view == 'edit' && tournamentNav.tournament != null
+        ? 'Менеджер турнірів: ${tournamentNav.tournament!.t_name}'
+        : 'Менеджер турнірів';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Менеджер турнірів'), elevation: 2),
+      appBar: AppBar(
+        title: Text(appBarTitle),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const SportSelectionScreen()),
+              );
+            },
+            icon: const Icon(Icons.swap_horiz_rounded, size: 28),
+            label: const Text('Змінити вид спорту'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: Row(
         children: [
           NavigationRail(
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) {
-              // Using your Notifier method
               ref.read(navigationProvider.notifier).setTab(index);
 
               // Reset tournament view to list if user switches away and back
@@ -54,16 +75,16 @@ class MainView extends ConsumerWidget {
             labelType: NavigationRailLabelType.all,
             destinations: const [
               NavigationRailDestination(
-                icon: Icon(Icons.emoji_events),
+                icon: Icon(Symbols.emoji_events_rounded),
                 label: Text('Турніри'),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.people),
-                label: Text('Гравці'),
+                icon: Icon(Icons.summarize),
+                label: Text('Звіти'),
               ),
               NavigationRailDestination(
-                icon: Icon(Icons.groups),
-                label: Text('Команди'),
+                icon: Icon(Icons.settings),
+                label: Text('Налаштування'),
               ),
             ],
           ),
@@ -71,7 +92,6 @@ class MainView extends ConsumerWidget {
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
-              // Key needs to change when either the main tab or the sub-view changes
               child: Container(
                 key: ValueKey<String>('$selectedIndex-${tournamentNav.view}-${tournamentNav.tournament?.t_id}'),
                 child: screens[selectedIndex],

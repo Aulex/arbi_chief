@@ -6,6 +6,7 @@ class Tournament {
   final String t_date_end;
   final int? t_location;
   final int? t_org;
+  final String? sync_uid;
 
   const Tournament({
     this.t_id,
@@ -15,6 +16,7 @@ class Tournament {
     required this.t_date_end,
     this.t_location,
     this.t_org,
+    this.sync_uid,
   });
 
   // --- Date Helpers (similar to Player model) ---
@@ -42,6 +44,7 @@ class Tournament {
     String? t_date_end,
     int? t_location,
     int? t_org,
+    String? sync_uid,
   }) {
     return Tournament(
       t_id: t_id ?? this.t_id,
@@ -51,6 +54,7 @@ class Tournament {
       t_date_end: t_date_end ?? this.t_date_end,
       t_location: t_location ?? this.t_location,
       t_org: t_org ?? this.t_org,
+      sync_uid: sync_uid ?? this.sync_uid,
     );
   }
 
@@ -62,6 +66,7 @@ class Tournament {
     t_date_end: json['t_date_end'] as String? ?? '',
     t_location: json['t_location'] as int?,
     t_org: json['t_org'] as int?,
+    sync_uid: json['sync_uid'] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -72,5 +77,6 @@ class Tournament {
     't_date_end': t_date_end,
     't_location': t_location,
     't_org': t_org,
+    'sync_uid': sync_uid,
   };
 }
