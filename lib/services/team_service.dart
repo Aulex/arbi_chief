@@ -5,13 +5,13 @@ import 'database_service.dart';
 class PlayerTeamAssignment {
   final int? pte_id;
   final int team_id;
-  final int player_id;
-  final int player_state; // 0 = active member, 1 = reserve
+  final int? player_id;
+  final int player_state; // 0 = active member, 1 = reserve, 2 = placeholder
 
   const PlayerTeamAssignment({
     this.pte_id,
     required this.team_id,
-    required this.player_id,
+    this.player_id,
     required this.player_state,
   });
 
@@ -19,7 +19,7 @@ class PlayerTeamAssignment {
     return PlayerTeamAssignment(
       pte_id: json['pte_id'] as int?,
       team_id: json['team_id'] as int,
-      player_id: json['player_id'] as int,
+      player_id: json['player_id'] as int?,
       player_state: json['player_state'] as int? ?? 0,
     );
   }
@@ -30,9 +30,14 @@ class TeamService {
 
   TeamService(this._dbService);
 
-  Future<List<Team>> getAllTeams() async {
+  Future<List<Team>> getAllTeams({int? tType}) async {
     final db = await _dbService.database;
-    final List<Map<String, dynamic>> maps = await db.query('CMP_TEAM');
+    final List<Map<String, dynamic>> maps;
+    if (tType != null) {
+      maps = await db.query('CMP_TEAM', where: 't_type = ?', whereArgs: [tType]);
+    } else {
+      maps = await db.query('CMP_TEAM');
+    }
     return List.generate(maps.length, (i) => Team.fromJson(maps[i]));
   }
 
@@ -40,8 +45,15 @@ class TeamService {
     final db = await _dbService.database;
     final data = team.toJson();
     if (team.team_id == null) {
+      // New team: create CMP_ENTITY first
+      final entId = await db.insert('CMP_ENTITY', {
+        'entity_type_id': 2,
+        'sync_uid': await SyncUidGenerator.generate(),
+      });
+      data['entity_id'] = entId;
+      data['sync_uid'] = await SyncUidGenerator.generate();
       final id = await db.insert('CMP_TEAM', data);
-      return team.copyWith(team_id: id);
+      return team.copyWith(team_id: id, entity_id: entId);
     } else {
       await db.update(
         'CMP_TEAM',
@@ -55,6 +67,13 @@ class TeamService {
 
   Future<void> deleteTeam(int id) async {
     final db = await _dbService.database;
+    // Get entity_id before deleting
+    final teamRows = await db.query('CMP_TEAM', columns: ['entity_id'], where: 'team_id = ?', whereArgs: [id]);
+    final entityId = teamRows.isNotEmpty ? teamRows.first['entity_id'] as int? : null;
+    // Delete CMP_SUBEVENT records referencing this entity
+    if (entityId != null) {
+      await db.delete('CMP_SUBEVENT', where: 'entity_id = ?', whereArgs: [entityId]);
+    }
     // Delete attr values for all player-team assignments of this team
     final assignments = await db.query(
       'CMP_PLAYER_TEAM',
@@ -71,6 +90,10 @@ class TeamService {
     }
     await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ?', whereArgs: [id]);
     await db.delete('CMP_TEAM', where: 'team_id = ?', whereArgs: [id]);
+    // Delete orphaned CMP_ENTITY
+    if (entityId != null) {
+      await db.delete('CMP_ENTITY', where: 'ent_id = ?', whereArgs: [entityId]);
+    }
   }
 
   Future<List<PlayerTeamAssignment>> getTeamAssignments(int teamId, int tId) async {
@@ -151,6 +174,18 @@ class TeamService {
         'asgn_date': today,
       });
     }
+
+    // Keep a placeholder row so the team stays visible in the tournament
+    if (boardMembers.isEmpty && reserves.isEmpty) {
+      await db.insert('CMP_PLAYER_TEAM', {
+        'team_id': teamId,
+        'player_id': null,
+        't_id': tId,
+        'team_number': teamNumber,
+        'player_state': 2,
+        'asgn_date': today,
+      });
+    }
   }
 
   /// Get team number for a team in a tournament.
@@ -165,6 +200,78 @@ class TeamService {
     );
     if (rows.isEmpty) return null;
     return rows.first['team_number'] as int?;
+  }
+
+  /// Register a team in a tournament (creates a placeholder row so the team is visible).
+  Future<void> registerTeamInTournament(int teamId, int tId, int teamNumber) async {
+    final db = await _dbService.database;
+    final today = DateTime.now().toIso8601String().split('T').first;
+    // Check if team already has entries
+    final existing = await db.query(
+      'CMP_PLAYER_TEAM',
+      where: 'team_id = ? AND t_id = ?',
+      whereArgs: [teamId, tId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await setTeamNumber(teamId, tId, teamNumber);
+      return;
+    }
+    // Insert a placeholder row to register the team
+    await db.insert('CMP_PLAYER_TEAM', {
+      'team_id': teamId,
+      'player_id': null,
+      't_id': tId,
+      'team_number': teamNumber,
+      'player_state': 2,
+      'asgn_date': today,
+    });
+  }
+
+  /// Remove a team from a tournament (deletes all assignment rows and resets player results).
+  Future<void> removeTeamFromTournament(int teamId, int tId) async {
+    final db = await _dbService.database;
+
+    // Get all player IDs assigned to this team in this tournament
+    final playerRows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['player_id'],
+      where: 'team_id = ? AND t_id = ? AND player_id IS NOT NULL',
+      whereArgs: [teamId, tId],
+    );
+    final playerIds = playerRows.map((r) => r['player_id'] as int).toSet();
+
+    // Delete games and results for these players in this tournament
+    for (final playerId in playerIds) {
+      final entId = await _dbService.ensurePlayerEntity(db, playerId);
+      final eventRows = await db.rawQuery('''
+        SELECT DISTINCT e.event_id
+        FROM CMP_EVENT e
+        JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
+        WHERE e.t_id = ? AND se.entity_id = ?
+      ''', [tId, entId]);
+      for (final er in eventRows) {
+        final eventId = er['event_id'] as int;
+        await db.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+        await db.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+      }
+    }
+
+    // Clean up attr values
+    final assignments = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['pte_id'],
+      where: 'team_id = ? AND t_id = ?',
+      whereArgs: [teamId, tId],
+    );
+    for (final a in assignments) {
+      await db.delete(
+        'CMP_PLAYER_TEAM_ATTR_VALUE',
+        where: 'pte_id = ?',
+        whereArgs: [a['pte_id']],
+      );
+    }
+    await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ? AND t_id = ?', whereArgs: [teamId, tId]);
   }
 
   /// Set team number for a team in a tournament.
@@ -190,13 +297,25 @@ class TeamService {
     return { for (final r in rows) r['board_number'] as int: r['player_id'] as int };
   }
 
+  /// Returns player IDs that are team members (reserves, player_state=1) for a team in a tournament.
+  Future<List<int>> getTeamMemberIds(int teamId, int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['player_id'],
+      where: 'team_id = ? AND t_id = ? AND player_state = 1 AND player_id IS NOT NULL',
+      whereArgs: [teamId, tId],
+    );
+    return rows.map((r) => r['player_id'] as int).toList();
+  }
+
   /// Returns player IDs assigned to any team OTHER than [excludeTeamId] in this tournament.
   Future<Set<int>> getPlayersInOtherTeams(int excludeTeamId, int tId) async {
     final db = await _dbService.database;
     final rows = await db.query(
       'CMP_PLAYER_TEAM',
       columns: ['player_id'],
-      where: 'team_id != ? AND t_id = ?',
+      where: 'team_id != ? AND t_id = ? AND player_id IS NOT NULL',
       whereArgs: [excludeTeamId, tId],
     );
     return rows.map((r) => r['player_id'] as int).toSet();
@@ -408,7 +527,7 @@ class TeamService {
       SELECT pt.player_id
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
-      WHERE pt.t_id = ? AND v.attr_id = 10 AND v.attr_value = '1'
+      WHERE pt.t_id = ? AND v.attr_id = 10 AND v.attr_value = '1' AND pt.player_id IS NOT NULL
     ''', [tId]);
     return rows.map((r) => r['player_id'] as int).toSet();
   }
@@ -430,5 +549,22 @@ class TeamService {
       where: 'pte_id = ? AND attr_id = 10',
       whereArgs: [pteId],
     );
+  }
+
+  /// Returns a map of player ID to their assigned Team in a specific tournament.
+  Future<Map<int, Team>> getPlayerTeamsMap(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, t.team_id, t.team_name, t.t_type
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_TEAM t ON pt.team_id = t.team_id
+      WHERE pt.t_id = ? AND pt.player_id IS NOT NULL
+    ''', [tId]);
+    
+    final Map<int, Team> result = {};
+    for (final r in rows) {
+      result[r['player_id'] as int] = Team.fromJson(r);
+    }
+    return result;
   }
 }

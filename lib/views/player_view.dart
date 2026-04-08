@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../viewmodels/player_viewmodel.dart';
+import '../viewmodels/team_viewmodel.dart';
 import '../models/player_model.dart';
+import '../models/team_model.dart';
 
 class PlayerView extends ConsumerWidget {
   const PlayerView({super.key});
@@ -11,7 +13,7 @@ class PlayerView extends ConsumerWidget {
     final playersAsync = ref.watch(playerProvider);
 
     return Card(
-      margin: const EdgeInsets.all(24),
+      margin: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -39,21 +41,43 @@ class PlayerView extends ConsumerWidget {
                     ),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: () => _showForm(context, ref),
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Додати гравця'),
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.indigo,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => _showBulkImportDialog(context, ref),
+                      icon: const Icon(Icons.content_paste),
+                      label: const Text('Імпорт з Excel'),
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.teal,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _showForm(context, ref),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Додати гравця'),
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.indigo,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -241,7 +265,7 @@ class PlayerView extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: _buildField(surnameC, 'Прізвище'),
+                          child: _buildField(surnameC, 'Прізвище', autofocus: !isEdit),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -357,13 +381,276 @@ class PlayerView extends ConsumerWidget {
     );
   }
 
-  Widget _buildField(TextEditingController c, String label) {
+  Widget _buildField(TextEditingController c, String label, {bool autofocus = false}) {
     return TextField(
       controller: c,
+      autofocus: autofocus,
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
+
+  void _showBulkImportDialog(BuildContext context, WidgetRef ref) {
+    final textC = TextEditingController();
+    bool isImporting = false;
+
+    // Use controller listener to catch ALL text changes (typing, paste, programmatic)
+    late void Function(void Function()) _setST;
+    textC.addListener(() {
+      _setST(() {});
+    });
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setST) {
+          _setST = setST;
+          final parsed = _parseImportText(textC.text);
+          final teamNames = parsed.map((r) => r.teamName).toSet();
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 750, maxHeight: 650),
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.content_paste, color: Colors.teal),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Імпорт гравців та команд з Excel',
+                          style: Theme.of(dialogContext)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Вставте дані з Excel. Формат рядка: Прізвище  Ім\'я  По батькові  Команда',
+                      style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 180,
+                      child: TextField(
+                        controller: textC,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        decoration: InputDecoration(
+                          hintText: 'Іванов\tІван\tІванович\tДинамо',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onChanged: (_) {
+                          setST(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (parsed.isNotEmpty) ...[
+                      Text(
+                        'Знайдено: ${parsed.length} гравців у ${teamNames.length} командах',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: teamNames.map((teamName) {
+                              final teamPlayers = parsed.where((r) => r.teamName == teamName).toList();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        teamName,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal.shade800,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ...teamPlayers.map((p) => Padding(
+                                      padding: const EdgeInsets.only(left: 16, top: 2),
+                                      child: Text(
+                                        '${p.surname} ${p.name} ${p.lastname}  —  ${p.gender == 0 ? 'Ч' : 'Ж'}',
+                                        style: Theme.of(dialogContext).textTheme.bodyMedium,
+                                      ),
+                                    )),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ] else
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            'Вставте дані для перегляду',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: isImporting ? null : () => Navigator.pop(dialogContext),
+                          child: const Text('Скасувати'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          icon: isImporting
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.download),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: parsed.isEmpty || isImporting
+                              ? null
+                              : () async {
+                                  setST(() => isImporting = true);
+                                  await _performBulkImport(ref, parsed);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                },
+                          label: Text(isImporting ? 'Імпорт...' : 'Імпортувати'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  List<_ImportRow> _parseImportText(String text) {
+    // Replace all Unicode whitespace characters (from Excel) with regular spaces
+    text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
+    final lines = text.split('\n').where((l) => l.trim().isNotEmpty);
+    final result = <_ImportRow>[];
+    for (final line in lines) {
+      List<String> parts;
+      if (line.contains('\t')) {
+        parts = line.split('\t').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      } else {
+        parts = line.trim().split(RegExp(r'\s+'));
+      }
+      if (parts.length >= 4) {
+        final surname = parts[0];
+        final name = parts[1];
+        final lastname = parts[2];
+        final teamName = parts.sublist(3).join(' ');
+        final gender = Player.detectGender(name, lastname);
+        result.add(_ImportRow(
+          surname: surname,
+          name: name,
+          lastname: lastname,
+          teamName: teamName,
+          gender: gender,
+        ));
+      }
+    }
+    return result;
+  }
+
+  Future<void> _performBulkImport(WidgetRef ref, List<_ImportRow> rows) async {
+    // Get unique team names from import
+    final teamNames = rows.map((r) => r.teamName).toSet();
+
+    // Load existing teams
+    List<Team> existingTeams;
+    try {
+      existingTeams = await ref.read(teamProvider.future);
+    } catch (_) {
+      existingTeams = [];
+    }
+
+    // Create missing teams
+    for (final name in teamNames) {
+      final exists = existingTeams.any(
+        (t) => t.team_name.toLowerCase() == name.toLowerCase(),
+      );
+      if (!exists) {
+        final newTeam = await ref.read(teamProvider.notifier).addTeam(name: name);
+        existingTeams.add(newTeam);
+      }
+    }
+
+    // Bulk-add players
+    final playerData = rows
+        .map((r) => (
+              name: r.name,
+              surname: r.surname,
+              lastname: r.lastname,
+              gender: r.gender,
+              dob: '',
+            ))
+        .toList();
+    await ref.read(playerProvider.notifier).bulkAddPlayers(playerData);
+  }
+}
+
+class _ImportRow {
+  final String surname;
+  final String name;
+  final String lastname;
+  final String teamName;
+  final int gender;
+
+  const _ImportRow({
+    required this.surname,
+    required this.name,
+    required this.lastname,
+    required this.teamName,
+    required this.gender,
+  });
 }

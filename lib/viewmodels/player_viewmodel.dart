@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../services/player_service.dart';
 import 'shared_providers.dart';
+import 'sport_type_provider.dart';
 
 // --- Search Logic ---
 final playerSearchProvider = NotifierProvider<PlayerSearchNotifier, String>(
@@ -24,32 +25,48 @@ final playerServiceProvider = Provider(
 class PlayerNotifier extends AsyncNotifier<List<Player>> {
   @override
   Future<List<Player>> build() async {
-    // Automatically re-fetches when playerServiceProvider changes
-    return ref.watch(playerServiceProvider).getAllPlayers();
+    final tType = ref.watch(selectedSportTypeProvider);
+    return ref.watch(playerServiceProvider).getAllPlayers(tType: tType);
   }
 
-  // Updated to match CMP_PLAYER table and your Player model 🧬
   Future<void> addPlayer({
     required String name,
     required String surname,
     required String lastname,
     required int gender,
-    required String dob, // Expecting "dd.mm.yyyy" from the UI
+    required String dob,
   }) async {
+    final tType = ref.read(selectedSportTypeProvider);
     final p = Player(
-      player_id: null, // SQLite handles autoincrement
+      player_id: null,
       player_name: name,
       player_surname: surname,
       player_lastname: lastname,
       player_gender: gender,
-      // Uses the static helper in your model to store as "yyyy-mm-dd" 📅
       player_date_birth: Player.formatForDB(dob),
+      t_type: tType,
     );
 
     await ref.read(playerServiceProvider).savePlayer(p);
-
-    // Refresh the local state 🔄
     ref.invalidateSelf();
+  }
+
+  /// Bulk-insert players in a single transaction and invalidate once.
+  /// Returns the generated player IDs.
+  Future<List<int>> bulkAddPlayers(List<({String name, String surname, String lastname, int gender, String dob})> players) async {
+    final tType = ref.read(selectedSportTypeProvider);
+    final playerObjects = players.map((p) => Player(
+      player_id: null,
+      player_name: p.name,
+      player_surname: p.surname,
+      player_lastname: p.lastname,
+      player_gender: p.gender,
+      player_date_birth: Player.formatForDB(p.dob),
+      t_type: tType,
+    )).toList();
+    final ids = await ref.read(playerServiceProvider).bulkSavePlayers(playerObjects);
+    ref.invalidateSelf();
+    return ids;
   }
 
   Future<void> updatePlayer(Player player) async {
@@ -58,7 +75,6 @@ class PlayerNotifier extends AsyncNotifier<List<Player>> {
   }
 
   Future<void> removePlayer(int id) async {
-    // Optimistic update: remove from local list immediately
     final current = state.value ?? [];
     state = AsyncData(current.where((p) => p.player_id != id).toList());
     await ref.read(playerServiceProvider).deletePlayer(id);
