@@ -36,6 +36,7 @@ class _StreetballGroupManagementTabState
     final teams = await teamSvc.getTeamListForTournament(widget.tId);
     final groups = await sbSvc.getGroupAssignments(widget.tId);
 
+    if (!mounted) return;
     setState(() {
       _teams = teams;
       _groups = groups;
