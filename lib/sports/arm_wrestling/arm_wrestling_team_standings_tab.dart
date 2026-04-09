@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../viewmodels/tournament_viewmodel.dart';
 import 'arm_wrestling_providers.dart';
@@ -20,6 +21,7 @@ class _ArmWrestlingTeamStandingsTabState
   List<ArmWrestlingTeamStanding> _teamStandings = [];
   Map<int, List<ArmWrestlingStanding>> _categoryStandings = {};
   Map<int, ({bool isValid, int count, String label})> _categoryValidation = {};
+  Map<int, double> _playerWeights = {};
 
   @override
   void initState() {
@@ -98,6 +100,7 @@ class _ArmWrestlingTeamStandingsTabState
         _categoryStandings = catStandings;
         _teamStandings = teamStandings;
         _categoryValidation = categoryValidation;
+        _playerWeights = playerWeights;
         _loading = false;
       });
     }
@@ -245,15 +248,50 @@ class _ArmWrestlingTeamStandingsTabState
     return widgets;
   }
 
+  Future<void> _editWeight(int playerId, String playerName, double? currentWeight) async {
+    final ctrl = TextEditingController(text: currentWeight?.toStringAsFixed(1) ?? '');
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Вага\n$playerName', style: const TextStyle(fontSize: 16)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+          decoration: const InputDecoration(labelText: 'Вага (кг)', border: OutlineInputBorder()),
+          autofocus: true,
+          onSubmitted: (_) {
+            final w = double.tryParse(ctrl.text);
+            if (w != null && w > 0) Navigator.pop(ctx, w);
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+          ElevatedButton(onPressed: () {
+            final w = double.tryParse(ctrl.text);
+            if (w != null && w > 0) Navigator.pop(ctx, w);
+          }, child: const Text('Зберегти')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result != null) {
+      final svc = ref.read(armWrestlingServiceProvider);
+      await svc.savePlayerWeight(playerId: playerId, tId: widget.tId, weight: result);
+      await _loadData();
+    }
+  }
+
   Widget _buildStandingsTable(List<ArmWrestlingStanding> standings) {
     return Table(
       columnWidths: const {
         0: FixedColumnWidth(40),  // Place
         1: FlexColumnWidth(3),    // Player
         2: FlexColumnWidth(2),    // Team
-        3: FixedColumnWidth(60),  // Wins
-        4: FixedColumnWidth(60),  // Losses
-        5: FixedColumnWidth(60),  // Games
+        3: FixedColumnWidth(70),  // Weight
+        4: FixedColumnWidth(60),  // Wins
+        5: FixedColumnWidth(60),  // Losses
+        6: FixedColumnWidth(60),  // Games
       },
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
@@ -265,6 +303,7 @@ class _ArmWrestlingTeamStandingsTabState
             _headerCell('М'),
             _headerCell('Учасник'),
             _headerCell('Команда'),
+            _headerCell('Вага', align: TextAlign.center),
             _headerCell('П', align: TextAlign.center),
             _headerCell('Пор', align: TextAlign.center),
             _headerCell('Ігри', align: TextAlign.center),
@@ -279,6 +318,28 @@ class _ArmWrestlingTeamStandingsTabState
               _dataCell('${s.place}', fontWeight: FontWeight.bold),
               _dataCell(s.playerName),
               _dataCell(s.teamName),
+              GestureDetector(
+                onTap: () => _editWeight(s.playerId, s.playerName, _playerWeights[s.playerId]),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _playerWeights[s.playerId] != null
+                            ? '${_playerWeights[s.playerId]!.toStringAsFixed(1)}'
+                            : '-',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: _playerWeights[s.playerId] != null ? null : Colors.grey.shade400,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.edit, size: 12, color: Colors.indigo.shade300),
+                    ],
+                  ),
+                ),
+              ),
               _dataCell('${s.wins}', align: TextAlign.center,
                   color: s.wins > 0 ? Colors.green.shade700 : null),
               _dataCell('${s.losses}', align: TextAlign.center,
