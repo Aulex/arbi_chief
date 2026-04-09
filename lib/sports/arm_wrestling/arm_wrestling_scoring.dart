@@ -149,6 +149,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
   required Map<int, List<ArmWrestlingStanding>> categoryStandings,
   required Set<int> teamIds,
   required Map<int, String> teamNames,
+  Map<int, double> playerWeights = const {},
 }) {
   // Find the largest category size for penalty calculation
   int maxCategorySize = 0;
@@ -163,7 +164,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
 
   for (final teamId in teamIds) {
     // Collect best placement per category and all individual placements
-    final bestPerCategory = <int, ({int place, String categoryLabel})>{};
+    final bestPerCategory = <int, ({int playerId, int place, String categoryLabel})>{};
     final allPlacements = <int>[];
     final allIndividualPlacements = <int>[];
 
@@ -174,16 +175,18 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
 
       // Find best placement for this team in this category
       int? bestPlace;
+      int? bestPlayerId;
       for (final s in standings) {
         if (s.teamId == teamId) {
           allIndividualPlacements.add(s.place);
           if (bestPlace == null || s.place < bestPlace) {
             bestPlace = s.place;
+            bestPlayerId = s.playerId;
           }
         }
       }
       if (bestPlace != null) {
-        bestPerCategory[categoryId] = (place: bestPlace, categoryLabel: categoryLabel);
+        bestPerCategory[categoryId] = (playerId: bestPlayerId!, place: bestPlace, categoryLabel: categoryLabel);
         allPlacements.add(bestPlace);
       }
     }
@@ -194,6 +197,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
 
     final contributors = <({int categoryId, String categoryLabel, int place})>[];
     int totalPoints = 0;
+    double totalWeight = 0.0;
 
     for (int i = 0; i < 3; i++) {
       if (i < sortedCategories.length) {
@@ -204,6 +208,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
           place: entry.value.place,
         ));
         totalPoints += entry.value.place;
+        totalWeight += playerWeights[entry.value.playerId] ?? 0.0;
       } else {
         // Missing participant: penalty = last place in largest category + 1
         totalPoints += penaltyPlace;
@@ -215,6 +220,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
       teamName: teamNames[teamId] ?? '',
       totalPoints: totalPoints,
       contributors: contributors,
+      totalWeight: totalWeight,
       allPlacements: allPlacements..sort(),
       allIndividualPlacements: allIndividualPlacements..sort(),
     ));

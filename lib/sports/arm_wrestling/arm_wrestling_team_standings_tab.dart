@@ -31,10 +31,11 @@ class _ArmWrestlingTeamStandingsTabState
     final armSvc = ref.read(armWrestlingServiceProvider);
     final tournamentSvc = ref.read(tournamentServiceProvider);
 
-    // Load players by category and games
+    // Load players by category, weights, and games
     final playersByCategory = await armSvc.getPlayersByCategory(widget.tId);
     final teamNames = await armSvc.getTeamNames(widget.tId);
     final categoryValidation = await armSvc.validateCategories(widget.tId);
+    final playerWeights = await armSvc.getPlayerWeights(widget.tId);
     final games = await tournamentSvc.getGamesGroupedByBoard(widget.tId);
 
     // Build results per category (boardNum = categoryId)
@@ -89,6 +90,7 @@ class _ArmWrestlingTeamStandingsTabState
       categoryStandings: validCatStandings,
       teamIds: allTeamIds,
       teamNames: teamNames,
+      playerWeights: playerWeights,
     );
 
     if (mounted) {

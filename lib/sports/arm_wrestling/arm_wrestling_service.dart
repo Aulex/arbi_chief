@@ -165,4 +165,37 @@ class ArmWrestlingService {
         r['team_id'] as int: r['team_name'] as String? ?? '',
     };
   }
+
+  // --- Player Body Weight (attr_id=17) ---
+
+  /// Save player body weight (kg) via attr_id=17.
+  Future<void> savePlayerWeight({required int playerId, required int tId, required double weight}) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ? AND attr_id = 17', whereArgs: [pteId]);
+    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+      'pte_id': pteId, 'attr_id': 17, 'attr_value': weight.toString(),
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_pw_$playerId',
+    });
+  }
+
+  /// Get player weights for a tournament. Returns Map<playerId, weightKg>.
+  Future<Map<int, double>> getPlayerWeights(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, v.attr_value
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.t_id = ? AND v.attr_id = 17 AND v.attr_value IS NOT NULL
+    ''', [tId]);
+    final map = <int, double>{};
+    for (final r in rows) {
+      final w = double.tryParse(r['attr_value'] as String? ?? '');
+      if (w != null) map[r['player_id'] as int] = w;
+    }
+    return map;
+  }
 }
