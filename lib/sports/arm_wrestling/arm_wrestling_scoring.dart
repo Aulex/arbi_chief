@@ -118,8 +118,10 @@ class ArmWrestlingTeamStanding {
   final List<({int categoryId, String categoryLabel, int place})> contributors;
   /// Total weight of 3 contributors (for tiebreaker).
   final double totalWeight;
-  /// All placements across all categories.
+  /// Best placement per category, sorted (for contributor selection).
   final List<int> allPlacements;
+  /// ALL individual placements across all categories, sorted (for tiebreakers).
+  final List<int> allIndividualPlacements;
   int place;
 
   ArmWrestlingTeamStanding({
@@ -129,6 +131,7 @@ class ArmWrestlingTeamStanding {
     required this.contributors,
     this.totalWeight = 0.0,
     this.allPlacements = const [],
+    this.allIndividualPlacements = const [],
     this.place = 0,
   });
 }
@@ -159,9 +162,10 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
   final teamStandings = <ArmWrestlingTeamStanding>[];
 
   for (final teamId in teamIds) {
-    // Collect best placement per category for this team
+    // Collect best placement per category and all individual placements
     final bestPerCategory = <int, ({int place, String categoryLabel})>{};
     final allPlacements = <int>[];
+    final allIndividualPlacements = <int>[];
 
     for (final catEntry in categoryStandings.entries) {
       final categoryId = catEntry.key;
@@ -172,6 +176,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
       int? bestPlace;
       for (final s in standings) {
         if (s.teamId == teamId) {
+          allIndividualPlacements.add(s.place);
           if (bestPlace == null || s.place < bestPlace) {
             bestPlace = s.place;
           }
@@ -200,7 +205,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
         ));
         totalPoints += entry.value.place;
       } else {
-        // Missing participant: penalty
+        // Missing participant: penalty = last place in largest category + 1
         totalPoints += penaltyPlace;
       }
     }
@@ -211,6 +216,7 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
       totalPoints: totalPoints,
       contributors: contributors,
       allPlacements: allPlacements..sort(),
+      allIndividualPlacements: allIndividualPlacements..sort(),
     ));
   }
 
@@ -221,40 +227,61 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
       return a.totalPoints.compareTo(b.totalPoints);
     }
 
-    // Tiebreaker 1: more 1st, 2nd, 3rd places etc.
-    final maxPlace = _maxPlace(a.allPlacements, b.allPlacements);
+    // Tiebreaker 1: more 1st, 2nd, 3rd places etc. (all individual placements)
+    final maxPlace = _maxPlace(a.allIndividualPlacements, b.allIndividualPlacements);
     for (int p = 1; p <= maxPlace; p++) {
-      final aCount = a.allPlacements.where((x) => x == p).length;
-      final bCount = b.allPlacements.where((x) => x == p).length;
+      final aCount = a.allIndividualPlacements.where((x) => x == p).length;
+      final bCount = b.allIndividualPlacements.where((x) => x == p).length;
       if (aCount != bCount) return bCount.compareTo(aCount); // more is better
     }
 
     // Tiebreaker 2: better results in other categories not in team standing
-    // (compare remaining placements not used in contributors)
+    // (one best result per non-contributing category)
     final aContribCats = a.contributors.map((c) => c.categoryId).toSet();
     final bContribCats = b.contributors.map((c) => c.categoryId).toSet();
     final aOther = <int>[];
     final bOther = <int>[];
     for (final catEntry in categoryStandings.entries) {
       if (!aContribCats.contains(catEntry.key)) {
+        int? best;
         for (final s in catEntry.value) {
-          if (s.teamId == a.teamId) aOther.add(s.place);
+          if (s.teamId == a.teamId && (best == null || s.place < best)) {
+            best = s.place;
+          }
         }
+        if (best != null) aOther.add(best);
       }
       if (!bContribCats.contains(catEntry.key)) {
+        int? best;
         for (final s in catEntry.value) {
-          if (s.teamId == b.teamId) bOther.add(s.place);
+          if (s.teamId == b.teamId && (best == null || s.place < best)) {
+            best = s.place;
+          }
         }
+        if (best != null) bOther.add(best);
       }
     }
     aOther.sort();
     bOther.sort();
     final otherLen = aOther.length < bOther.length ? aOther.length : bOther.length;
     for (int i = 0; i < otherLen; i++) {
-      if (aOther[i] != bOther[i]) return aOther[i].compareTo(bOther[i]); // lower place is better
+      if (aOther[i] != bOther[i]) return aOther[i].compareTo(bOther[i]);
     }
 
-    // Tiebreaker 3: lower total weight (not tracked in DB, keep equal)
+    // Tiebreaker 3: better results from ALL weight categories (all individual placements)
+    final aAll = a.allIndividualPlacements;
+    final bAll = b.allIndividualPlacements;
+    final allLen = aAll.length < bAll.length ? aAll.length : bAll.length;
+    for (int i = 0; i < allLen; i++) {
+      if (aAll[i] != bAll[i]) return aAll[i].compareTo(bAll[i]);
+    }
+    if (aAll.length != bAll.length) return bAll.length.compareTo(aAll.length);
+
+    // Tiebreaker 4: lower total weight of 3 contributors
+    if (a.totalWeight > 0 && b.totalWeight > 0 && a.totalWeight != b.totalWeight) {
+      return a.totalWeight.compareTo(b.totalWeight);
+    }
+
     return 0;
   });
 

@@ -75,9 +75,18 @@ class _ArmWrestlingTeamStandingsTabState
       }
     }
 
+    // Only valid categories (≥5 participants) count for team standings
+    final validCatStandings = <int, List<ArmWrestlingStanding>>{};
+    for (final entry in catStandings.entries) {
+      final validation = categoryValidation[entry.key];
+      if (validation != null && validation.isValid) {
+        validCatStandings[entry.key] = entry.value;
+      }
+    }
+
     // Calculate team standings
     final teamStandings = calculateTeamStandings(
-      categoryStandings: catStandings,
+      categoryStandings: validCatStandings,
       teamIds: allTeamIds,
       teamNames: teamNames,
     );
