@@ -895,8 +895,8 @@ class _StreetballCrossTableTabState
                               Container(
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  color: Colors.black,
-                                  border: Border.all(color: Colors.black, width: 0.5),
+                                  color: Colors.grey.shade400,
+                                  border: Border.all(color: Colors.grey.shade400, width: 0.5),
                                 ),
                               ),
                               _hc('Команда'),
@@ -938,8 +938,8 @@ class _StreetballCrossTableTabState
                                 Container(
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    border: Border.all(color: Colors.black, width: 0.5),
+                                    color: Colors.grey.shade400,
+                                    border: Border.all(color: Colors.grey.shade400, width: 0.5),
                                   ),
                                 ),
                                 _nc(

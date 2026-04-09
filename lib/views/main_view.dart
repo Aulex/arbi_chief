@@ -41,8 +41,8 @@ class MainView extends ConsumerWidget {
     ];
 
     final appBarTitle = tournamentNav.view == 'edit' && tournamentNav.tournament != null
-        ? 'Менеджер турнірів: ${tournamentNav.tournament!.t_name}'
-        : 'Менеджер турнірів';
+        ? 'tournamentManager: ${tournamentNav.tournament!.t_name}'
+        : 'tournamentManager';
 
     return Scaffold(
       appBar: AppBar(

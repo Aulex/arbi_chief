@@ -46,7 +46,7 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Tournament Manager',
+      title: 'tournamentManager',
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
