@@ -67,7 +67,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final surnameC = TextEditingController(text: player.player_surname);
     final lastnameC = TextEditingController(text: player.player_lastname);
     final dobC = TextEditingController(text: player.birthDateForUI);
+    final weightC = TextEditingController();
     int gender = player.player_gender;
+    final needsWeight = const {8, 9, 13}.contains(widget.tType);
+
+    // Load existing weight
+    if (needsWeight && player.player_id != null) {
+      ref.read(tournamentServiceProvider).getPlayerWeight(
+        playerId: player.player_id!, tId: widget.tId,
+      ).then((w) {
+        if (w != null) weightC.text = w.toStringAsFixed(1);
+      });
+    }
 
     Future<void> pickDate(BuildContext dialogContext, StateSetter setST) async {
       final picked = await showDatePicker(
@@ -96,6 +107,11 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           player_date_birth: Player.formatForDB(dobC.text.trim()),
         ),
       );
+      final weightVal = double.tryParse(weightC.text.trim());
+      if (weightVal != null && weightVal > 0 && player.player_id != null) {
+        await ref.read(tournamentServiceProvider).savePlayerWeight(
+          playerId: player.player_id!, tId: widget.tId, weight: weightVal);
+      }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
       _loadData();
     }
@@ -205,6 +221,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         ),
                       ],
                     ),
+                    if (needsWeight) ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: weightC,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                        decoration: InputDecoration(
+                          labelText: 'Вага (кг)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
