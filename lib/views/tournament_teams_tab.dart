@@ -1093,7 +1093,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                         // Player search bar
                         TextField(
                           decoration: InputDecoration(
-                            hintText: 'Пошук гравця для додавання...',
+                            hintText: 'Фільтр гравців...',
                             prefixIcon: const Icon(Icons.search, size: 20),
                             isDense: true,
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -1101,13 +1101,12 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                           ),
                           onChanged: (v) => setState(() => _playerSearch = v),
                         ),
-                        // Search results
-                        if (_playerSearch.length >= 2) ...[
-                          const SizedBox(height: 4),
-                          Builder(
-                            builder: (context) {
+                        // Available players from tournament
+                        const SizedBox(height: 4),
+                        Builder(
+                          builder: (context) {
                               final assignedInThisTeam = selectedData.boards.values.toSet();
-                              // Also exclude team members (reserves) for swimming
+                              // Also exclude team members (reserves)
                               final membersInThisTeam = _teamMembers[selectedData.team.team_id] ?? [];
                               final assignedInOtherTeams = <int>{};
                               for (final td in _teamData) {
@@ -1119,15 +1118,23 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                 if (assignedInThisTeam.contains(p.player_id)) return false;
                                 if (membersInThisTeam.contains(p.player_id)) return false;
                                 if (assignedInOtherTeams.contains(p.player_id)) return false;
-                                return p.fullName.toLowerCase().contains(_playerSearch.toLowerCase());
+                                if (_playerSearch.isNotEmpty) {
+                                  return p.fullName.toLowerCase().contains(_playerSearch.toLowerCase());
+                                }
+                                return true;
                               }).toList()
                                 ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
-                              final display = results.take(5).toList();
+                              final display = results.take(20).toList();
 
                               if (display.isEmpty) {
                                 return Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 4),
-                                  child: Text('Нічого не знайдено', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                                  child: Text(
+                                    _playerSearch.isEmpty
+                                        ? 'Немає доступних гравців'
+                                        : 'Нічого не знайдено',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                  ),
                                 );
                               }
                               // Find first empty board (for board-based sports)
@@ -1200,7 +1207,6 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                               );
                             },
                           ),
-                        ],
                         const Divider(height: 24),
                         Expanded(
                           child: widget.config.boardCount == 0
@@ -1221,7 +1227,7 @@ class _TournamentTeamsTabState extends ConsumerState<TournamentTeamsTab> {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              'Знайдіть гравця через пошук вище.',
+                                              'Оберіть гравця зі списку вище.',
                                               style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
                                             ),
                                           ],

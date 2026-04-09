@@ -711,4 +711,33 @@ class TournamentService {
       await txn.delete('CMP_EVENT', where: 't_id = ?', whereArgs: [tId]);
     });
   }
+
+  /// Save player body weight (kg) via CMP_PLAYER_TEAM_ATTR_VALUE attr_id=17.
+  /// Silently returns if no CMP_PLAYER_TEAM entry exists yet.
+  Future<void> savePlayerWeight({required int playerId, required int tId, required double weight}) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ? AND attr_id = 17', whereArgs: [pteId]);
+    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+      'pte_id': pteId, 'attr_id': 17, 'attr_value': weight.toString(),
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_pw_$playerId',
+    });
+  }
+
+  /// Get player body weight (kg) for a player in a tournament.
+  Future<double?> getPlayerWeight({required int playerId, required int tId}) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT v.attr_value
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.player_id = ? AND pt.t_id = ? AND v.attr_id = 17
+      LIMIT 1
+    ''', [playerId, tId]);
+    if (rows.isEmpty) return null;
+    return double.tryParse(rows.first['attr_value'] as String? ?? '');
+  }
 }

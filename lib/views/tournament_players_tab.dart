@@ -848,10 +848,12 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final surnameC = TextEditingController();
     final lastnameC = TextEditingController();
     final dobC = TextEditingController();
+    final weightC = TextEditingController();
     int gender = 0;
     String searchQuery = '';
     Player? selectedExisting;
     List<Player> allPlayers = [];
+    final needsWeight = const {8, 9, 13}.contains(widget.tType);
 
     // Load all players for search
     ref.read(playerProvider.future).then((players) {
@@ -907,6 +909,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
             .lastOrNull;
         if (newPlayer != null && newPlayer.player_id != null) {
           await ref.read(tournamentServiceProvider).addParticipant(widget.tId, newPlayer.player_id!);
+        }
+      }
+      // Save weight if entered
+      final weightVal = double.tryParse(weightC.text.trim());
+      if (weightVal != null && weightVal > 0) {
+        final playerId = selectedExisting?.player_id ??
+            (await ref.read(playerProvider.future))
+                .where((p) => p.player_surname == surnameC.text.trim() && p.player_name == nameC.text.trim())
+                .lastOrNull?.player_id;
+        if (playerId != null) {
+          await ref.read(tournamentServiceProvider).savePlayerWeight(
+            playerId: playerId, tId: widget.tId, weight: weightVal);
         }
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1081,6 +1095,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           ),
                         ],
                       ),
+                      if (needsWeight) ...[
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: weightC,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                          decoration: InputDecoration(
+                            labelText: 'Вага (кг)',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
