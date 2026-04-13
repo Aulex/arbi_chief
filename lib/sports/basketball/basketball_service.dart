@@ -3,14 +3,9 @@ import 'dart:math';
 import '../../services/database_service.dart';
 
 /// Basketball-specific database operations.
-///
-/// Handles team-vs-team game CRUD with goal/point results,
-/// group assignments, and no-show tracking.
 class BasketballService {
   final DatabaseService _dbService;
   BasketballService(this._dbService);
-
-  // --- Team Game CRUD ---
 
   Future<int> createTeamGame({required int tId, required int teamAId, required int teamBId}) async {
     final db = await _dbService.database;
@@ -23,14 +18,7 @@ class BasketballService {
     return eventId;
   }
 
-  Future<void> saveGoalResult({
-    required int eventId,
-    required int teamAEntityId,
-    required int teamBEntityId,
-    required int goalsA,
-    required int goalsB,
-    int? esId,
-  }) async {
+  Future<void> saveGoalResult({required int eventId, required int teamAEntityId, required int teamBEntityId, required int goalsA, required int goalsB, int? esId}) async {
     final db = await _dbService.database;
     await db.transaction((txn) async {
       await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
@@ -67,16 +55,6 @@ class BasketballService {
     if (existing.isNotEmpty) return existing.first['event_id'] as int;
     return createTeamGame(tId: tId, teamAId: teamAId, teamBId: teamBId);
   }
-
-  Future<void> deleteTeamGame(int eventId) async {
-    final db = await _dbService.database;
-    await db.transaction((txn) async {
-      await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
-      await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
-    });
-  }
-
-  // --- No-Show Handling ---
 
   Future<int> countNoShows(int tId, int teamId) async {
     final db = await _dbService.database;
@@ -165,14 +143,23 @@ class BasketballService {
     await db.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 10', whereArgs: [tId]);
   }
 
-  /// Public wrapper to ensure a team has an entity_id.
   Future<int> ensureTeamEntity(int teamId) async {
     final db = await _dbService.database;
     return _dbService.ensureTeamEntity(db, teamId);
   }
 
-  // --- Group Management ---
+  Future<void> deleteTeamGame(int eventId) async {
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+      await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+    });
+  }
 
+  // --- Group Management (same approach as Volleyball) ---
+
+  /// Get group assignments for all teams in a tournament.
+  /// Returns Map<teamId, groupName>.
   Future<Map<int, String>> getGroupAssignments(int tId) async {
     final db = await _dbService.database;
     final rows = await db.query(
@@ -189,6 +176,7 @@ class BasketballService {
     return result;
   }
 
+  /// Set group assignment for a team.
   Future<void> setGroupAssignment(int tId, int teamId, String group) async {
     final db = await _dbService.database;
     final existing = await db.query(
@@ -215,11 +203,13 @@ class BasketballService {
     }
   }
 
+  /// Clear all group assignments for a tournament.
   Future<void> clearGroupAssignments(int tId) async {
     final db = await _dbService.database;
     await db.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 11', whereArgs: [tId]);
   }
 
+  /// Auto-assign groups: for 9+ teams create balanced groups of 3-5 teams.
   Future<void> autoAssignGroups(int tId, List<int> teamIds) async {
     if (teamIds.isEmpty) return;
     final db = await _dbService.database;
@@ -229,7 +219,6 @@ class BasketballService {
     if (teamCount <= 8) {
       groupCount = 1;
     } else {
-      // Basketball rules: groups of 3-5 teams
       groupCount = (teamCount / 4).ceil();
       while (groupCount > 1 && (teamCount / groupCount) < 3) {
         groupCount--;

@@ -1,19 +1,7 @@
 /// Basketball scoring utilities.
 ///
 /// Rules: 2 pts win, 1 pt loss, 0 pt no-show.
-/// Tie-breakers (among tied group, excluding no-show games):
-///   1. H2H match points
-///   2. H2H point ratio (scored/conceded)
-///   3. Total point ratio (scored/conceded)
-
-/// Match points.
-const int basketballWinPoints = 2;
-const int basketballLossPoints = 1;
-const int basketballNoShowPoints = 0;
-
-/// No-show forfeit score (per basketball rules: 25:0).
-const String basketballNoShowWinScore = '25:0';
-const String basketballNoShowLossScore = '0:25';
+/// Tie-breakers: H2H result, H2H goal difference, most goals scored.
 
 class BasketballStanding {
   final int teamId;
@@ -40,17 +28,23 @@ class BasketballStanding {
     this.rank = 0,
   });
 
-  double get pointRatio => pointsConceded == 0 ? pointsScored.toDouble() : pointsScored / pointsConceded;
+  int get goalDifference => pointsScored - pointsConceded;
 }
 
-/// Calculate standings from game results.
-///
-/// [teams] — list of (teamId, teamName, entityId) tuples.
-/// [games] — map of (teamAEntityId, teamBEntityId) → score string "goalsA:goalsB".
-///   Only one direction per game (no duplicates).
-/// [removedTeamIds] — teams removed after 2nd no-show.
-/// [noShowGamePairs] — (entityA, entityB) pairs for forfeited games (es_id=4).
-///   These games are excluded from tiebreaker calculations per the rules.
+const String noShowWinScore = '20:0';
+const String noShowLossScore = '0:20';
+
+enum BasketballConductionSystem {
+  roundRobin,
+  mixedGroupsAndFinals,
+}
+
+BasketballConductionSystem pickBasketballConductionSystem(int teamCount) {
+  return teamCount <= 8
+      ? BasketballConductionSystem.roundRobin
+      : BasketballConductionSystem.mixedGroupsAndFinals;
+}
+
 List<BasketballStanding> calculateStandings({
   required List<({int teamId, String teamName, int? entityId})> teams,
   required Map<(int, int), String> games,
@@ -59,7 +53,6 @@ List<BasketballStanding> calculateStandings({
 }) {
   final standings = <int, BasketballStanding>{};
 
-  final entityToTeamId = <int, int>{};
   for (final team in teams) {
     standings[team.teamId] = BasketballStanding(
       teamId: team.teamId,
@@ -67,21 +60,18 @@ List<BasketballStanding> calculateStandings({
       entityId: team.entityId,
       isRemoved: removedTeamIds.contains(team.teamId),
     );
-    if (team.entityId != null) {
-      entityToTeamId[team.entityId!] = team.teamId;
-    }
   }
 
   for (final entry in games.entries) {
     final (aEntId, bEntId) = entry.key;
     final detail = entry.value;
 
-    final aTeamId = entityToTeamId[aEntId];
-    final bTeamId = entityToTeamId[bEntId];
-    if (aTeamId == null || bTeamId == null) continue;
+    final teamAInfo = teams.where((t) => t.entityId == aEntId).firstOrNull;
+    final teamBInfo = teams.where((t) => t.entityId == bEntId).firstOrNull;
+    if (teamAInfo == null || teamBInfo == null) continue;
 
-    final standingA = standings[aTeamId]!;
-    final standingB = standings[bTeamId]!;
+    final standingA = standings[teamAInfo.teamId]!;
+    final standingB = standings[teamBInfo.teamId]!;
 
     if (standingA.isRemoved || standingB.isRemoved) continue;
 
@@ -96,138 +86,116 @@ List<BasketballStanding> calculateStandings({
     standingB.pointsConceded += aPts;
 
     if (aPts > bPts) {
-      standingA.matchPoints += basketballWinPoints;
+      standingA.matchPoints += 2;
       standingA.wins++;
-      standingB.matchPoints += basketballLossPoints;
+      standingB.matchPoints += 1;
       standingB.losses++;
     } else {
-      standingB.matchPoints += basketballWinPoints;
+      standingB.matchPoints += 2;
       standingB.wins++;
-      standingA.matchPoints += basketballLossPoints;
+      standingA.matchPoints += 1;
       standingA.losses++;
     }
   }
 
   final result = standings.values.toList();
 
-  // Step 1: sort by removed flag and match points
   result.sort((a, b) {
     if (a.isRemoved != b.isRemoved) return a.isRemoved ? 1 : -1;
-    return b.matchPoints.compareTo(a.matchPoints);
+    final ptsCmp = b.matchPoints.compareTo(a.matchPoints);
+    if (ptsCmp != 0) return ptsCmp;
+    return 0;
   });
 
-  // Step 2: identify groups of teams tied on match points and resolve each
+  // Resolve ties by rules:
+  // 1) head-to-head result,
+  // 2) better scored/conceded difference in games among tied teams,
+  // 3) more scored points.
+  final resolved = <BasketballStanding>[];
   int i = 0;
   while (i < result.length) {
-    if (result[i].isRemoved) { i++; continue; }
-
+    final tied = <BasketballStanding>[result[i]];
     int j = i + 1;
-    while (j < result.length &&
-           !result[j].isRemoved &&
-           result[j].matchPoints == result[i].matchPoints) {
+    while (j < result.length && result[j].matchPoints == result[i].matchPoints) {
+      tied.add(result[j]);
       j++;
     }
-
-    if (j - i > 1) {
-      final tiedGroup = result.sublist(i, j);
-      final resolved = _resolveTiedGroup(tiedGroup, games, teams, noShowGamePairs);
-      result.replaceRange(i, j, resolved);
+    if (tied.length == 1) {
+      resolved.add(tied.first);
+    } else {
+      resolved.addAll(_resolveTieGroup(tied, games, noShowGamePairs));
     }
-
     i = j;
   }
 
-  for (int i = 0; i < result.length; i++) {
-    result[i].rank = i + 1;
+  for (int k = 0; k < resolved.length; k++) {
+    resolved[k].rank = k + 1;
   }
 
-  return result;
+  return resolved;
 }
 
-/// Resolve a group of teams tied on match points.
-///
-/// Computes head-to-head stats using only games between teams in the group,
-/// excluding forfeited (no-show) games per the rules.
-///
-/// Sorts by: h2h points → h2h point ratio → total point ratio.
-List<BasketballStanding> _resolveTiedGroup(
+List<BasketballStanding> _resolveTieGroup(
   List<BasketballStanding> group,
-  Map<(int, int), String> allGames,
-  List<({int teamId, String teamName, int? entityId})> allTeams,
+  Map<(int, int), String> games,
   Set<(int, int)> noShowGamePairs,
 ) {
   if (group.length <= 1) return group;
 
-  final entityIds = group.map((s) => s.entityId).whereType<int>().toSet();
-  final entToTeam = <int, int>{};
+  final inGroupEntityIds = group.map((s) => s.entityId).whereType<int>().toSet();
+  final h2hPoints = <int, int>{};
+  final h2hDiff = <int, int>{};
+  final scored = <int, int>{};
+
   for (final s in group) {
-    if (s.entityId != null) entToTeam[s.entityId!] = s.teamId;
+    if (s.entityId == null) continue;
+    h2hPoints[s.entityId!] = 0;
+    h2hDiff[s.entityId!] = 0;
+    scored[s.entityId!] = 0;
   }
 
-  final h2hStats = <int, ({int points, int ptScored, int ptConceded})>{};
-  for (final s in group) {
-    h2hStats[s.teamId] = (points: 0, ptScored: 0, ptConceded: 0);
-  }
-
-  for (final entry in allGames.entries) {
+  for (final entry in games.entries) {
     final (aEntId, bEntId) = entry.key;
-    if (!entityIds.contains(aEntId) || !entityIds.contains(bEntId)) continue;
-
-    final aTeamId = entToTeam[aEntId];
-    final bTeamId = entToTeam[bEntId];
-    if (aTeamId == null || bTeamId == null) continue;
-
-    // Exclude no-show games from tiebreaker
+    if (!inGroupEntityIds.contains(aEntId) || !inGroupEntityIds.contains(bEntId)) {
+      continue;
+    }
+    if (aEntId == bEntId) continue;
     if (noShowGamePairs.contains((aEntId, bEntId)) ||
-        noShowGamePairs.contains((bEntId, aEntId))) continue;
+        noShowGamePairs.contains((bEntId, aEntId))) {
+      continue;
+    }
 
-    final detail = entry.value;
-    final parts = detail.split(':');
+    final parts = entry.value.split(':');
     if (parts.length != 2) continue;
     final aPts = int.tryParse(parts[0]) ?? 0;
     final bPts = int.tryParse(parts[1]) ?? 0;
 
-    final aOld = h2hStats[aTeamId]!;
-    final bOld = h2hStats[bTeamId]!;
+    h2hDiff[aEntId] = (h2hDiff[aEntId] ?? 0) + (aPts - bPts);
+    h2hDiff[bEntId] = (h2hDiff[bEntId] ?? 0) + (bPts - aPts);
+    scored[aEntId] = (scored[aEntId] ?? 0) + aPts;
+    scored[bEntId] = (scored[bEntId] ?? 0) + bPts;
 
-    int aWinPts = 0, bWinPts = 0;
     if (aPts > bPts) {
-      aWinPts = basketballWinPoints;
-      bWinPts = basketballLossPoints;
+      h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 2;
+      h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 1;
     } else {
-      bWinPts = basketballWinPoints;
-      aWinPts = basketballLossPoints;
+      h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 2;
+      h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 1;
     }
-
-    h2hStats[aTeamId] = (
-      points: aOld.points + aWinPts,
-      ptScored: aOld.ptScored + aPts,
-      ptConceded: aOld.ptConceded + bPts,
-    );
-    h2hStats[bTeamId] = (
-      points: bOld.points + bWinPts,
-      ptScored: bOld.ptScored + bPts,
-      ptConceded: bOld.ptConceded + aPts,
-    );
   }
 
-  // Sort by h2h points → h2h point ratio → total point ratio
   group.sort((a, b) {
-    final aH = h2hStats[a.teamId]!;
-    final bH = h2hStats[b.teamId]!;
+    final aEnt = a.entityId;
+    final bEnt = b.entityId;
+    if (aEnt == null || bEnt == null) return b.pointsScored.compareTo(a.pointsScored);
 
-    // 1. Head-to-head match points
-    final ptsCmp = bH.points.compareTo(aH.points);
-    if (ptsCmp != 0) return ptsCmp;
+    final h2hPtsCmp = (h2hPoints[bEnt] ?? 0).compareTo(h2hPoints[aEnt] ?? 0);
+    if (h2hPtsCmp != 0) return h2hPtsCmp;
 
-    // 2. H2H point ratio (scored/conceded)
-    final aH2hRatio = aH.ptConceded == 0 ? aH.ptScored.toDouble() : aH.ptScored / aH.ptConceded;
-    final bH2hRatio = bH.ptConceded == 0 ? bH.ptScored.toDouble() : bH.ptScored / bH.ptConceded;
-    final ratioCmp = bH2hRatio.compareTo(aH2hRatio);
-    if (ratioCmp != 0) return ratioCmp;
+    final h2hDiffCmp = (h2hDiff[bEnt] ?? 0).compareTo(h2hDiff[aEnt] ?? 0);
+    if (h2hDiffCmp != 0) return h2hDiffCmp;
 
-    // 3. Total point ratio
-    return b.pointRatio.compareTo(a.pointRatio);
+    return (scored[bEnt] ?? 0).compareTo(scored[aEnt] ?? 0);
   });
 
   return group;

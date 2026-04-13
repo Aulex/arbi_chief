@@ -3,17 +3,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../viewmodels/team_viewmodel.dart';
 import 'basketball_providers.dart';
 
-/// Group management tab for basketball tournaments with >= 9 teams.
+/// Group management tab for basketball tournaments with ≥ 9 teams.
+///
+/// Displays groups as columns with team names.
+/// Supports automatic random draw and manual reassignment.
 class BasketballGroupManagementTab extends ConsumerStatefulWidget {
   final int tId;
 
   const BasketballGroupManagementTab({super.key, required this.tId});
 
   @override
-  ConsumerState<BasketballGroupManagementTab> createState() => _BasketballGroupManagementTabState();
+  ConsumerState<BasketballGroupManagementTab> createState() =>
+      _BasketballGroupManagementTabState();
 }
 
-class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupManagementTab> {
+class _BasketballGroupManagementTabState
+    extends ConsumerState<BasketballGroupManagementTab> {
   bool _loading = true;
   List<({int teamId, String teamName, int? teamNumber})> _teams = [];
   Map<int, String> _groups = {};
@@ -26,10 +31,10 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
 
   Future<void> _loadData() async {
     final teamSvc = ref.read(teamServiceProvider);
-    final bSvc = ref.read(basketballServiceProvider);
+    final sbSvc = ref.read(basketballServiceProvider);
 
     final teams = await teamSvc.getTeamListForTournament(widget.tId);
-    final groups = await bSvc.getGroupAssignments(widget.tId);
+    final groups = await sbSvc.getGroupAssignments(widget.tId);
 
     if (!mounted) return;
     setState(() {
@@ -40,9 +45,9 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
   }
 
   Future<void> _autoAssignGroups() async {
-    final bSvc = ref.read(basketballServiceProvider);
+    final sbSvc = ref.read(basketballServiceProvider);
     final teamIds = _teams.map((t) => t.teamId).toList();
-    await bSvc.autoAssignGroups(widget.tId, teamIds);
+    await sbSvc.autoAssignGroups(widget.tId, teamIds);
     await _loadData();
   }
 
@@ -53,15 +58,21 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
         title: const Text('Очистити групи?'),
         content: const Text('Всі призначення груп будуть видалені.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Скасувати')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Очистити')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Скасувати'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Очистити'),
+          ),
         ],
       ),
     );
     if (confirmed != true) return;
 
-    final bSvc = ref.read(basketballServiceProvider);
-    await bSvc.clearGroupAssignments(widget.tId);
+    final sbSvc = ref.read(basketballServiceProvider);
+    await sbSvc.clearGroupAssignments(widget.tId);
     await _loadData();
   }
 
@@ -85,8 +96,8 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
     );
 
     if (newGroup == null) return;
-    final bSvc = ref.read(basketballServiceProvider);
-    await bSvc.setGroupAssignment(widget.tId, teamId, newGroup);
+    final sbSvc = ref.read(basketballServiceProvider);
+    await sbSvc.setGroupAssignment(widget.tId, teamId, newGroup);
     await _loadData();
   }
 
@@ -107,7 +118,8 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
     }
     final isUnbalanced = groupSizes.isNotEmpty &&
         groupSizes.values.reduce((a, b) => a > b ? a : b) -
-            groupSizes.values.reduce((a, b) => a < b ? a : b) > 1;
+                groupSizes.values.reduce((a, b) => a < b ? a : b) >
+            1;
 
     return Card(
       elevation: 0,
@@ -132,7 +144,11 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
                     padding: const EdgeInsets.only(right: 12),
                     child: Tooltip(
                       message: 'Групи не збалансовані',
-                      child: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 20),
+                      child: Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange.shade700,
+                        size: 20,
+                      ),
                     ),
                   ),
                 OutlinedButton.icon(
@@ -150,14 +166,17 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
               ],
             ),
             const SizedBox(height: 16),
-
             if (groupNames.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(32),
                   child: Column(
                     children: [
-                      Icon(Icons.group_work_outlined, size: 48, color: Colors.grey.shade400),
+                      Icon(
+                        Icons.group_work_outlined,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         'Натисніть "Жеребкування" для автоматичного розподілу команд по групах',
@@ -182,7 +201,6 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
                   ),
                 ),
               ),
-
             if (unassigned.isNotEmpty) ...[
               const Divider(height: 24),
               Text(
@@ -223,7 +241,11 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
                   backgroundColor: Colors.indigo,
                   child: Text(
                     groupName,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -242,17 +264,19 @@ class _BasketballGroupManagementTabState extends ConsumerState<BasketballGroupMa
             if (teamsInGroup.isEmpty)
               Text('Порожня', style: TextStyle(color: Colors.grey.shade400))
             else
-              ...teamsInGroup.map((t) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                leading: const Icon(Icons.groups_outlined, size: 20),
-                title: Text(t.teamName, style: const TextStyle(fontSize: 13)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.swap_horiz, size: 18),
-                  tooltip: 'Перемістити в іншу групу',
-                  onPressed: () => _reassignTeam(t.teamId, groupName),
+              ...teamsInGroup.map(
+                (t) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.groups_outlined, size: 20),
+                  title: Text(t.teamName, style: const TextStyle(fontSize: 13)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.swap_horiz, size: 18),
+                    tooltip: 'Перемістити в іншу групу',
+                    onPressed: () => _reassignTeam(t.teamId, groupName),
+                  ),
                 ),
-              )),
+              ),
           ],
         ),
       ),
