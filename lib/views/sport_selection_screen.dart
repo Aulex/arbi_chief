@@ -25,15 +25,8 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
     'Настільний теніс',
     'Плавання',
     'Волейбол',
-    'Армрестлінг',
-    'Футзал',
     'Баскетбол',
     'Стрітбол',
-    'Легка атлетика',
-    'Велоспорт',
-    'Пауерліфтинг',
-    'Гирьовий спорт',
-    'Перетягування канату',
   };
 
   /// Desired display order (excluding Спортивне орієнтування).

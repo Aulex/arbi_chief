@@ -518,15 +518,6 @@ class VolleyballReportBuilder {
       _cell('Місце', hdrStyle),
       _cell('Команда', hdrStyle, align: pw.Alignment.centerLeft),
       _cell('Етап', hdrStyle),
-      _cell('Очки', hdrStyle),
-      _cell('П', hdrStyle),
-      _cell('Пр', hdrStyle),
-      _cell('С+', hdrStyle),
-      _cell('С-', hdrStyle),
-      _cell('С+/-', hdrStyle),
-      _cell('М+', hdrStyle),
-      _cell('М-', hdrStyle),
-      _cell('М+/-', hdrStyle),
     ];
 
     final rows = <pw.TableRow>[
@@ -539,41 +530,20 @@ class VolleyballReportBuilder {
     for (int i = 0; i < rankedTeams.length; i++) {
       final t = rankedTeams[i];
       final rowBg = i.isOdd ? const pw.BoxDecoration(color: PdfColors.grey100) : null;
-      final setDiff = t.setsWon - t.setsLost;
-      final ptDiff = t.pointsScored - t.pointsConceded;
-
       rows.add(pw.TableRow(
         decoration: rowBg,
         children: [
           _cell('${t.overallPlace}', cellBold),
           _cell(t.teamName, cellSt, align: pw.Alignment.centerLeft),
           _cell(t.phase, cellSt),
-          _cell('${t.matchPoints}', cellBold),
-          _cell('${(cumulativeByTeam[t.teamId]?.wins ?? 0)}', cellSt),
-          _cell('${(cumulativeByTeam[t.teamId]?.losses ?? 0)}', cellSt),
-          _cell('${t.setsWon}', cellSt),
-          _cell('${t.setsLost}', cellSt),
-          _cell('${setDiff >= 0 ? '+' : ''}$setDiff', cellSt),
-          _cell('${t.pointsScored}', cellSt),
-          _cell('${t.pointsConceded}', cellSt),
-          _cell('${ptDiff >= 0 ? '+' : ''}$ptDiff', cellSt),
         ],
       ));
     }
 
     final colWidths = <int, pw.TableColumnWidth>{
-      0: const pw.FixedColumnWidth(36),
-      1: const pw.FixedColumnWidth(140),
-      2: const pw.FixedColumnWidth(56),
-      3: const pw.FixedColumnWidth(34),
-      4: const pw.FixedColumnWidth(28),
-      5: const pw.FixedColumnWidth(28),
-      6: const pw.FixedColumnWidth(28),
-      7: const pw.FixedColumnWidth(28),
-      8: const pw.FixedColumnWidth(34),
-      9: const pw.FixedColumnWidth(30),
-      10: const pw.FixedColumnWidth(30),
-      11: const pw.FixedColumnWidth(34),
+      0: const pw.FixedColumnWidth(50),
+      1: const pw.FlexColumnWidth(),
+      2: const pw.FixedColumnWidth(100),
     };
 
     ctx.pdf.addPage(
