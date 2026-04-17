@@ -12,6 +12,8 @@ import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
 import '../sports/chess/chess_scoring.dart' as chess_scoring;
 import '../sports/volleyball/volleyball_report_builder.dart';
 import '../sports/volleyball/volleyball_service.dart';
+import '../sports/streetball/streetball_report_builder.dart';
+import '../sports/streetball/streetball_service.dart';
 import 'team_service.dart';
 import 'tournament_service.dart';
 
@@ -19,8 +21,9 @@ class ReportService {
   final TeamService _teamService;
   final TournamentService _tournamentService;
   final VolleyballService _volleyballService;
+  final StreetballService _streetballService;
 
-  ReportService(this._teamService, this._tournamentService, this._volleyballService);
+  ReportService(this._teamService, this._tournamentService, this._volleyballService, this._streetballService);
 
   /// Load all data needed for a tournament report.
   ///
@@ -318,6 +321,9 @@ class ReportService {
   Future<bool> _checkTeamSportData(int tId, int? sportType) async {
     if (isVolleyball(sportType)) {
       return VolleyballReportBuilder(_volleyballService, _teamService, _tournamentService).hasData(tId);
+    }
+    if (isStreetball(sportType)) {
+      return StreetballReportBuilder(_streetballService, _teamService, _tournamentService).hasData(tId);
     }
     // Other team sports: not yet implemented — return false
     return false;
@@ -685,6 +691,10 @@ class ReportService {
   Future<pw.Document> _buildTeamSportPdf(Tournament tournament, SportTypeConfig config) async {
     if (isVolleyball(tournament.t_type)) {
       return VolleyballReportBuilder(_volleyballService, _teamService, _tournamentService)
+          .buildPdf(tournament, config);
+    }
+    if (isStreetball(tournament.t_type)) {
+      return StreetballReportBuilder(_streetballService, _teamService, _tournamentService)
           .buildPdf(tournament, config);
     }
     // Fallback: return empty document for unimplemented team sports

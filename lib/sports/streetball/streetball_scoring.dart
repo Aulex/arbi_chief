@@ -85,16 +85,22 @@ List<StreetballStanding> calculateStandings({
     standingB.pointsScored += bPts;
     standingB.pointsConceded += aPts;
 
+    final isNoShow = noShowGamePairs.contains((aEntId, bEntId)) || 
+                     noShowGamePairs.contains((bEntId, aEntId));
+
     if (aPts > bPts) {
       standingA.matchPoints += 2;
       standingA.wins++;
-      standingB.matchPoints += 1;
+      standingB.matchPoints += isNoShow ? 0 : 1;
       standingB.losses++;
-    } else {
+    } else if (bPts > aPts) {
       standingB.matchPoints += 2;
       standingB.wins++;
-      standingA.matchPoints += 1;
+      standingA.matchPoints += isNoShow ? 0 : 1;
       standingA.losses++;
+    } else {
+      standingA.matchPoints += 1;
+      standingB.matchPoints += 1;
     }
   }
 

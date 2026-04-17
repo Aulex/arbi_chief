@@ -986,21 +986,23 @@ class _StreetballCrossTableTabState
     String cellText = '';
     Color? bg;
 
-    if (game?.esId == 4) {
-      cellText = '-';
-      bg = Colors.orange.shade100;
-    } else if (game?.eventResult != null) {
+    if (game?.eventResult != null) {
       cellText = game!.eventResult!;
       final p = cellText.split(':');
       if (p.length == 2) {
         final a = int.tryParse(p[0]) ?? 0;
         final b = int.tryParse(p[1]) ?? 0;
-        bg = a > b
-            ? Colors.green.shade50
-            : a < b
-                ? Colors.red.shade50
-                : Colors.amber.shade50;
+        bg = game?.esId == 4
+            ? Colors.orange.shade100
+            : (a > b
+                ? Colors.green.shade50
+                : a < b
+                    ? Colors.red.shade50
+                    : Colors.amber.shade50);
       }
+    } else if (game?.esId == 4) {
+      cellText = '-';
+      bg = Colors.orange.shade100;
     }
     if (isCarryOver && game == null) bg = Colors.amber.shade50;
     if (isRemoved) bg = Colors.grey.shade200;
@@ -1044,16 +1046,13 @@ class _StreetballCrossTableTabState
       }
     }
 
-    final cA = TextEditingController(text: eA > 0 ? '$eA' : '');
-    final cB = TextEditingController(text: eB > 0 ? '$eB' : '');
-
     final result = await showDialog<_ScoreDialogResult?>(
       context: context,
       builder: (ctx) => _StreetballScoreDialog(
         teamAName: tA.teamName as String,
         teamBName: tB.teamName as String,
-        controllerA: cA,
-        controllerB: cB,
+        initialScoreA: eA,
+        initialScoreB: eB,
         hasExisting: existing != null,
         onDelete: existing != null ? () {
           Navigator.pop(ctx);
@@ -1061,9 +1060,6 @@ class _StreetballCrossTableTabState
         } : null,
       ),
     );
-
-    cA.dispose();
-    cB.dispose();
 
     if (result == null) return;
 
@@ -1248,28 +1244,50 @@ class _ScoreDialogResult {
   _ScoreDialogResult.noShow(this.noShowTeam) : goalsA = null, goalsB = null;
 }
 
-class _StreetballScoreDialog extends StatelessWidget {
+class _StreetballScoreDialog extends StatefulWidget {
   final String teamAName;
   final String teamBName;
-  final TextEditingController controllerA;
-  final TextEditingController controllerB;
+  final int initialScoreA;
+  final int initialScoreB;
   final bool hasExisting;
   final VoidCallback? onDelete;
 
   const _StreetballScoreDialog({
     required this.teamAName,
     required this.teamBName,
-    required this.controllerA,
-    required this.controllerB,
+    required this.initialScoreA,
+    required this.initialScoreB,
     required this.hasExisting,
     this.onDelete,
   });
 
   @override
+  State<_StreetballScoreDialog> createState() => _StreetballScoreDialogState();
+}
+
+class _StreetballScoreDialogState extends State<_StreetballScoreDialog> {
+  late final TextEditingController _controllerA;
+  late final TextEditingController _controllerB;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllerA = TextEditingController(text: widget.initialScoreA > 0 ? '${widget.initialScoreA}' : '');
+    _controllerB = TextEditingController(text: widget.initialScoreB > 0 ? '${widget.initialScoreB}' : '');
+  }
+
+  @override
+  void dispose() {
+    _controllerA.dispose();
+    _controllerB.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        '$teamAName — $teamBName',
+        '${widget.teamAName} — ${widget.teamBName}',
         style: const TextStyle(fontSize: 16),
       ),
       content: SizedBox(
@@ -1283,7 +1301,7 @@ class _StreetballScoreDialog extends StatelessWidget {
                 const SizedBox(width: 60),
                 Expanded(
                   child: Text(
-                    teamAName,
+                    widget.teamAName,
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
@@ -1292,7 +1310,7 @@ class _StreetballScoreDialog extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    teamBName,
+                    widget.teamBName,
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
@@ -1315,7 +1333,7 @@ class _StreetballScoreDialog extends StatelessWidget {
                   child: SizedBox(
                     height: 40,
                     child: TextField(
-                      controller: controllerA,
+                      controller: _controllerA,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       textAlign: TextAlign.center,
@@ -1336,7 +1354,7 @@ class _StreetballScoreDialog extends StatelessWidget {
                   child: SizedBox(
                     height: 40,
                     child: TextField(
-                      controller: controllerB,
+                      controller: _controllerB,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       textAlign: TextAlign.center,
@@ -1365,11 +1383,11 @@ class _StreetballScoreDialog extends StatelessWidget {
           itemBuilder: (ctx) => [
             PopupMenuItem(
               value: 'A',
-              child: Text('Неявка: $teamAName'),
+              child: Text('Неявка: ${widget.teamAName}'),
             ),
             PopupMenuItem(
               value: 'B',
-              child: Text('Неявка: $teamBName'),
+              child: Text('Неявка: ${widget.teamBName}'),
             ),
           ],
           child: Container(
@@ -1392,9 +1410,9 @@ class _StreetballScoreDialog extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (hasExisting && onDelete != null)
+            if (widget.hasExisting && widget.onDelete != null)
               TextButton(
-                onPressed: onDelete,
+                onPressed: widget.onDelete,
                 child: const Text('Видалити', style: TextStyle(color: Colors.red)),
               ),
             TextButton(
@@ -1404,8 +1422,8 @@ class _StreetballScoreDialog extends StatelessWidget {
             const SizedBox(width: 8),
             FilledButton(
               onPressed: () {
-                final a = int.tryParse(controllerA.text) ?? 0;
-                final b = int.tryParse(controllerB.text) ?? 0;
+                final a = int.tryParse(_controllerA.text) ?? 0;
+                final b = int.tryParse(_controllerB.text) ?? 0;
                 Navigator.pop(context, _ScoreDialogResult.goals(a, b));
               },
               child: const Text('Зберегти'),
