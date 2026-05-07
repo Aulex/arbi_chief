@@ -14,7 +14,7 @@ import '../sports/streetball/streetball_scoring.dart' as sb_scoring;
 import '../sports/volleyball/volleyball_scoring.dart' as vb_scoring;
 import '../sports/tug_of_war/tug_of_war_scoring.dart' as tow_scoring;
 import '../sports/arm_wrestling/arm_wrestling_scoring.dart' as aw_scoring;
-import '../sports/athletics/athletics_scoring.dart' as athletics_scoring;
+
 import '../sports/swimming/swimming_scoring.dart' as swimming_scoring;
 import '../sports/cycling/cycling_scoring.dart' as cycling_scoring;
 import '../sports/powerlifting/powerlifting_scoring.dart' as powerlifting_scoring;

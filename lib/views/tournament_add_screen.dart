@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/tournament_model.dart';
 import '../viewmodels/nav_provider.dart';
 import '../viewmodels/tournament_viewmodel.dart';
+import '../viewmodels/sport_type_provider.dart';
 import '../services/tournament_service.dart';
+import '../sports/athletics/athletics_results_tab.dart';
+import '../sports/athletics/athletics_service.dart';
 
 class TournamentAddScreen extends ConsumerStatefulWidget {
   final Tournament? tournament;
@@ -33,6 +37,10 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
   bool _allowSubstitutes = false;
   bool _isLoading = false;
   String _startingListSort = "За алфавітом";
+
+  // Athletics age coefficients — mutable copy for editing
+  Map<int, ({double men3000, double women1500})> _coeffTable = {};
+  bool _coeffTableLoaded = false;
 
   // Tournament conduct settings (Налаштування проведення)
   final _finalsPlacesController = TextEditingController(text: '1,2');
@@ -83,6 +91,30 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
         _loadAttrValues(t.t_id!);
       }
     }
+    // Load athletics coefficients in edit mode
+    if (widget.isEditMode && widget.tournament != null && widget.tournament!.t_type == 10) {
+      _loadCoeffTable(widget.tournament!.t_id!);
+    } else if (widget.tournament?.t_type == 10) {
+      // New athletics tournament — start with empty table
+      _coeffTable = {};
+      _coeffTableLoaded = true;
+    }
+  }
+
+  Future<void> _loadCoeffTable(int tId) async {
+    final svc = ref.read(athleticsServiceProvider);
+    final custom = await svc.getCustomCoefficients(tId);
+    if (!mounted) return;
+    setState(() {
+      _coeffTable = custom ?? {};
+      _coeffTableLoaded = true;
+    });
+  }
+
+  Future<void> _saveCoeffTable(int tId, AthleticsService svc) async {
+    // Only save for athletics tournaments (type 10)
+    if (widget.tournament?.t_type != 10 && ref.read(selectedSportTypeProvider) != 10) return;
+    await svc.saveCustomCoefficients(tId, _coeffTable);
   }
 
   Future<void> _loadAttrValues(int tId) async {
@@ -127,6 +159,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       _initialCyclePlaces = _cyclePlacesController.text;
     });
   }
+
 
   String _formatDateTime(DateTime dt) {
     final d = dt.toLocal().toString().split(' ')[0];
@@ -208,7 +241,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
         .map((e) => e.key)
         .toList();
 
-    await ref.read(tournamentProvider.notifier).addTournament(
+    final athleticsSvc = ref.read(athleticsServiceProvider);
+    
+    final tId = await ref.read(tournamentProvider.notifier).addTournament(
       existingId: widget.isEditMode ? widget.tournament?.t_id : null,
       name: tNameController.text.trim(),
       dateBegin: dateBegin,
@@ -229,6 +264,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       crossGroupMatchPlaces: _crossGroupMatchPlacesController.text.trim(),
       cyclePlaces: _cyclePlacesController.text.trim(),
     );
+
+    // Save athletics coefficients
+    await _saveCoeffTable(tId, athleticsSvc);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -741,6 +779,8 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       ),
       const SizedBox(height: 24),
 
+      // --- Tournament conduct settings (hidden for athletics) ---
+      if (widget.tournament?.t_type != 10) ...[
       // --- Finals places ---
       Card(
         elevation: 0,
@@ -868,7 +908,418 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
           ),
         ),
       ),
+      ], // end of conduct settings hidden for athletics
+
+      // --- Athletics Age Coefficients ---
+      if (widget.tournament?.t_type == 10) ...[
+        const SizedBox(height: 24),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Colors.orange.shade200, width: 1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.speed, color: Colors.orange.shade700, size: 22),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Вікові коефіцієнти',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Коефіцієнт застосовується автоматично до кожного учасника залежно від віку. '
+                  'Чоловіки: 3000 м, Жінки: 1500 м. '
+                  'Заліковий час = час × коефіцієнт.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                // Action buttons row
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _addCoefficientAge,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Додати вік'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _importCoefficients,
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text('Імпорт'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _resetCoefficientsToDefault,
+                      icon: Icon(Icons.delete_sweep, size: 18, color: Colors.red.shade400),
+                      label: Text('Очистити все', style: TextStyle(color: Colors.red.shade400)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 400,
+                  child: SingleChildScrollView(
+                    child: _buildCoefficientTable(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     ]);
+  }
+
+  Widget _buildCoefficientTable() {
+    if (!_coeffTableLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final sortedEntries = _coeffTable.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    if (sortedEntries.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Таблиця порожня',
+            style: TextStyle(color: Colors.grey.shade500),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      child: DataTable(
+      columnSpacing: 24,
+      headingRowColor: WidgetStatePropertyAll(Colors.orange.shade50),
+      dataRowMinHeight: 36,
+      dataRowMaxHeight: 40,
+      columns: const [
+        DataColumn(label: Text('Вік', style: TextStyle(fontWeight: FontWeight.bold))),
+        DataColumn(label: Text('Чол. 3000м', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+        DataColumn(label: Text('Жін. 1500м', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+        DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+      ],
+      rows: sortedEntries.map((e) {
+        return DataRow(
+          cells: [
+            DataCell(Text('${e.key}', style: const TextStyle(fontWeight: FontWeight.w600))),
+            DataCell(
+              Text(
+                e.value.men3000.toStringAsFixed(4),
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  color: e.value.men3000 < 1.0 ? Colors.indigo : null,
+                ),
+              ),
+              onTap: () => _editCoefficient(e.key, true),
+            ),
+            DataCell(
+              Text(
+                e.value.women1500.toStringAsFixed(4),
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  color: e.value.women1500 < 1.0 ? Colors.pink : null,
+                ),
+              ),
+              onTap: () => _editCoefficient(e.key, false),
+            ),
+            DataCell(
+              IconButton(
+                icon: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade300),
+                onPressed: () {
+                  setState(() {
+                    // Set to 1.0 (effectively removing the coefficient)
+                    _coeffTable[e.key] = (men3000: 1.0, women1500: 1.0);
+                  });
+                },
+                tooltip: 'Видалити',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+      ),
+    );
+  }
+
+
+
+  void _editCoefficient(int age, bool isMen) {
+    final current = _coeffTable[age];
+    if (current == null) return;
+    final controller = TextEditingController(
+      text: (isMen ? current.men3000 : current.women1500).toStringAsFixed(4),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${isMen ? "Чол. 3000м" : "Жін. 1500м"} — вік $age'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+          ],
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Коефіцієнт',
+            hintText: '0.9856',
+          ),
+          onSubmitted: (_) {
+            final val = double.tryParse(controller.text.replaceAll(',', '.'));
+            if (val != null && val > 0 && val <= 1.0) {
+              setState(() {
+                if (isMen) {
+                  _coeffTable[age] = (men3000: val, women1500: current.women1500);
+                } else {
+                  _coeffTable[age] = (men3000: current.men3000, women1500: val);
+                }
+              });
+              Navigator.pop(ctx);
+            }
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+          FilledButton(
+            onPressed: () {
+              final val = double.tryParse(controller.text.replaceAll(',', '.'));
+              if (val != null && val > 0 && val <= 1.0) {
+                setState(() {
+                  if (isMen) {
+                    _coeffTable[age] = (men3000: val, women1500: current.women1500);
+                  } else {
+                    _coeffTable[age] = (men3000: current.men3000, women1500: val);
+                  }
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Зберегти'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addCoefficientAge() {
+    final ageController = TextEditingController();
+    final menController = TextEditingController(text: '1.0000');
+    final womenController = TextEditingController(text: '1.0000');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Додати вік'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: ageController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Вік',
+                hintText: '82',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: menController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Чоловіки 3000м',
+                hintText: '0.9856',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: womenController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Жінки 1500м',
+                hintText: '0.9895',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+          FilledButton(
+            onPressed: () {
+              final age = int.tryParse(ageController.text);
+              final men = double.tryParse(menController.text.replaceAll(',', '.'));
+              final women = double.tryParse(womenController.text.replaceAll(',', '.'));
+              if (age != null && men != null && women != null && age > 0) {
+                setState(() {
+                  _coeffTable[age] = (men3000: men, women1500: women);
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Додати'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _importCoefficients() {
+    final textController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setST) {
+          // Parse preview
+          final lines = textController.text
+              .split('\n')
+              .map((l) => l.trim())
+              .where((l) => l.isNotEmpty)
+              .toList();
+          final preview = <({int age, double men, double women, bool valid})>[];
+          // Detect format: 2 columns (men, women — ages auto from 18) or 3 columns (age, men, women)
+          int autoAge = 18;
+          for (final line in lines) {
+            // Split by tab or semicolon only — NOT comma (used as decimal separator)
+            var parts = line.split(RegExp(r'[\t;]+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+            // Fallback: if only 1 part, try splitting by any spaces
+            if (parts.length == 1) {
+              parts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+            }
+            if (parts.length >= 3) {
+              // 3+ columns: age, men, women
+              final age = int.tryParse(parts[0]);
+              final men = double.tryParse(parts[1].replaceAll(',', '.'));
+              final women = double.tryParse(parts[2].replaceAll(',', '.'));
+              preview.add((
+                age: age ?? 0,
+                men: men ?? 0,
+                women: women ?? 0,
+                valid: age != null && men != null && women != null && age > 0,
+              ));
+            } else if (parts.length == 2) {
+              // 2 columns: men, women (auto-assign ages starting from 18)
+              final men = double.tryParse(parts[0].replaceAll(',', '.'));
+              final women = double.tryParse(parts[1].replaceAll(',', '.'));
+              if (men != null && women != null) {
+                preview.add((
+                  age: autoAge,
+                  men: men,
+                  women: women,
+                  valid: true,
+                ));
+                autoAge++;
+              }
+            }
+          }
+          final validCount = preview.where((p) => p.valid).length;
+
+          return AlertDialog(
+            title: const Text('Імпорт коефіцієнтів'),
+            content: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Вставте дані з Excel. Підтримувані формати:\n'
+                    '• 2 колонки: Чол.3000м  Жін.1500м (вік автоматично з 18)\n'
+                    '• 3 колонки: Вік  Чол.3000м  Жін.1500м\n'
+                    'Роздільник колонок: табуляція або крапка з комою.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 200,
+                    child: TextField(
+                      controller: textController,
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: '18\t0.9856\t0.9895\n19\t0.9914\t0.9948\n34\t0.9979\t0.9845',
+                        hintStyle: TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'monospace',
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                      onChanged: (_) => setST(() {}),
+                    ),
+                  ),
+                  if (preview.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Знайдено $validCount з ${preview.length} записів',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: validCount == preview.length ? Colors.green : Colors.orange,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+              FilledButton(
+                onPressed: validCount == 0
+                    ? null
+                    : () {
+                        setState(() {
+                          for (final p in preview) {
+                            if (p.valid) {
+                              _coeffTable[p.age] = (men3000: p.men, women1500: p.women);
+                            }
+                          }
+                        });
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Імпортовано $validCount коефіцієнтів')),
+                        );
+                      },
+                child: Text('Імпортувати ($validCount)'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _resetCoefficientsToDefault() {
+    setState(() {
+      _coeffTable = {};
+    });
   }
 
   Widget _buildTab(List<Widget> children) => SingleChildScrollView(

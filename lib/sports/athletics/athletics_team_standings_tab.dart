@@ -1,135 +1,220 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../viewmodels/team_viewmodel.dart';
-import 'athletics_providers.dart';
-import 'athletics_scoring.dart' as scoring;
+import 'athletics_model.dart';
+import 'athletics_results_tab.dart';
 
+/// Displays team standings for athletics competitions.
 class AthleticsTeamStandingsTab extends ConsumerStatefulWidget {
   final int tId;
+
   const AthleticsTeamStandingsTab({super.key, required this.tId});
 
   @override
-  ConsumerState<AthleticsTeamStandingsTab> createState() => _AthleticsTeamStandingsTabState();
+  ConsumerState<AthleticsTeamStandingsTab> createState() =>
+      _AthleticsTeamStandingsTabState();
 }
 
-class _AthleticsTeamStandingsTabState extends ConsumerState<AthleticsTeamStandingsTab> {
+class _AthleticsTeamStandingsTabState
+    extends ConsumerState<AthleticsTeamStandingsTab> {
+  List<AthleticsTeamStanding> _standings = [];
   bool _loading = true;
-  List<scoring.AthleticsStanding> _standings = [];
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadStandings();
   }
 
-  Future<void> _loadData() async {
-    final teamSvc = ref.read(teamServiceProvider);
-    final athSvc = ref.read(athleticsServiceProvider);
-
-    final tourTeams = await teamSvc.getTeamListForTournament(widget.tId);
-    final teams = tourTeams.map((t) => (teamId: t.teamId, teamName: t.teamName)).toList();
-    
-    // For removed teams (not used actively but logic requires it)
-    final removedIds = <int>{};
-
-    // Get individual places and categories
-    final placesMap = await athSvc.getPlayerPlaces(widget.tId);
-    final categoriesMap = await athSvc.getPlayerCategories(widget.tId);
-
-    // Map playerId -> teamId
-    final playerTeamsMap = await teamSvc.getPlayerTeamsMap(widget.tId);
-    final playerTeams = {for (final entry in playerTeamsMap.entries) entry.key: entry.value.team_id!};
-
-    final individualResults = <({int teamId, int place, String? category})>[];
-    for (final entry in placesMap.entries) {
-      final pId = entry.key;
-      final place = entry.value;
-      final tId = playerTeams[pId];
-      if (tId != null) {
-        individualResults.add((teamId: tId, place: place, category: categoriesMap[pId]));
-      }
-    }
-
-    final standings = scoring.calculateStandings(
-      teams: teams,
-      individualResults: individualResults,
-      maxResultsPerTeam: 3,
-      removedTeamIds: removedIds,
+  Future<void> _loadStandings() async {
+    setState(() => _loading = true);
+    final svc = ref.read(athleticsServiceProvider);
+    final customCoefficients = await svc.getCustomCoefficients(widget.tId);
+    final standings = await svc.getTeamStandings(
+      widget.tId, customCoefficients: customCoefficients,
     );
-
-    setState(() {
-      _standings = standings;
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _standings = standings;
+        _loading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-
     if (_standings.isEmpty) {
-      return const Center(child: Text('Командний залік порожній.'));
-    }
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+      return Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Командний залік', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
-              ],
-            ),
+            Icon(Icons.emoji_events_outlined,
+                size: 48, color: Colors.grey.shade400),
             const SizedBox(height: 12),
-            Expanded(
-              child: ListView.separated(
-                itemCount: _standings.length + 1,
-                separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.shade200),
-                itemBuilder: (ctx, i) {
-                  if (i == 0) return _buildHeader();
-                  final s = _standings[i - 1];
-                  
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      children: [
-                        SizedBox(width: 40, child: Text('${s.rank}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                        Expanded(flex: 3, child: Text(s.teamName)),
-                        Expanded(flex: 2, child: Text(s.places.join(', '), style: TextStyle(color: Colors.grey.shade600))),
-                        SizedBox(width: 60, child: Text('${s.totalPoints}', style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-                      ],
-                    ),
-                  );
-                },
-              ),
+            Text('Немає результатів для командного заліку',
+                style: TextStyle(color: Colors.grey.shade500)),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _loadStandings,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Оновити'),
             ),
           ],
         ),
-      ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Командний залік — Легка атлетика',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: _loadStandings,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Оновити'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Очки = сума місць (2 чоловіки + 1 жінка з різних вікових категорій). Менше очок = краще.',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: Colors.grey.shade300, width: 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SingleChildScrollView(
+                child: _buildTable(),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      color: Colors.grey.shade100,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: const Row(
-        children: [
-          SizedBox(width: 40, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(flex: 3, child: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(flex: 2, child: Text('Кращі результати', style: TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 60, child: Text('Сума', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
-        ],
-      ),
+  Widget _buildTable() {
+    return DataTable(
+      columnSpacing: 16,
+      headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
+      columns: const [
+        DataColumn(
+            label:
+                Text('М', style: TextStyle(fontWeight: FontWeight.bold))),
+        DataColumn(
+            label: Text('Команда',
+                style: TextStyle(fontWeight: FontWeight.bold))),
+        DataColumn(
+            label:
+                Text('Ч35', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label:
+                Text('Ч49', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label:
+                Text('Ч50', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label:
+                Text('Ж35', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label:
+                Text('Ж49', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label:
+                Text('Ж50', style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+        DataColumn(
+            label: Text('Залік',
+                style: TextStyle(fontWeight: FontWeight.bold))),
+        DataColumn(
+            label: Text('Очки',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            numeric: true),
+      ],
+      rows: _standings.map((s) {
+        final m35 =
+            _formatPlaces(s.categoryPlaces[AthleticsCategory.m35] ?? []);
+        final m49 =
+            _formatPlaces(s.categoryPlaces[AthleticsCategory.m49] ?? []);
+        final m50 =
+            _formatPlaces(s.categoryPlaces[AthleticsCategory.m50] ?? []);
+        final f35 =
+            _formatPlaces(s.categoryPlaces[AthleticsCategory.f35] ?? []);
+        final f49 =
+            _formatPlaces(s.categoryPlaces[AthleticsCategory.f49] ?? []);
+        final f50 =
+            _formatPlaces(s.categoryPlaces[AthleticsCategory.f50] ?? []);
+
+        return DataRow(
+          color: s.place <= 3
+              ? WidgetStatePropertyAll(
+                  s.place == 1
+                      ? Colors.amber.shade50
+                      : s.place == 2
+                          ? Colors.grey.shade50
+                          : Colors.brown.shade50,
+                )
+              : null,
+          cells: [
+            DataCell(Text(
+              '${s.place}',
+              style: TextStyle(
+                fontWeight:
+                    s.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                color: s.place == 1
+                    ? Colors.amber.shade800
+                    : s.place == 2
+                        ? Colors.grey.shade600
+                        : s.place == 3
+                            ? Colors.brown
+                            : null,
+              ),
+            )),
+            DataCell(Text(s.teamName,
+                style: const TextStyle(fontWeight: FontWeight.w500))),
+            DataCell(Text(m35)),
+            DataCell(Text(m49)),
+            DataCell(Text(m50)),
+            DataCell(Text(f35)),
+            DataCell(Text(f49)),
+            DataCell(Text(f50)),
+            DataCell(Text(
+              s.scoringPlaces.join('+'),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.indigo.shade700,
+                  fontWeight: FontWeight.w500),
+            )),
+            DataCell(Text(
+              '${s.totalPoints}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            )),
+          ],
+        );
+      }).toList(),
     );
+  }
+
+  String _formatPlaces(List<int> places) {
+    if (places.isEmpty) return '-';
+    return places.join('+');
   }
 }

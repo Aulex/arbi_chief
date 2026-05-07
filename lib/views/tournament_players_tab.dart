@@ -67,6 +67,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final surnameC = TextEditingController(text: player.player_surname);
     final lastnameC = TextEditingController(text: player.player_lastname);
     final dobC = TextEditingController(text: player.birthDateForUI);
+    final ageC = TextEditingController(text: player.player_age != null ? player.player_age.toString() : '');
     final weightC = TextEditingController();
     int gender = player.player_gender;
     final needsWeight = const {8, 9, 13}.contains(widget.tType);
@@ -98,6 +99,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
     Future<void> saveEdit(BuildContext dialogContext) async {
       if (nameC.text.trim().isEmpty || surnameC.text.trim().isEmpty) return;
+      int? parsedAge = int.tryParse(ageC.text.trim());
       await ref.read(playerProvider.notifier).updatePlayer(
         player.copyWith(
           player_name: nameC.text.trim(),
@@ -105,6 +107,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           player_lastname: lastnameC.text.trim(),
           player_gender: gender,
           player_date_birth: Player.formatForDB(dobC.text.trim()),
+          player_age: parsedAge,
         ),
       );
       final weightVal = double.tryParse(weightC.text.trim());
@@ -190,6 +193,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     Row(
                       children: [
                         Expanded(
+                          flex: 2,
                           child: TextField(
                             controller: dobC,
                             readOnly: true,
@@ -204,8 +208,22 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                             onTap: () => pickDate(dialogContext, setST),
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: 8),
                         Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: ageC,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: InputDecoration(
+                              labelText: 'Вік (опц.)',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 1,
                           child: DropdownButtonFormField<int>(
                             value: gender,
                             decoration: InputDecoration(
@@ -213,8 +231,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             ),
                             items: const [
-                              DropdownMenuItem(value: 0, child: Text('Чоловіча')),
-                              DropdownMenuItem(value: 1, child: Text('Жіноча')),
+                              DropdownMenuItem(value: 0, child: Text('Чол')),
+                              DropdownMenuItem(value: 1, child: Text('Жін')),
                             ],
                             onChanged: (v) => setST(() => gender = v!),
                           ),
@@ -292,17 +310,30 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           finalParts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         }
         if (finalParts.isEmpty) continue;
+        
+        int? age;
+        if (finalParts.length > 2) {
+          final lastPart = finalParts.last;
+          final parsedAge = int.tryParse(lastPart);
+          if (parsedAge != null && parsedAge > 4 && parsedAge < 150) {
+            age = parsedAge;
+            finalParts.removeLast();
+          }
+        }
+
         if (fmt == 0) {
           result.add(_ParsedPlayer(
             surname: finalParts[0],
             name: finalParts.length > 1 ? finalParts[1] : '',
             lastname: finalParts.length > 2 ? finalParts.sublist(2).join(' ') : '',
+            age: age,
           ));
         } else {
           result.add(_ParsedPlayer(
             surname: finalParts[0],
             name: finalParts.length > 1 ? finalParts.sublist(1).join(' ') : '',
             lastname: '',
+            age: age,
           ));
         }
       }
@@ -386,7 +417,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                             final genderLabel = Player.detectGender(p.name, p.lastname) == 0 ? 'Ч' : 'Ж';
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 1),
-                              child: Text('${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($genderLabel)',
+                              child: Text('${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($genderLabel)${p.age != null ? ', Вік: ${p.age}' : ''}',
                                 style: TextStyle(fontSize: 12, color: p.surname.isEmpty ? Colors.red : Colors.black87),
                               ),
                             );
@@ -420,6 +451,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                   lastname: p.lastname,
                                   gender: Player.detectGender(p.name, p.lastname),
                                   dob: '',
+                                  age: p.age,
                                 )).toList(),
                               );
                               await ref.read(tournamentServiceProvider).bulkAddParticipants(widget.tId, playerIds);
@@ -467,21 +499,66 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       final result = <_ParsedTeamPlayer>[];
       for (final line in lines) {
         List<String> parts = line.split(RegExp(r'\t|;')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        int? age;
+        if (parts.length >= 3) {
+          final lastPart = parts.last;
+          final parsedAge = int.tryParse(lastPart);
+          if (parsedAge != null && parsedAge > 4 && parsedAge < 150) {
+            age = parsedAge;
+            parts.removeLast();
+          }
+        }
+
         if (parts.length == 1) {
           final spaceParts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+          int? spaceAge;
+          if (spaceParts.length >= 4) {
+            final lastSpace = spaceParts.last;
+            final parsedSpaceAge = int.tryParse(lastSpace);
+            if (parsedSpaceAge != null && parsedSpaceAge > 4 && parsedSpaceAge < 150) {
+              spaceAge = parsedSpaceAge;
+              spaceParts.removeLast();
+            }
+          }
+
           if (fmt == 0) {
             if (spaceParts.length >= 4) {
-              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: spaceParts[2], teamName: spaceParts.sublist(3).join(' ')));
+              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: spaceParts[2], teamName: spaceParts.sublist(3).join(' '), age: spaceAge));
             }
           } else {
             if (spaceParts.length >= 3) {
-              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: '', teamName: spaceParts.sublist(2).join(' ')));
+              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: '', teamName: spaceParts.sublist(2).join(' '), age: spaceAge));
+            }
+          }
+        } else if (parts.length == 2) {
+          // Two tab-separated fields: first = "Surname Name [Patronymic]", second = team
+          final nameParts = parts[0].split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+          final teamName = parts[1];
+          if (fmt == 0) {
+            if (nameParts.length >= 2) {
+              result.add(_ParsedTeamPlayer(
+                surname: nameParts[0],
+                name: nameParts[1],
+                lastname: nameParts.length > 2 ? nameParts.sublist(2).join(' ') : '',
+                teamName: teamName,
+                age: age,
+              ));
+            }
+          } else {
+            if (nameParts.length >= 2) {
+              result.add(_ParsedTeamPlayer(
+                surname: nameParts[0],
+                name: nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '',
+                lastname: '',
+                teamName: teamName,
+                age: age,
+              ));
             }
           }
         } else {
           if (fmt == 0) {
             if (parts.length >= 4) {
-              result.add(_ParsedTeamPlayer(surname: parts[0], name: parts[1], lastname: parts[2], teamName: parts.sublist(3).join(' ')));
+              result.add(_ParsedTeamPlayer(surname: parts[0], name: parts[1], lastname: parts[2], teamName: parts.sublist(3).join(' '), age: age));
             }
           } else {
             if (parts.length >= 3) {
@@ -490,6 +567,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                 name: parts[1],
                 lastname: '',
                 teamName: parts.sublist(2).join(' '),
+                age: age,
               ));
             }
           }
@@ -614,10 +692,10 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                   for (var i = 0; i < entry.value.length; i++)
                                     Padding(
                                       padding: const EdgeInsets.only(left: 16),
-                                      child: Text(
-                                        '${i + 1}. ${entry.value[i].surname} ${entry.value[i].name} ${entry.value[i].lastname} '
-                                        '(${Player.detectGender(entry.value[i].name, entry.value[i].lastname) == 0 ? 'Ч' : 'Ж'})',
-                                        style: TextStyle(
+                                        child: Text(
+                                          '${i + 1}. ${entry.value[i].surname} ${entry.value[i].name} ${entry.value[i].lastname} '
+                                          '(${Player.detectGender(entry.value[i].name, entry.value[i].lastname) == 0 ? 'Ч' : 'Ж'}${entry.value[i].age != null ? ', Вік: ${entry.value[i].age}' : ''})',
+                                          style: TextStyle(
                                           fontSize: 12,
                                           color: entry.value[i].surname.isEmpty ? Colors.red : Colors.black87,
                                         ),
@@ -691,6 +769,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                           lastname: p.lastname,
                                           gender: Player.detectGender(p.name, p.lastname),
                                           dob: '',
+                                          age: p.age,
                                         )).toList(),
                                       );
 
@@ -1301,7 +1380,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           title: Text(player.fullName),
                           subtitle: player.birthDateForUI.isNotEmpty
                               ? Text(player.birthDateForUI)
-                              : null,
+                              : (player.player_age != null ? Text('Вік: ${player.player_age}') : null),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1334,7 +1413,8 @@ class _ParsedPlayer {
   final String surname;
   final String name;
   final String lastname;
-  const _ParsedPlayer({required this.surname, required this.name, required this.lastname});
+  final int? age;
+  const _ParsedPlayer({required this.surname, required this.name, required this.lastname, this.age});
 }
 
 class _ParsedTeamPlayer {
@@ -1342,5 +1422,6 @@ class _ParsedTeamPlayer {
   final String surname;
   final String name;
   final String lastname;
-  const _ParsedTeamPlayer({required this.teamName, required this.surname, required this.name, required this.lastname});
+  final int? age;
+  const _ParsedTeamPlayer({required this.teamName, required this.surname, required this.name, required this.lastname, this.age});
 }

@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 13,
+      version: 15,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -323,6 +323,20 @@ class DatabaseService {
             'attr_entity_type': 2,
           });
         }
+        if (oldVersion < 14) {
+          // Вікові коефіцієнти for athletics (tournament level)
+          await db.insert('CMP_ATTR', {
+            'attr_id': 18,
+            'attr_name': 'Вікові коефіцієнти',
+            'attr_data_type': 'TEXT',
+            'attr_entity_type': 1,
+            'attr_t_type': 10,
+          });
+        }
+        if (oldVersion < 15) {
+          // Add player_age to CMP_PLAYER
+          await db.execute('ALTER TABLE CMP_PLAYER ADD COLUMN player_age INTEGER');
+        }
       },
       onCreate: (db, version) async {
         // 1. CMP_TOURNAMENT_TYPE
@@ -478,6 +492,7 @@ class DatabaseService {
             player_lastname TEXT,
             player_gender INTEGER,
             player_date_birth TEXT,
+            player_age INTEGER,
             t_type INTEGER,
             entity_id INTEGER,
             sync_uid TEXT,
@@ -721,6 +736,14 @@ class DatabaseService {
           'attr_name': 'Вага спортсмена',
           'attr_data_type': 'REAL',
           'attr_entity_type': 2,
+        });
+        // Вікові коефіцієнти for athletics (tournament level) (NEW in v14)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 18,
+          'attr_name': 'Вікові коефіцієнти',
+          'attr_data_type': 'TEXT',
+          'attr_entity_type': 1,
+          'attr_t_type': 10,
         });
 
         await db.insert('CMP_ATTR_DICT', {

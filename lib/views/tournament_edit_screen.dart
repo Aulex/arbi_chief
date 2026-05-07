@@ -218,7 +218,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     } else if (widget.tournament.t_type == 10) { // Athletics
       tabCount = 5;
       tabs = const [
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.directions_run, size: 18), SizedBox(width: 6), Text('Результати')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),

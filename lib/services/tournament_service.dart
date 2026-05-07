@@ -122,6 +122,31 @@ class TournamentService {
 
   Future<void> removeParticipant(int tId, int playerId) async {
     final db = await _dbService.database;
+    // Find player entity
+    final pRows = await db.query('CMP_PLAYER', columns: ['entity_id'], where: 'player_id = ?', whereArgs: [playerId]);
+    if (pRows.isNotEmpty) {
+      final entId = pRows.first['entity_id'] as int?;
+      if (entId != null) {
+        // Find all subevents for this entity in this tournament
+        final seRows = await db.rawQuery('''
+          SELECT se.se_id, e.event_id
+          FROM CMP_SUBEVENT se
+          JOIN CMP_EVENT e ON se.ev_id = e.event_id
+          WHERE e.t_id = ? AND se.entity_id = ?
+        ''', [tId, entId]);
+        for (final row in seRows) {
+          await db.delete('CMP_SUBEVENT', where: 'se_id = ?', whereArgs: [row['se_id']]);
+        }
+      }
+    }
+    
+    // Delete player team attributes
+    final ptRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'], where: 't_id = ? AND player_id = ?', whereArgs: [tId, playerId]);
+    for (final pt in ptRows) {
+      await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ?', whereArgs: [pt['pte_id']]);
+    }
+    await db.delete('CMP_PLAYER_TEAM', where: 't_id = ? AND player_id = ?', whereArgs: [tId, playerId]);
+
     await db.delete(
       'CMP_PLAYER_TOURNAMENT',
       where: 't_id = ? AND player_id = ?',

@@ -1,9 +1,25 @@
-/// Athletics scoring logic.
-///
-/// Rules: 1st place = 1pt, 2nd = 2pts, etc. Lower total sum wins.
-/// Team scoring: 3 best results from 3 different categories.
-/// Missing categories penalised with (largest category size + 1).
-/// Tie-breakers: Most 1st places, then most 2nd places, etc.
+// Athletics scoring logic.
+//
+// Rules:
+// - Individual: 1st place = 1pt, 2nd = 2pts, etc. (within each age/gender category)
+// - Team scoring: 3 best results (2 men + 1 woman) from different age categories
+// - Missing categories penalised with (largest category size + 1)
+// - Tie-breakers (in order):
+//   1) More 1st places, then 2nd, 3rd, etc.
+//   2) Lowest sum of times of 3 contributing participants
+//   3) Largest sum of ages of 3 contributing participants
+//   4) Best result among women in scoring
+//
+// Category merging: if <5 participants in a category, merge into younger category.
+// Category cancellation: if <=4 participants (including base categories), don't run.
+//
+// Age flexibility:
+// - Participants 35+ may compete in Ч35/Ж35
+// - Participants 50+ may compete in Ч35, Ч49 / Ж35, Ж49
+// - Women may replace men only in their own or younger age categories
+
+// Main scoring logic is implemented in AthleticsService.getTeamStandings()
+// This file is kept for compatibility with the sport_type_config.dart pattern.
 
 class AthleticsStanding {
   final int teamId;
@@ -25,106 +41,4 @@ class AthleticsStanding {
   });
 
   int countPlace(int p) => places.where((x) => x == p).length;
-}
-
-List<AthleticsStanding> calculateStandings({
-  required List<({int teamId, String teamName})> teams,
-  required List<({int teamId, int place, String? category})> individualResults,
-  int maxResultsPerTeam = 3,
-  Set<int> removedTeamIds = const {},
-}) {
-  final standings = <int, AthleticsStanding>{};
-
-  for (final team in teams) {
-    standings[team.teamId] = AthleticsStanding(
-      teamId: team.teamId,
-      teamName: team.teamName,
-      isRemoved: removedTeamIds.contains(team.teamId),
-    );
-  }
-
-  // Find largest category size for penalty calculation
-  final categorySizes = <String, int>{};
-  for (final res in individualResults) {
-    final cat = res.category ?? '';
-    categorySizes[cat] = (categorySizes[cat] ?? 0) + 1;
-  }
-  int maxCategorySize = 0;
-  for (final size in categorySizes.values) {
-    if (size > maxCategorySize) maxCategorySize = size;
-  }
-  final penaltyPlace = maxCategorySize + 1;
-
-  // Group results by team, then pick best from different categories
-  final teamResults = <int, List<({int place, String category})>>{};
-  for (final res in individualResults) {
-    teamResults
-        .putIfAbsent(res.teamId, () => [])
-        .add((place: res.place, category: res.category ?? ''));
-  }
-
-  for (final teamId in teamResults.keys) {
-    if (standings[teamId] == null) continue;
-
-    final results = teamResults[teamId]!;
-    final hasCategories = results.any((r) => r.category.isNotEmpty);
-
-    List<int> bestPlaces;
-    List<String> contribCats = [];
-
-    if (hasCategories) {
-      // Group by category, pick best per category
-      final bestPerCategory = <String, int>{};
-      for (final r in results) {
-        final cat = r.category;
-        if (!bestPerCategory.containsKey(cat) || r.place < bestPerCategory[cat]!) {
-          bestPerCategory[cat] = r.place;
-        }
-      }
-      // Sort categories by best place and pick top N
-      final sortedCats = bestPerCategory.entries.toList()
-        ..sort((a, b) => a.value.compareTo(b.value));
-      bestPlaces = [];
-      for (int i = 0; i < maxResultsPerTeam; i++) {
-        if (i < sortedCats.length) {
-          bestPlaces.add(sortedCats[i].value);
-          contribCats.add(sortedCats[i].key);
-        } else {
-          // Penalty for missing category
-          bestPlaces.add(penaltyPlace);
-        }
-      }
-    } else {
-      // Fallback: no categories assigned, use best N results
-      final sorted = results.map((r) => r.place).toList()..sort();
-      bestPlaces = sorted.length > maxResultsPerTeam
-          ? sorted.take(maxResultsPerTeam).toList()
-          : sorted;
-    }
-
-    standings[teamId]!.places = bestPlaces;
-    standings[teamId]!.contributingCategories = contribCats;
-    standings[teamId]!.totalPoints = bestPlaces.fold(0, (sum, p) => sum + p);
-  }
-
-  final result = standings.values.toList();
-  result.sort((a, b) {
-    if (a.isRemoved != b.isRemoved) return a.isRemoved ? 1 : -1;
-    if (a.totalPoints == 0 && b.totalPoints == 0) return a.teamName.compareTo(b.teamName);
-    if (a.totalPoints == 0) return 1;
-    if (b.totalPoints == 0) return -1;
-    final ptsCmp = a.totalPoints.compareTo(b.totalPoints);
-    if (ptsCmp != 0) return ptsCmp;
-    for (int i = 1; i <= 50; i++) {
-      final aCount = a.countPlace(i);
-      final bCount = b.countPlace(i);
-      if (aCount != bCount) return bCount.compareTo(aCount);
-    }
-    return a.teamName.compareTo(b.teamName);
-  });
-
-  for (int i = 0; i < result.length; i++) {
-    result[i].rank = i + 1;
-  }
-  return result;
 }

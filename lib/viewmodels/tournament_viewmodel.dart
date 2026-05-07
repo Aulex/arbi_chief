@@ -18,7 +18,7 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     return ref.watch(tournamentServiceProvider).getAllTournaments(tType: tType);
   }
 
-  Future<void> addTournament({
+  Future<int> addTournament({
     int? existingId,
     required String name,
     required String dateBegin,
@@ -143,6 +143,7 @@ class TournamentNotifier extends AsyncNotifier<List<Tournament>> {
     }
 
     ref.invalidateSelf();
+    return tId;
   }
 
   Future<void> updateTournament(Tournament tournament) async {
