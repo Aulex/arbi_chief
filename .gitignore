@@ -64,18 +64,14 @@ sportrules.txt
 ~$*
 
 # Local debug/scratch scripts at repo root
-/check_relay_data.dart
-/check_schema.dart
-/count_entries.dart
-/extract_strings.dart
-/list_ts.dart
-/scan_rk.dart
-/search_hex.dart
-/search_seq.dart
-/search_seq_exact.dart
-/search_totals.dart
-/search_val.dart
-/search_xls.dart
-/tmp_*.py
+/check_*.dart
+/count_*.dart
+/extract_*.dart
+/list_*.dart
+/scan_*.dart
+/search_*.dart
 /replace_*.dart
 /test_parse.dart
+/tmp_*.py
+/tmp_*.dart
+/*.xls
