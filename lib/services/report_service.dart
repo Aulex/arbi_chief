@@ -728,8 +728,11 @@ class ReportService {
   Future<void> exportPdf(Tournament tournament, SportTypeConfig config, ReportData data) async {
     final doc = await buildPdf(tournament, config, data);
     final bytes = await doc.save();
-    final name = tournament.t_name.replaceAll(RegExp(r'[^\w\s\-]'), '').trim();
-    await Printing.sharePdf(bytes: bytes, filename: 'Звіт_$name.pdf');
+    // Strip filesystem-reserved characters but keep Unicode letters (Cyrillic).
+    final name = tournament.t_name
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '')
+        .trim();
+    await Printing.sharePdf(bytes: bytes, filename: '${name}_звіт.pdf');
   }
 
   // ---------------------------------------------------------------------------
