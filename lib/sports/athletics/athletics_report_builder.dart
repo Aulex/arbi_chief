@@ -192,8 +192,6 @@ class AthleticsReportBuilder {
           _cell('Команда', hdrStyle, align: pw.Alignment.centerLeft),
           _cell('Сума місць', hdrStyle),
           _cell('Залікові місця', hdrStyle),
-          _cell('Σ часу', hdrStyle),
-          _cell('Σ віку', hdrStyle),
         ],
       ),
     ];
@@ -213,8 +211,6 @@ class AthleticsReportBuilder {
           _cell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
           _cell('${s.totalPoints}', cellBold),
           _cell(scoring, cellSt),
-          _cell(_formatAdjusted(s.sumOfTimes.toDouble()), cellSt),
-          _cell('${s.sumOfAges}', cellSt),
         ],
       ));
     }
@@ -239,8 +235,6 @@ class AthleticsReportBuilder {
               1: pw.FlexColumnWidth(4),
               2: pw.FixedColumnWidth(60),
               3: pw.FixedColumnWidth(80),
-              4: pw.FixedColumnWidth(70),
-              5: pw.FixedColumnWidth(50),
             },
             defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
             children: rows,
