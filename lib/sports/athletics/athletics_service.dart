@@ -5,9 +5,25 @@ import '../../services/database_service.dart';
 /// Athletics database service — stores time-based results per category.
 /// Follows the SwimmingService pattern: uses CMP_EVENT/CMP_SUBEVENT tables.
 class AthleticsService {
+  static const int _eventTypeIndividual = 1;
+  static const int _attrIdAgeCoefficients = 18;
+
   final DatabaseService _dbService;
 
   AthleticsService(this._dbService);
+
+  /// Returns the reference year for age calculations: tournament begin year
+  /// when available, otherwise the current year.
+  Future<int> _tournamentReferenceYear(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query('CMP_TOURNAMENT',
+        columns: ['t_date_begin'], where: 't_id = ?', whereArgs: [tId]);
+    if (rows.isEmpty) return DateTime.now().year;
+    final dateStr = rows.first['t_date_begin'] as String? ?? '';
+    if (dateStr.isEmpty) return DateTime.now().year;
+    final parsed = DateTime.tryParse(dateStr);
+    return parsed?.year ?? DateTime.now().year;
+  }
 
   // ── CRUD ──
 
@@ -29,13 +45,13 @@ class AthleticsService {
       eventId = subRows.first['ev_id'] as int;
 
       await db.update('CMP_EVENT', {
-        'event_result': result.totalDsec.toString(),
+        'event_result': result.totalDsec,
       }, where: 'event_id = ?', whereArgs: [eventId]);
     } else {
       eventId = await db.insert('CMP_EVENT', {
         't_id': result.tournamentId,
-        'et_id': 1, // Individual
-        'event_result': result.totalDsec.toString(),
+        'et_id': _eventTypeIndividual,
+        'event_result': result.totalDsec,
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ath_ev',
       });
     }
@@ -44,7 +60,7 @@ class AthleticsService {
     final subEventMap = {
       'ev_id': eventId,
       'entity_id': entityId,
-      'se_result': result.totalDsec.toDouble(),
+      'se_result': result.totalDsec,
       'se_note': result.category.name,
       'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ath_se',
     };
@@ -119,11 +135,13 @@ class AthleticsService {
     String sql = '''
       SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id,
-             COALESCE(pt.team_id, 0) as team_id
+             COALESCE((
+               SELECT MIN(pt.team_id) FROM CMP_PLAYER_TEAM pt
+               WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
+             ), 0) as team_id
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
-      LEFT JOIN CMP_PLAYER_TEAM pt ON p.player_id = pt.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
       WHERE e.t_id = ? AND se.se_note IN ($athCategories)
     ''';
 
@@ -152,18 +170,14 @@ class AthleticsService {
 
   // ── Individual Standings ──
 
-  /// Calculate age from birth date string.
-  int _calculateAge(String? dobStr) {
+  /// Calculate age relative to a reference year (typically tournament year).
+  /// Birth-day vs Jan 1 of reference year is treated as completing the year,
+  /// matching the rule "born YYYY+ → category X" which is purely year-based.
+  int _calculateAge(String? dobStr, int referenceYear) {
     if (dobStr == null || dobStr.isEmpty) return 0;
     try {
       final dob = DateTime.parse(dobStr);
-      final now = DateTime.now();
-      int age = now.year - dob.year;
-      if (now.month < dob.month ||
-          (now.month == dob.month && now.day < dob.day)) {
-        age--;
-      }
-      return age;
+      return referenceYear - dob.year;
     } catch (_) {
       return 0;
     }
@@ -177,18 +191,23 @@ class AthleticsService {
     AthleticsCategory category, {
     Map<int, ({double men3000, double women1500})>? customCoefficients,
   }) async {
-    final db = await _dbService.database;
     final rows = await db.rawQuery('''
       SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, p.player_surname, p.player_name, p.player_lastname,
              p.player_date_birth, p.player_age, p.player_gender,
-             COALESCE(pt.team_id, 0) as team_id,
-             COALESCE(t2.team_name, '') as team_name
+             COALESCE((
+               SELECT MIN(pt.team_id) FROM CMP_PLAYER_TEAM pt
+               WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
+             ), 0) as team_id,
+             COALESCE((
+               SELECT t2.team_name FROM CMP_PLAYER_TEAM pt
+               JOIN CMP_TEAM t2 ON pt.team_id = t2.team_id
+               WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
+               ORDER BY pt.team_id LIMIT 1
+             ), '') as team_name
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
-      LEFT JOIN CMP_PLAYER_TEAM pt ON p.player_id = pt.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
-      LEFT JOIN CMP_TEAM t2 ON pt.team_id = t2.team_id
       WHERE e.t_id = ? AND se.se_note = ?
     ''', [tId, category.name]);
 
@@ -198,7 +217,7 @@ class AthleticsService {
       final total = (row['time_total'] as num?)?.toInt() ?? 0;
       final dob = row['player_date_birth'] as String?;
       final dbAge = row['player_age'] as int?;
-      int age = _calculateAge(dob);
+      int age = _calculateAge(dob, referenceYear);
       if (age <= 0 && dbAge != null && dbAge > 0) {
         age = dbAge;
       }
@@ -243,7 +262,7 @@ class AthleticsService {
     int place = 1;
     for (int i = 0; i < results.length; i++) {
       final r = results[i];
-      if (i > 0 && r.adjDsec.round() != results[i - 1].adjDsec.round()) {
+      if (i > 0 && !_adjustedTimesTied(r.adjDsec, results[i - 1].adjDsec)) {
         place = i + 1;
       }
       ranked.add(RankedAthleticsResult(
@@ -258,6 +277,10 @@ class AthleticsService {
     }
     return ranked;
   }
+
+  /// Two adjusted times are considered tied when they round to the same
+  /// decisecond — the precision used to display and report results.
+  bool _adjustedTimesTied(double a, double b) => a.round() == b.round();
 
   // ── Team Standings ──
 
@@ -303,26 +326,15 @@ class AthleticsService {
     }
     final penaltyPlace = maxCatSize + 1;
 
-    /// Get actual places for a team in a category's standings.
-    List<int> bestPlacesForTeam(
-        List<RankedAthleticsResult> standings, int teamId, int count) {
+    /// All places for a team in a category's standings, sorted ascending.
+    List<int> placesForTeam(
+        List<RankedAthleticsResult> standings, int teamId) {
       final teamResults = standings
           .where((r) => r.result.teamId == teamId)
           .map((r) => r.place)
           .toList();
       teamResults.sort();
-      return teamResults.take(count).toList();
-    }
-
-
-    /// Get age for a player from birth date.
-    Future<int> getPlayerAge(int playerId) async {
-      final pRows = await db.query('CMP_PLAYER',
-          columns: ['player_date_birth'],
-          where: 'player_id = ?', whereArgs: [playerId]);
-      if (pRows.isEmpty) return 0;
-      final dob = pRows.first['player_date_birth'] as String? ?? '';
-      return _calculateAge(dob);
+      return teamResults;
     }
 
     // Active male categories (those with results after merging)
@@ -342,7 +354,7 @@ class AthleticsService {
       final teamName = row['team_name'] as String;
 
       // Pick best 2 men from different categories
-      final maleOptions = <({AthleticsCategory cat, int place, int time, int playerId})>[];
+      final maleOptions = <({AthleticsCategory cat, int place, int time, int age})>[];
       for (final cat in activeMaleCats) {
         final standings = categoryStandings[cat]!;
         final teamResults = standings.where((r) => r.result.teamId == teamId).toList();
@@ -351,14 +363,14 @@ class AthleticsService {
             cat: cat,
             place: teamResults.first.place,
             time: teamResults.first.result.totalDsec,
-            playerId: teamResults.first.result.playerId,
+            age: teamResults.first.age,
           ));
         }
       }
       maleOptions.sort((a, b) => a.place.compareTo(b.place));
 
       // Pick best 2 from different categories
-      final selectedMale = <({AthleticsCategory cat, int place, int time, int playerId})>[];
+      final selectedMale = <({AthleticsCategory cat, int place, int time, int age})>[];
       final usedCats = <AthleticsCategory>{};
       for (final opt in maleOptions) {
         if (!usedCats.contains(opt.cat) && selectedMale.length < 2) {
@@ -368,7 +380,7 @@ class AthleticsService {
       }
 
       // Pick best 1 woman from different category
-      final femaleOptions = <({AthleticsCategory cat, int place, int time, int playerId})>[];
+      final femaleOptions = <({AthleticsCategory cat, int place, int time, int age})>[];
       for (final cat in activeFemaleCats) {
         final standings = categoryStandings[cat]!;
         final teamResults = standings.where((r) => r.result.teamId == teamId).toList();
@@ -377,7 +389,7 @@ class AthleticsService {
             cat: cat,
             place: teamResults.first.place,
             time: teamResults.first.result.totalDsec,
-            playerId: teamResults.first.result.playerId,
+            age: teamResults.first.age,
           ));
         }
       }
@@ -387,14 +399,14 @@ class AthleticsService {
 
       // Build scoring places
       final scoringPlaces = <int>[];
-      final contributingPlayerIds = <int>[];
       double bestWomanTime = double.infinity;
+      int sumOfAges = 0;
 
       // 2 male places
       for (int i = 0; i < 2; i++) {
         if (i < selectedMale.length) {
           scoringPlaces.add(selectedMale[i].place);
-          contributingPlayerIds.add(selectedMale[i].playerId);
+          sumOfAges += selectedMale[i].age;
         } else {
           scoringPlaces.add(penaltyPlace);
         }
@@ -402,13 +414,13 @@ class AthleticsService {
       // 1 female place
       if (selectedFemale != null) {
         scoringPlaces.add(selectedFemale.place);
-        contributingPlayerIds.add(selectedFemale.playerId);
+        sumOfAges += selectedFemale.age;
         bestWomanTime = selectedFemale.time.toDouble();
       } else {
         scoringPlaces.add(penaltyPlace);
       }
 
-      final totalPoints = scoringPlaces.fold(0, (sum, p) => sum + p);
+      final totalPoints = scoringPlaces.fold<int>(0, (sum, p) => sum + p);
 
       // Sum of times for tiebreak
       int sumOfTimes = 0;
@@ -417,18 +429,9 @@ class AthleticsService {
       }
       if (selectedFemale != null) sumOfTimes += selectedFemale.time;
 
-      // Sum of ages for tiebreak
-      int sumOfAges = 0;
-      for (final pid in contributingPlayerIds) {
-        sumOfAges += await getPlayerAge(pid);
-      }
-
       final categoryPlacesMap = <AthleticsCategory, List<int>>{};
       for (final cat in AthleticsCategory.values) {
-        categoryPlacesMap[cat] = bestPlacesForTeam(
-          categoryStandings[cat]!, teamId,
-          cat.isMale ? 1 : 1,
-        );
+        categoryPlacesMap[cat] = placesForTeam(categoryStandings[cat]!, teamId);
       }
 
       teamStandings.add(_TeamScore(
@@ -443,6 +446,11 @@ class AthleticsService {
       ));
     }
 
+    // Compute the highest place value once instead of inside every comparison.
+    final maxPlace = teamStandings
+        .expand((t) => t.scoringPlaces)
+        .fold<int>(0, (m, p) => p > m ? p : m);
+
     // Sort with all tiebreakers
     teamStandings.sort((a, b) {
       // Primary: lowest total points
@@ -450,9 +458,6 @@ class AthleticsService {
       if (cmp != 0) return cmp;
 
       // Tiebreak 1: more 1st places, then 2nd, 3rd, etc.
-      final maxPlace = teamStandings
-          .expand((t) => t.scoringPlaces)
-          .fold(0, (m, p) => p > m ? p : m);
       for (int p = 1; p <= maxPlace; p++) {
         final aCount = a.scoringPlaces.where((x) => x == p).length;
         final bCount = b.scoringPlaces.where((x) => x == p).length;
@@ -484,9 +489,6 @@ class AthleticsService {
         if (t.totalPoints == prev.totalPoints) {
           // Check all tiebreakers for true tie
           bool isTied = true;
-          final maxPlace = teamStandings
-              .expand((ts) => ts.scoringPlaces)
-              .fold(0, (m, p) => p > m ? p : m);
           for (int p = 1; p <= maxPlace; p++) {
             if (t.scoringPlaces.where((x) => x == p).length !=
                 prev.scoringPlaces.where((x) => x == p).length) {
@@ -533,36 +535,34 @@ class AthleticsService {
         // Move results to the younger category
         standings[merge.to]!.addAll(standings[merge.from]!);
         standings[merge.from] = [];
-        // Re-sort and re-rank the target category
+        // Re-sort by adjusted time (each athlete keeps their own coefficient)
+        // and re-rank.
         standings[merge.to]!.sort((a, b) =>
-            a.result.totalDsec.compareTo(b.result.totalDsec));
+            a.adjustedDsec.compareTo(b.adjustedDsec));
         _reRank(standings[merge.to]!);
       }
     }
-
-    // Cancel categories with <=4 participants
-    for (final cat in AthleticsCategory.values) {
-      if (standings[cat]!.length <= 4) {
-        // Don't cancel, just keep as is — results still count for team scoring
-        // The rule says "competitions in such categories are not held" but
-        // participants can still get places for team scoring
-      }
-    }
+    // Categories with <=4 participants are kept as-is: per the rules the
+    // competition is not "held" in that category, but the athletes still
+    // contribute places to their team's scoring.
   }
 
   void _reRank(List<RankedAthleticsResult> standings) {
     int place = 1;
     for (int i = 0; i < standings.length; i++) {
-      if (i > 0 && standings[i].result.totalDsec != standings[i - 1].result.totalDsec) {
+      if (i > 0 && !_adjustedTimesTied(
+          standings[i].adjustedDsec, standings[i - 1].adjustedDsec)) {
         place = i + 1;
       }
+      final current = standings[i];
       standings[i] = RankedAthleticsResult(
-        result: standings[i].result,
+        result: current.result,
         place: place,
-        playerName: standings[i].playerName,
-        teamName: standings[i].teamName,
-        coefficient: standings[i].coefficient,
-        adjustedDsec: standings[i].adjustedDsec,
+        playerName: current.playerName,
+        teamName: current.teamName,
+        age: current.age,
+        coefficient: current.coefficient,
+        adjustedDsec: current.adjustedDsec,
       );
     }
   }
@@ -602,6 +602,7 @@ class AthleticsService {
       FROM CMP_TEAM t
       JOIN CMP_PLAYER_TEAM pt ON t.team_id = pt.team_id
       WHERE pt.t_id = ? AND t.team_name = ? COLLATE NOCASE
+        AND pt.player_state IN (0, 1)
     ''', [tId, teamName.trim()]);
 
     if (teamRows.isEmpty) return (playerId: null, teamId: null);
@@ -611,7 +612,7 @@ class AthleticsService {
       SELECT p.player_id
       FROM CMP_PLAYER_TEAM pt
       JOIN CMP_PLAYER p ON pt.player_id = p.player_id
-      WHERE pt.t_id = ? AND pt.team_id = ?
+      WHERE pt.t_id = ? AND pt.team_id = ? AND pt.player_state IN (0, 1)
       AND (
         TRIM(REPLACE(REPLACE(REPLACE(
           COALESCE(p.player_surname, '') || ' ' || COALESCE(p.player_name, '') || ' ' || COALESCE(p.player_lastname, ''),
@@ -638,7 +639,8 @@ class AthleticsService {
   ) async {
     final db = await _dbService.database;
     await db.delete('CMP_ATTR_VALUE',
-        where: 't_id = ? AND attr_id = 18', whereArgs: [tId]);
+        where: 't_id = ? AND attr_id = ?',
+        whereArgs: [tId, _attrIdAgeCoefficients]);
     // Store all entries
     final allMap = <String, Map<String, double>>{};
     for (final entry in customTable.entries) {
@@ -651,7 +653,7 @@ class AthleticsService {
 
     await db.insert('CMP_ATTR_VALUE', {
       't_id': tId,
-      'attr_id': 18,
+      'attr_id': _attrIdAgeCoefficients,
       'attr_value': jsonEncode(allMap),
     });
   }
@@ -664,7 +666,8 @@ class AthleticsService {
     final db = await _dbService.database;
     final rows = await db.query('CMP_ATTR_VALUE',
         columns: ['attr_value'],
-        where: 't_id = ? AND attr_id = 18', whereArgs: [tId]);
+        where: 't_id = ? AND attr_id = ?',
+        whereArgs: [tId, _attrIdAgeCoefficients]);
     if (rows.isEmpty) return null;
 
     final jsonStr = rows.first['attr_value'] as String? ?? '';
