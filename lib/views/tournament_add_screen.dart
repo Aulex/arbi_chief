@@ -6,7 +6,7 @@ import '../viewmodels/nav_provider.dart';
 import '../viewmodels/tournament_viewmodel.dart';
 import '../viewmodels/sport_type_provider.dart';
 import '../services/tournament_service.dart';
-import '../sports/athletics/athletics_results_tab.dart';
+import '../sports/athletics/athletics_providers.dart';
 import '../sports/athletics/athletics_service.dart';
 
 class TournamentAddScreen extends ConsumerStatefulWidget {
@@ -767,6 +767,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
   }
 
   Widget _buildTournamentConductTab() {
+    final isAthletics = widget.tournament?.t_type == 10;
     return _buildTab([
       const Text(
         'Налаштування проведення',
@@ -774,13 +775,15 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       ),
       const SizedBox(height: 8),
       Text(
-        'Визначте, як місця в групах впливають на подальші етапи турніру.',
+        isAthletics
+            ? 'Налаштуйте вікові коефіцієнти, які застосовуються до часу учасників.'
+            : 'Визначте, як місця в групах впливають на подальші етапи турніру.',
         style: TextStyle(color: Colors.grey.shade600),
       ),
       const SizedBox(height: 24),
 
       // --- Tournament conduct settings (hidden for athletics) ---
-      if (widget.tournament?.t_type != 10) ...[
+      if (!isAthletics) ...[
       // --- Finals places ---
       Card(
         elevation: 0,
@@ -911,7 +914,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
       ], // end of conduct settings hidden for athletics
 
       // --- Athletics Age Coefficients ---
-      if (widget.tournament?.t_type == 10) ...[
+      if (isAthletics) ...[
         const SizedBox(height: 24),
         Card(
           elevation: 0,

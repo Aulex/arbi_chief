@@ -59,3 +59,23 @@ Thumbs.db
 sportrules.pdf
 sportrules.txt
 Положення 36 Спартакіади ПООП 2026.doc
+
+# Microsoft Office lock files
+~$*
+
+# Local debug/scratch scripts at repo root
+/check_relay_data.dart
+/check_schema.dart
+/count_entries.dart
+/extract_strings.dart
+/list_ts.dart
+/scan_rk.dart
+/search_hex.dart
+/search_seq.dart
+/search_seq_exact.dart
+/search_totals.dart
+/search_val.dart
+/search_xls.dart
+/tmp_*.py
+/replace_*.dart
+/test_parse.dart

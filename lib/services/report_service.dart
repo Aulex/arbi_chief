@@ -14,6 +14,8 @@ import '../sports/volleyball/volleyball_report_builder.dart';
 import '../sports/volleyball/volleyball_service.dart';
 import '../sports/streetball/streetball_report_builder.dart';
 import '../sports/streetball/streetball_service.dart';
+import '../sports/athletics/athletics_report_builder.dart';
+import '../sports/athletics/athletics_service.dart';
 import 'team_service.dart';
 import 'tournament_service.dart';
 
@@ -22,8 +24,15 @@ class ReportService {
   final TournamentService _tournamentService;
   final VolleyballService _volleyballService;
   final StreetballService _streetballService;
+  final AthleticsService _athleticsService;
 
-  ReportService(this._teamService, this._tournamentService, this._volleyballService, this._streetballService);
+  ReportService(
+    this._teamService,
+    this._tournamentService,
+    this._volleyballService,
+    this._streetballService,
+    this._athleticsService,
+  );
 
   /// Load all data needed for a tournament report.
   ///
@@ -31,6 +40,17 @@ class ReportService {
   /// lightweight [ReportData] with [hasTeamData] set — the actual PDF
   /// content is built by the sport-specific report builder.
   Future<ReportData> loadReportData(int tId, {int? sportType}) async {
+    // Athletics: delegate to athletics-specific builder for data check.
+    if (isAthletics(sportType)) {
+      final hasData = await AthleticsReportBuilder(_athleticsService).hasData(tId);
+      return ReportData(
+        boardPlayers: {},
+        boardResults: {},
+        boardResultDetails: {},
+        hasTeamData: hasData,
+      );
+    }
+
     // Team-match sports: delegate data check to sport-specific builder
     final config = getConfigForType(sportType);
     if (config.hasTeamCrossTable && !config.hasBoardCrossTables) {
@@ -330,6 +350,10 @@ class ReportService {
   }
 
   Future<pw.Document> buildPdf(Tournament tournament, SportTypeConfig config, ReportData data) async {
+    // Athletics: delegate to athletics builder.
+    if (isAthletics(tournament.t_type)) {
+      return AthleticsReportBuilder(_athleticsService).buildPdf(tournament);
+    }
     // Delegate to sport-specific builders for team sports
     if (config.hasTeamCrossTable && !config.hasBoardCrossTables) {
       return _buildTeamSportPdf(tournament, config);

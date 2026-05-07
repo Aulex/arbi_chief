@@ -2,13 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'athletics_model.dart';
-import 'athletics_service.dart';
+import 'athletics_providers.dart';
 import '../../viewmodels/shared_providers.dart';
-
-/// Provider for AthleticsService.
-final athleticsServiceProvider = Provider(
-  (ref) => AthleticsService(ref.watch(dbServiceProvider)),
-);
 
 /// Main tab for entering and viewing athletics results per category.
 class AthleticsResultsTab extends ConsumerStatefulWidget {

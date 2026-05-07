@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'athletics_model.dart';
-import 'athletics_results_tab.dart';
+import 'athletics_providers.dart';
 
 /// Displays team standings for athletics competitions.
 class AthleticsTeamStandingsTab extends ConsumerStatefulWidget {
