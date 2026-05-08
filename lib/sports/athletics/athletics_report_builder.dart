@@ -197,10 +197,10 @@ class AthleticsReportBuilder {
       pw.TableRow(
         decoration: const pw.BoxDecoration(color: PdfColors.grey200),
         children: [
-          _cell('Місце', hdrStyle),
           _cell('Команда', hdrStyle, align: pw.Alignment.centerLeft),
           _cell('Сума місць', hdrStyle),
           _cell('Залікові місця', hdrStyle),
+          _cell('Місце', hdrStyle),
         ],
       ),
     ];
@@ -216,10 +216,10 @@ class AthleticsReportBuilder {
       rows.add(pw.TableRow(
         decoration: bg,
         children: [
-          _cell('${s.place}', cellBold),
           _cell(s.teamName, cellSt, align: pw.Alignment.centerLeft),
           _cell('${s.totalPoints}', cellBold),
           _cell(scoring, cellSt),
+          _cell('${s.place}', cellBold),
         ],
       ));
     }
@@ -240,10 +240,10 @@ class AthleticsReportBuilder {
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey400),
             columnWidths: const {
-              0: pw.FixedColumnWidth(40),
-              1: pw.FlexColumnWidth(4),
-              2: pw.FixedColumnWidth(60),
-              3: pw.FixedColumnWidth(80),
+              0: pw.FlexColumnWidth(4),
+              1: pw.FixedColumnWidth(60),
+              2: pw.FixedColumnWidth(80),
+              3: pw.FixedColumnWidth(40),
             },
             defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
             children: rows,
