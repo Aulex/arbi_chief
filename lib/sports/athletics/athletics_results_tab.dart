@@ -534,8 +534,8 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
           DataColumn(label: Text('Час', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('Коеф', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
           DataColumn(label: Text('Зал. час', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('М', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+          DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
         rows: _standings.map((r) {
           return DataRow(
@@ -564,6 +564,19 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                 r.result.adjustedTimeFormatted(r.coefficient),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 14, color: Colors.indigo),
               )),
+              DataCell(Text(
+                '${r.place}',
+                style: TextStyle(
+                  fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                  color: r.place == 1
+                      ? Colors.amber.shade800
+                      : r.place == 2
+                          ? Colors.grey.shade600
+                          : r.place == 3
+                              ? Colors.brown
+                              : null,
+                ),
+              )),
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -580,19 +593,6 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                       tooltip: 'Видалити',
                     ),
                 ],
-              )),
-              DataCell(Text(
-                '${r.place}',
-                style: TextStyle(
-                  fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
-                  color: r.place == 1
-                      ? Colors.amber.shade800
-                      : r.place == 2
-                          ? Colors.grey.shade600
-                          : r.place == 3
-                              ? Colors.brown
-                              : null,
-                ),
               )),
             ],
           );
