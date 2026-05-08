@@ -191,6 +191,8 @@ class AthleticsService {
     AthleticsCategory category, {
     Map<int, ({double men3000, double women1500})>? customCoefficients,
   }) async {
+    final db = await _dbService.database;
+    final referenceYear = await _tournamentReferenceYear(tId);
     final rows = await db.rawQuery('''
       SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, p.player_surname, p.player_name, p.player_lastname,
