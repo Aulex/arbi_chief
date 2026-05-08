@@ -145,10 +145,6 @@ class _AthleticsTeamStandingsTabState
             label: Text('Залік',
                 style: TextStyle(fontWeight: FontWeight.bold))),
         DataColumn(
-            label: Text('Сума віку',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            numeric: true),
-        DataColumn(
             label: Text('Очки',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             numeric: true),
@@ -206,9 +202,6 @@ class _AthleticsTeamStandingsTabState
                   fontSize: 12,
                   color: Colors.indigo.shade700,
                   fontWeight: FontWeight.w500),
-            )),
-            DataCell(Text(
-              s.sumOfAges > 0 ? '${s.sumOfAges}' : '—',
             )),
             DataCell(Text(
               '${s.totalPoints}',

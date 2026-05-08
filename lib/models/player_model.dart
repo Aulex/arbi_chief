@@ -6,7 +6,6 @@ class Player {
   final int player_gender;
   final String player_date_birth; // Stored as yyyy-mm-dd in SQLite
   final int? player_age;          // Fallback age if birth date is missing
-  final int? player_number;       // Optional bib / participant number
   final int? t_type;
   final int? entity_id;
   final String? sync_uid;
@@ -19,7 +18,6 @@ class Player {
     required this.player_gender,
     required this.player_date_birth,
     this.player_age,
-    this.player_number,
     this.t_type,
     this.entity_id,
     this.sync_uid,
@@ -80,7 +78,6 @@ class Player {
     int? player_gender,
     String? player_date_birth,
     int? player_age,
-    int? player_number,
     int? t_type,
     int? entity_id,
     String? sync_uid,
@@ -93,7 +90,6 @@ class Player {
       player_gender: player_gender ?? this.player_gender,
       player_date_birth: player_date_birth ?? this.player_date_birth,
       player_age: player_age ?? this.player_age,
-      player_number: player_number ?? this.player_number,
       t_type: t_type ?? this.t_type,
       entity_id: entity_id ?? this.entity_id,
       sync_uid: sync_uid ?? this.sync_uid,
@@ -109,7 +105,6 @@ class Player {
       player_gender: json['player_gender'] as int? ?? 0,
       player_date_birth: json['player_date_birth'] as String? ?? '',
       player_age: json['player_age'] as int?,
-      player_number: json['player_number'] as int?,
       t_type: json['t_type'] as int?,
       entity_id: json['entity_id'] as int?,
       sync_uid: json['sync_uid'] as String?,
@@ -125,7 +120,6 @@ class Player {
       'player_gender': player_gender,
       'player_date_birth': player_date_birth,
       'player_age': player_age,
-      'player_number': player_number,
       't_type': t_type,
       'entity_id': entity_id,
       'sync_uid': sync_uid,

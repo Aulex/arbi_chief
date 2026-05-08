@@ -200,8 +200,6 @@ class PlayerView extends ConsumerWidget {
     final lastnameC =
         TextEditingController(text: player?.player_lastname ?? "");
     final dobC = TextEditingController(text: player?.birthDateForUI ?? "");
-    final numberC = TextEditingController(
-        text: player?.player_number?.toString() ?? "");
     int gender = player?.player_gender ?? 0;
     final isEdit = player != null;
 
@@ -318,17 +316,6 @@ class PlayerView extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: numberC,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Номер учасника',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
                     const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -358,10 +345,6 @@ class PlayerView extends ConsumerWidget {
                           onPressed: () {
                             if (nameC.text.trim().isEmpty ||
                                 surnameC.text.trim().isEmpty) return;
-                            final numberText = numberC.text.trim();
-                            final number = numberText.isEmpty
-                                ? null
-                                : int.tryParse(numberText);
                             if (player == null) {
                               ref.read(playerProvider.notifier).addPlayer(
                                     name: nameC.text.trim(),
@@ -369,24 +352,17 @@ class PlayerView extends ConsumerWidget {
                                     lastname: lastnameC.text.trim(),
                                     gender: gender,
                                     dob: dobC.text.trim(),
-                                    number: number,
                                   );
                             } else {
                               ref
                                   .read(playerProvider.notifier)
-                                  .updatePlayer(Player(
-                                    player_id: player.player_id,
-                                    player_surname: surnameC.text.trim(),
+                                  .updatePlayer(player.copyWith(
                                     player_name: nameC.text.trim(),
+                                    player_surname: surnameC.text.trim(),
                                     player_lastname: lastnameC.text.trim(),
                                     player_gender: gender,
                                     player_date_birth:
                                         Player.formatForDB(dobC.text.trim()),
-                                    player_age: player.player_age,
-                                    player_number: number,
-                                    t_type: player.t_type,
-                                    entity_id: player.entity_id,
-                                    sync_uid: player.sync_uid,
                                   ));
                             }
                             Navigator.pop(dialogContext);
@@ -657,8 +633,6 @@ class PlayerView extends ConsumerWidget {
               lastname: r.lastname,
               gender: r.gender,
               dob: '',
-              age: null,
-              number: null,
             ))
         .toList();
     await ref.read(playerProvider.notifier).bulkAddPlayers(playerData);
