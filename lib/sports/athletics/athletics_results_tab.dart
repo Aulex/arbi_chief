@@ -527,7 +527,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
         horizontalMargin: isNarrow ? 8 : 24,
         headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
         columns: const [
-          DataColumn(label: Text('М', style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(label: Text('№', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
           DataColumn(label: Text('ПІБ', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('Вік', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -535,21 +535,18 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
           DataColumn(label: Text('Коеф', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
           DataColumn(label: Text('Зал. час', style: TextStyle(fontWeight: FontWeight.bold))),
           DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(label: Text('М', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
         ],
         rows: _standings.map((r) {
           return DataRow(
             cells: [
               DataCell(Text(
-                '${r.place}',
+                r.playerNumber != null ? '${r.playerNumber}' : '—',
                 style: TextStyle(
-                  fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
-                  color: r.place == 1
-                      ? Colors.amber.shade800
-                      : r.place == 2
-                          ? Colors.grey.shade600
-                          : r.place == 3
-                              ? Colors.brown
-                              : null,
+                  fontWeight: FontWeight.bold,
+                  color: r.playerNumber != null
+                      ? Colors.indigo.shade700
+                      : Colors.grey.shade500,
                 ),
               )),
               DataCell(Text(r.playerName ?? '')),
@@ -583,6 +580,19 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                       tooltip: 'Видалити',
                     ),
                 ],
+              )),
+              DataCell(Text(
+                '${r.place}',
+                style: TextStyle(
+                  fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                  color: r.place == 1
+                      ? Colors.amber.shade800
+                      : r.place == 2
+                          ? Colors.grey.shade600
+                          : r.place == 3
+                              ? Colors.brown
+                              : null,
+                ),
               )),
             ],
           );

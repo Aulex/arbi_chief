@@ -206,7 +206,14 @@ class AthleticsService {
                JOIN CMP_TEAM t2 ON pt.team_id = t2.team_id
                WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id AND pt.player_state IN (0,1)
                ORDER BY pt.team_id LIMIT 1
-             ), '') as team_name
+             ), '') as team_name,
+             (
+               SELECT v.attr_value FROM CMP_PLAYER_TEAM pt
+               JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+               WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id
+                 AND pt.player_state IN (0,1) AND v.attr_id = 19
+               LIMIT 1
+             ) as player_number
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
@@ -214,7 +221,7 @@ class AthleticsService {
     ''', [tId, category.name]);
 
     // Build results with per-player coefficients
-    final results = <({AthleticsResult result, int age, double coeff, double adjDsec, String playerName, String? teamName})>[];
+    final results = <({AthleticsResult result, int age, double coeff, double adjDsec, String playerName, String? teamName, int? playerNumber})>[];
     for (final row in rows) {
       final total = (row['time_total'] as num?)?.toInt() ?? 0;
       final dob = row['player_date_birth'] as String?;
@@ -245,6 +252,7 @@ class AthleticsService {
       final surname = row['player_surname'] as String? ?? '';
       final name = row['player_name'] as String? ?? '';
       final lastname = row['player_lastname'] as String? ?? '';
+      final number = int.tryParse(row['player_number'] as String? ?? '');
 
       results.add((
         result: r,
@@ -253,6 +261,7 @@ class AthleticsService {
         adjDsec: adjDsec,
         playerName: '$surname $name $lastname'.trim(),
         teamName: row['team_name'] as String?,
+        playerNumber: number,
       ));
     }
 
@@ -275,6 +284,7 @@ class AthleticsService {
         age: r.age,
         coefficient: r.coeff,
         adjustedDsec: r.adjDsec,
+        playerNumber: r.playerNumber,
       ));
     }
     return ranked;
@@ -569,6 +579,7 @@ class AthleticsService {
         age: current.age,
         coefficient: current.coefficient,
         adjustedDsec: current.adjustedDsec,
+        playerNumber: current.playerNumber,
       );
     }
   }

@@ -140,6 +140,7 @@ class RankedAthleticsResult {
   final int age;
   final double coefficient;
   final double adjustedDsec;
+  final int? playerNumber;
 
   const RankedAthleticsResult({
     required this.result,
@@ -149,6 +150,7 @@ class RankedAthleticsResult {
     this.age = 0,
     this.coefficient = 1.0,
     this.adjustedDsec = 0,
+    this.playerNumber,
   });
 }
 

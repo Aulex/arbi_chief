@@ -114,13 +114,14 @@ class AthleticsReportBuilder {
       pw.TableRow(
         decoration: const pw.BoxDecoration(color: PdfColors.grey200),
         children: [
-          _cell('Місце', hdrStyle),
+          _cell('№', hdrStyle),
           _cell('Спортсмен', hdrStyle, align: pw.Alignment.centerLeft),
           _cell('Команда', hdrStyle, align: pw.Alignment.centerLeft),
           _cell('Вік', hdrStyle),
           _cell('Час', hdrStyle),
           _cell('Коеф.', hdrStyle),
           _cell('Заліковий час', hdrStyle),
+          _cell('Місце', hdrStyle),
         ],
       ),
     ];
@@ -134,13 +135,14 @@ class AthleticsReportBuilder {
       rows.add(pw.TableRow(
         decoration: bg,
         children: [
-          _cell('${s.place}', cellBold),
+          _cell(s.playerNumber != null ? '${s.playerNumber}' : '—', cellBold),
           _cell(s.playerName ?? '', cellSt, align: pw.Alignment.centerLeft),
           _cell(s.teamName ?? '', cellSt, align: pw.Alignment.centerLeft),
           _cell(s.age > 0 ? '${s.age}' : '—', cellSt),
           _cell(s.result.timeFormatted, cellSt),
           _cell(s.coefficient.toStringAsFixed(4), cellSt),
           _cell(adj, cellBold),
+          _cell('${s.place}', cellBold),
         ],
       ));
     }
@@ -170,6 +172,7 @@ class AthleticsReportBuilder {
               4: pw.FixedColumnWidth(56),
               5: pw.FixedColumnWidth(48),
               6: pw.FixedColumnWidth(72),
+              7: pw.FixedColumnWidth(40),
             },
             defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
             children: rows,

@@ -20,6 +20,7 @@ class TournamentPlayersTab extends ConsumerStatefulWidget {
 class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   List<Player> _participants = [];
   List<Player> _available = [];
+  Map<int, int> _playerNumbers = const {};
   bool _loading = true;
   String _search = '';
   final FocusNode _focusNode = FocusNode();
@@ -39,13 +40,19 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   Future<void> _loadData() async {
     final svc = ref.read(tournamentServiceProvider);
     final allPlayersFuture = ref.read(playerProvider.future);
-    
+
     final participants = await svc.getParticipants(widget.tId);
     if (!mounted) return;
-    
+
     final allPlayers = await allPlayersFuture;
     if (!mounted) return;
-    
+
+    final isAthletics = widget.tType == 10;
+    final numbers = isAthletics
+        ? await svc.getPlayerNumbers(widget.tId)
+        : const <int, int>{};
+    if (!mounted) return;
+
     final participantIds = participants.map((p) => p.player_id).toSet();
     final available = allPlayers
         .where((p) => !participantIds.contains(p.player_id))
@@ -57,6 +64,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         _participants = participants
           ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
         _available = available;
+        _playerNumbers = numbers;
         _loading = false;
       });
     }
@@ -1433,7 +1441,38 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final player = filtered[index];
+                        final isAthletics = widget.tType == 10;
+                        final number = player.player_id == null
+                            ? null
+                            : _playerNumbers[player.player_id!];
                         return ListTile(
+                          leading: isAthletics
+                              ? Container(
+                                  width: 44,
+                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: number != null
+                                        ? Colors.indigo.shade50
+                                        : Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: number != null
+                                          ? Colors.indigo.shade200
+                                          : Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    number != null ? '$number' : '—',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: number != null
+                                          ? Colors.indigo.shade700
+                                          : Colors.grey.shade500,
+                                    ),
+                                  ),
+                                )
+                              : null,
                           title: Text(player.fullName),
                           subtitle: player.birthDateForUI.isNotEmpty
                               ? Text(player.birthDateForUI)

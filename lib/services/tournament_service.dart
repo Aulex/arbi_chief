@@ -805,4 +805,22 @@ class TournamentService {
     if (rows.isEmpty) return null;
     return int.tryParse(rows.first['attr_value'] as String? ?? '');
   }
+
+  /// Get participant numbers for all players in a tournament.
+  /// Returns Map<playerId, number>.
+  Future<Map<int, int>> getPlayerNumbers(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, v.attr_value
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.t_id = ? AND v.attr_id = 19 AND v.attr_value IS NOT NULL
+    ''', [tId]);
+    final map = <int, int>{};
+    for (final r in rows) {
+      final n = int.tryParse(r['attr_value'] as String? ?? '');
+      if (n != null) map[r['player_id'] as int] = n;
+    }
+    return map;
+  }
 }
