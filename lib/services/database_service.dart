@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 15,
+      version: 16,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -337,6 +337,10 @@ class DatabaseService {
           // Add player_age to CMP_PLAYER
           await db.execute('ALTER TABLE CMP_PLAYER ADD COLUMN player_age INTEGER');
         }
+        if (oldVersion < 16) {
+          // Add player_number (bib / participant number) to CMP_PLAYER
+          await db.execute('ALTER TABLE CMP_PLAYER ADD COLUMN player_number INTEGER');
+        }
       },
       onCreate: (db, version) async {
         // 1. CMP_TOURNAMENT_TYPE
@@ -493,6 +497,7 @@ class DatabaseService {
             player_gender INTEGER,
             player_date_birth TEXT,
             player_age INTEGER,
+            player_number INTEGER,
             t_type INTEGER,
             entity_id INTEGER,
             sync_uid TEXT,

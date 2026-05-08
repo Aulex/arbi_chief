@@ -191,6 +191,8 @@ class AthleticsService {
     AthleticsCategory category, {
     Map<int, ({double men3000, double women1500})>? customCoefficients,
   }) async {
+    final db = await _dbService.database;
+    final referenceYear = await _tournamentReferenceYear(tId);
     final rows = await db.rawQuery('''
       SELECT se.se_id as sr_id, e.t_id, se.se_result as time_total, se.se_note as category,
              p.player_id, p.player_surname, p.player_name, p.player_lastname,
@@ -281,6 +283,47 @@ class AthleticsService {
   /// Two adjusted times are considered tied when they round to the same
   /// decisecond — the precision used to display and report results.
   bool _adjustedTimesTied(double a, double b) => a.round() == b.round();
+
+  /// Returns ranked results for all male or female athletes combined across
+  /// age categories. Each athlete keeps their own age coefficient; ranking
+  /// is by adjusted time. Used for the "absolute" gender standings.
+  Future<List<RankedAthleticsResult>> getOverallStandings(
+    int tId, {
+    required bool isMale,
+    Map<int, ({double men3000, double women1500})>? customCoefficients,
+  }) async {
+    final cats = isMale
+        ? AthleticsCategory.maleCategories
+        : AthleticsCategory.femaleCategories;
+
+    final all = <RankedAthleticsResult>[];
+    for (final cat in cats) {
+      final standings = await getCategoryStandings(
+        tId, cat, customCoefficients: customCoefficients,
+      );
+      all.addAll(standings);
+    }
+    all.sort((a, b) => a.adjustedDsec.compareTo(b.adjustedDsec));
+
+    final ranked = <RankedAthleticsResult>[];
+    int place = 1;
+    for (int i = 0; i < all.length; i++) {
+      final r = all[i];
+      if (i > 0 && !_adjustedTimesTied(r.adjustedDsec, all[i - 1].adjustedDsec)) {
+        place = i + 1;
+      }
+      ranked.add(RankedAthleticsResult(
+        result: r.result,
+        place: place,
+        playerName: r.playerName,
+        teamName: r.teamName,
+        age: r.age,
+        coefficient: r.coefficient,
+        adjustedDsec: r.adjustedDsec,
+      ));
+    }
+    return ranked;
+  }
 
   // ── Team Standings ──
 

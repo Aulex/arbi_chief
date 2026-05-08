@@ -452,6 +452,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                   gender: Player.detectGender(p.name, p.lastname),
                                   dob: '',
                                   age: p.age,
+                                  number: null,
                                 )).toList(),
                               );
                               await ref.read(tournamentServiceProvider).bulkAddParticipants(widget.tId, playerIds);
@@ -770,6 +771,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                           gender: Player.detectGender(p.name, p.lastname),
                                           dob: '',
                                           age: p.age,
+                                          number: null,
                                         )).toList(),
                                       );
 

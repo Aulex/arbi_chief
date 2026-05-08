@@ -35,6 +35,7 @@ class PlayerNotifier extends AsyncNotifier<List<Player>> {
     required String lastname,
     required int gender,
     required String dob,
+    int? number,
   }) async {
     final tType = ref.read(selectedSportTypeProvider);
     final p = Player(
@@ -44,6 +45,7 @@ class PlayerNotifier extends AsyncNotifier<List<Player>> {
       player_lastname: lastname,
       player_gender: gender,
       player_date_birth: Player.formatForDB(dob),
+      player_number: number,
       t_type: tType,
     );
 
@@ -53,7 +55,7 @@ class PlayerNotifier extends AsyncNotifier<List<Player>> {
 
   /// Bulk-insert players in a single transaction and invalidate once.
   /// Returns the generated player IDs.
-  Future<List<int>> bulkAddPlayers(List<({String name, String surname, String lastname, int gender, String dob, int? age})> players) async {
+  Future<List<int>> bulkAddPlayers(List<({String name, String surname, String lastname, int gender, String dob, int? age, int? number})> players) async {
     final tType = ref.read(selectedSportTypeProvider);
     final playerObjects = players.map((p) => Player(
       player_id: null,
@@ -63,6 +65,7 @@ class PlayerNotifier extends AsyncNotifier<List<Player>> {
       player_gender: p.gender,
       player_date_birth: Player.formatForDB(p.dob),
       player_age: p.age,
+      player_number: p.number,
       t_type: tType,
     )).toList();
     final ids = await ref.read(playerServiceProvider).bulkSavePlayers(playerObjects);
