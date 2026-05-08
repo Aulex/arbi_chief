@@ -82,15 +82,21 @@ class AthleticsReportBuilder {
   Future<pw.ThemeData> _loadTheme() async {
     pw.Font fontRegular;
     pw.Font fontBold;
-    try {
-      final reg = await File('C:\\Windows\\Fonts\\times.ttf').readAsBytes();
-      final bold = await File('C:\\Windows\\Fonts\\timesbd.ttf').readAsBytes();
-      fontRegular = pw.Font.ttf(ByteData.sublistView(reg));
-      fontBold = pw.Font.ttf(ByteData.sublistView(bold));
-    } catch (_) {
-      fontRegular = await PdfGoogleFonts.notoSansRegular();
-      fontBold = await PdfGoogleFonts.notoSansBold();
+    final reg = File('C:\\Windows\\Fonts\\times.ttf');
+    final bold = File('C:\\Windows\\Fonts\\timesbd.ttf');
+    if (Platform.isWindows && await reg.exists() && await bold.exists()) {
+      try {
+        final regBytes = await reg.readAsBytes();
+        final boldBytes = await bold.readAsBytes();
+        fontRegular = pw.Font.ttf(ByteData.sublistView(regBytes));
+        fontBold = pw.Font.ttf(ByteData.sublistView(boldBytes));
+        return pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+      } catch (_) {
+        // Fall through to Google fallback.
+      }
     }
+    fontRegular = await PdfGoogleFonts.notoSansRegular();
+    fontBold = await PdfGoogleFonts.notoSansBold();
     return pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
   }
 

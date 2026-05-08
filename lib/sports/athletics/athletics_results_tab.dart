@@ -126,8 +126,8 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
   Future<void> _loadStandings() async {
     setState(() => _loading = true);
     final svc = ref.read(athleticsServiceProvider);
-    // Load custom coefficient table (null = use defaults)
-    _customCoefficients ??= await svc.getCustomCoefficients(widget.tId);
+    // Reload coefficients each time so edits in the settings tab are picked up.
+    _customCoefficients = await svc.getCustomCoefficients(widget.tId);
     final standings = await svc.getCategoryStandings(
       widget.tId, widget.category,
       customCoefficients: _customCoefficients,
@@ -223,9 +223,11 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     List<_ParsedResult> preview = [];
     bool importing = false;
     bool parsing = false;
+    int parseToken = 0;
 
     Future<void> updatePreview(
         String text, Function(void Function()) setST) async {
+      final myToken = ++parseToken;
       if (text.trim().isEmpty) {
         setST(() => preview = []);
         return;
@@ -246,21 +248,29 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
 
         final fullName = parts[0];
         final teamName = parts[1];
-        final min = int.tryParse(parts[2]) ?? 0;
-        final sec = int.tryParse(parts[3]) ?? 0;
-        final ms = int.tryParse(parts[4]) ?? 0;
+        final min = int.tryParse(parts[2]) ?? -1;
+        final sec = int.tryParse(parts[3]) ?? -1;
+        final ms = int.tryParse(parts[4]) ?? -1;
+
+        final timeValid = min >= 0 &&
+            sec >= 0 && sec <= 59 &&
+            ms >= 0 && ms <= 99 &&
+            (min + sec + ms) > 0;
 
         final ids = await svc.findParticipant(widget.tId, fullName, teamName);
+        if (myToken != parseToken) return; // a newer parse has started
         results.add(_ParsedResult(
           fullName: fullName,
           teamName: teamName,
-          min: min,
-          sec: sec,
-          ms: ms,
+          min: min < 0 ? 0 : min,
+          sec: sec < 0 ? 0 : sec,
+          ms: ms < 0 ? 0 : ms,
           playerId: ids.playerId,
           teamId: ids.teamId,
+          timeValid: timeValid,
         ));
       }
+      if (myToken != parseToken) return;
       setST(() {
         preview = results;
         parsing = false;
@@ -315,8 +325,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                                 separatorBuilder: (_, __) => const Divider(),
                                 itemBuilder: (ctx, i) {
                                   final p = preview[i];
-                                  final ok =
-                                      p.teamId != null && p.playerId != null;
+                                  final ok = p.teamId != null &&
+                                      p.playerId != null &&
+                                      p.timeValid;
                                   return Row(
                                     children: [
                                       Icon(
@@ -344,7 +355,8 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                                                 '${p.teamName} • ${p.min}:${p.sec.toString().padLeft(2, '0')}.${p.ms.toString().padLeft(2, '0')}',
                                                 style: TextStyle(
                                                     fontSize: 12,
-                                                    color: p.teamId == null
+                                                    color: (p.teamId == null ||
+                                                            !p.timeValid)
                                                         ? Colors.red
                                                         : Colors
                                                             .grey.shade600)),
@@ -355,7 +367,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                                         Text(
                                           p.teamId == null
                                               ? 'Команду не знайдено'
-                                              : 'Учасника не знайдено',
+                                              : p.playerId == null
+                                                  ? 'Учасника не знайдено'
+                                                  : 'Некоректний час',
                                           style: const TextStyle(
                                               fontSize: 10, color: Colors.red),
                                         ),
@@ -376,8 +390,10 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
             FilledButton(
               onPressed: (importing ||
                       preview.isEmpty ||
-                      !preview.any(
-                          (p) => p.teamId != null && p.playerId != null))
+                      !preview.any((p) =>
+                          p.teamId != null &&
+                          p.playerId != null &&
+                          p.timeValid))
                   ? null
                   : () async {
                       setST(() => importing = true);
@@ -385,7 +401,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                         final svc = ref.read(athleticsServiceProvider);
                         int count = 0;
                         for (final p in preview) {
-                          if (p.teamId != null && p.playerId != null) {
+                          if (p.teamId != null &&
+                              p.playerId != null &&
+                              p.timeValid) {
                             await svc.saveResult(AthleticsResult(
                               tournamentId: widget.tId,
                               category: widget.category,
@@ -849,6 +867,7 @@ class _ParsedResult {
   final int ms;
   final int? playerId;
   final int? teamId;
+  final bool timeValid;
 
   _ParsedResult({
     required this.fullName,
@@ -858,5 +877,6 @@ class _ParsedResult {
     required this.ms,
     this.playerId,
     this.teamId,
+    this.timeValid = true,
   });
 }
