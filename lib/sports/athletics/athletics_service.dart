@@ -328,15 +328,19 @@ class AthleticsService {
     }
     final penaltyPlace = maxCatSize + 1;
 
-    /// All places for a team in a category's standings, sorted ascending.
+    /// Best (lowest) place for a team in a category's standings.
+    /// Returns a single-element list, or an empty list if the team has no
+    /// athlete in this category. The team-standings UI shows one number per
+    /// category — the place actually counted for scoring.
     List<int> placesForTeam(
         List<RankedAthleticsResult> standings, int teamId) {
       final teamResults = standings
           .where((r) => r.result.teamId == teamId)
           .map((r) => r.place)
           .toList();
+      if (teamResults.isEmpty) return const [];
       teamResults.sort();
-      return teamResults;
+      return [teamResults.first];
     }
 
     // Active male categories (those with results after merging)
