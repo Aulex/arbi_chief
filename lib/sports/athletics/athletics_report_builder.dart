@@ -38,6 +38,12 @@ class AthleticsReportBuilder {
         tId, cat, customCoefficients: coeffs,
       );
     }
+    final overallMen = await _service.getOverallStandings(
+      tId, isMale: true, customCoefficients: coeffs,
+    );
+    final overallWomen = await _service.getOverallStandings(
+      tId, isMale: false, customCoefficients: coeffs,
+    );
     final teamStandings = await _service.getTeamStandings(
       tId, customCoefficients: coeffs,
     );
@@ -52,6 +58,24 @@ class AthleticsReportBuilder {
         tournamentName: tournamentName,
         category: cat,
         standings: standings,
+        theme: theme,
+      ));
+    }
+
+    // --- Overall (no age categories) standings: men 3000м, then women 1500м ---
+    if (overallMen.isNotEmpty) {
+      pdf.addPage(_buildOverallStandingsPage(
+        tournamentName: tournamentName,
+        title: 'Загальний залік — Чоловіки (3000 м)',
+        standings: overallMen,
+        theme: theme,
+      ));
+    }
+    if (overallWomen.isNotEmpty) {
+      pdf.addPage(_buildOverallStandingsPage(
+        tournamentName: tournamentName,
+        title: 'Загальний залік — Жінки (1500 м)',
+        standings: overallWomen,
         theme: theme,
       ));
     }
@@ -161,6 +185,86 @@ class AthleticsReportBuilder {
             '${category.fullName} (${category.distanceLabel})',
             style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
           ),
+          pw.SizedBox(height: 8),
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            columnWidths: const {
+              0: pw.FixedColumnWidth(36),
+              1: pw.FlexColumnWidth(3),
+              2: pw.FlexColumnWidth(3),
+              3: pw.FixedColumnWidth(32),
+              4: pw.FixedColumnWidth(56),
+              5: pw.FixedColumnWidth(48),
+              6: pw.FixedColumnWidth(72),
+              7: pw.FixedColumnWidth(40),
+            },
+            defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: rows,
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Page _buildOverallStandingsPage({
+    required String tournamentName,
+    required String title,
+    required List<RankedAthleticsResult> standings,
+    required pw.ThemeData theme,
+  }) {
+    final hdrStyle = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
+    final cellSt = const pw.TextStyle(fontSize: 9);
+    final cellBold = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
+
+    final rows = <pw.TableRow>[
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+        children: [
+          _cell('№', hdrStyle),
+          _cell('Спортсмен', hdrStyle, align: pw.Alignment.centerLeft),
+          _cell('Команда', hdrStyle, align: pw.Alignment.centerLeft),
+          _cell('Вік', hdrStyle),
+          _cell('Час', hdrStyle),
+          _cell('Коеф.', hdrStyle),
+          _cell('Заліковий час', hdrStyle),
+          _cell('Місце', hdrStyle),
+        ],
+      ),
+    ];
+
+    for (int i = 0; i < standings.length; i++) {
+      final s = standings[i];
+      final adj = _formatAdjusted(s.adjustedDsec);
+      final bg = i.isOdd
+          ? const pw.BoxDecoration(color: PdfColors.grey100)
+          : null;
+      rows.add(pw.TableRow(
+        decoration: bg,
+        children: [
+          _cell(s.playerNumber != null ? '${s.playerNumber}' : '—', cellBold),
+          _cell(s.playerName ?? '', cellSt, align: pw.Alignment.centerLeft),
+          _cell(s.teamName ?? '', cellSt, align: pw.Alignment.centerLeft),
+          _cell(s.age > 0 ? '${s.age}' : '—', cellSt),
+          _cell(s.result.timeFormatted, cellSt),
+          _cell(s.coefficient.toStringAsFixed(4), cellSt),
+          _cell(adj, cellBold),
+          _cell('${s.place}', cellBold),
+        ],
+      ));
+    }
+
+    return pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(28),
+      theme: theme,
+      build: (context) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(tournamentName,
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text(title,
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 8),
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey400),
