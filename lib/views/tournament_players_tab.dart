@@ -69,8 +69,10 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final dobC = TextEditingController(text: player.birthDateForUI);
     final ageC = TextEditingController(text: player.player_age != null ? player.player_age.toString() : '');
     final weightC = TextEditingController();
+    final numberC = TextEditingController();
     int gender = player.player_gender;
     final needsWeight = const {8, 9, 13}.contains(widget.tType);
+    final isAthletics = widget.tType == 10;
 
     // Load existing weight
     if (needsWeight && player.player_id != null) {
@@ -78,6 +80,15 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         playerId: player.player_id!, tId: widget.tId,
       ).then((w) {
         if (w != null) weightC.text = w.toStringAsFixed(1);
+      });
+    }
+
+    // Load existing participant number
+    if (isAthletics && player.player_id != null) {
+      ref.read(tournamentServiceProvider).getPlayerNumber(
+        playerId: player.player_id!, tId: widget.tId,
+      ).then((n) {
+        if (n != null) numberC.text = n.toString();
       });
     }
 
@@ -114,6 +125,17 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       if (weightVal != null && weightVal > 0 && player.player_id != null) {
         await ref.read(tournamentServiceProvider).savePlayerWeight(
           playerId: player.player_id!, tId: widget.tId, weight: weightVal);
+      }
+      if (isAthletics && player.player_id != null) {
+        final numText = numberC.text.trim();
+        final numVal = int.tryParse(numText);
+        if (numVal != null && numVal > 0) {
+          await ref.read(tournamentServiceProvider).savePlayerNumber(
+            playerId: player.player_id!, tId: widget.tId, number: numVal);
+        } else if (numText.isEmpty) {
+          await ref.read(tournamentServiceProvider).clearPlayerNumber(
+            playerId: player.player_id!, tId: widget.tId);
+        }
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
       _loadData();
@@ -247,6 +269,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
                         decoration: InputDecoration(
                           labelText: 'Вага (кг)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
+                    if (isAthletics) ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: numberC,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: InputDecoration(
+                          labelText: 'Номер учасника',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
@@ -956,11 +990,13 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final lastnameC = TextEditingController();
     final dobC = TextEditingController();
     final weightC = TextEditingController();
+    final numberC = TextEditingController();
     int gender = 0;
     String searchQuery = '';
     Player? selectedExisting;
     List<Player> allPlayers = [];
     final needsWeight = const {8, 9, 13}.contains(widget.tType);
+    final isAthletics = widget.tType == 10;
 
     // Load all players for search
     ref.read(playerProvider.future).then((players) {
@@ -1018,16 +1054,25 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           await ref.read(tournamentServiceProvider).addParticipant(widget.tId, newPlayer.player_id!);
         }
       }
+      // Resolve playerId once for any post-creation attribute saves.
+      final resolvedPlayerId = selectedExisting?.player_id ??
+          (await ref.read(playerProvider.future))
+              .where((p) => p.player_surname == surnameC.text.trim() && p.player_name == nameC.text.trim())
+              .lastOrNull?.player_id;
+
       // Save weight if entered
       final weightVal = double.tryParse(weightC.text.trim());
-      if (weightVal != null && weightVal > 0) {
-        final playerId = selectedExisting?.player_id ??
-            (await ref.read(playerProvider.future))
-                .where((p) => p.player_surname == surnameC.text.trim() && p.player_name == nameC.text.trim())
-                .lastOrNull?.player_id;
-        if (playerId != null) {
-          await ref.read(tournamentServiceProvider).savePlayerWeight(
-            playerId: playerId, tId: widget.tId, weight: weightVal);
+      if (weightVal != null && weightVal > 0 && resolvedPlayerId != null) {
+        await ref.read(tournamentServiceProvider).savePlayerWeight(
+          playerId: resolvedPlayerId, tId: widget.tId, weight: weightVal);
+      }
+
+      // Save participant number if entered (athletics only)
+      if (isAthletics && resolvedPlayerId != null) {
+        final numVal = int.tryParse(numberC.text.trim());
+        if (numVal != null && numVal > 0) {
+          await ref.read(tournamentServiceProvider).savePlayerNumber(
+            playerId: resolvedPlayerId, tId: widget.tId, number: numVal);
         }
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1210,6 +1255,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
                           decoration: InputDecoration(
                             labelText: 'Вага (кг)',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ],
+                      if (isAthletics) ...[
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: numberC,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          decoration: InputDecoration(
+                            labelText: 'Номер учасника',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                         ),
