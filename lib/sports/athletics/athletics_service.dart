@@ -7,6 +7,8 @@ import '../../services/database_service.dart';
 class AthleticsService {
   static const int _eventTypeIndividual = 1;
   static const int _attrIdAgeCoefficients = 18;
+  static const int _attrIdPlayerNumber = 19;
+  static const int _attrIdAssignedCategory = 20;
 
   final DatabaseService _dbService;
 
@@ -685,6 +687,168 @@ class AthleticsService {
           playerRows.isNotEmpty ? playerRows.first['player_id'] as int : null,
       teamId: teamId,
     );
+  }
+
+  // ── Assigned category override (CMP_PLAYER_TEAM_ATTR_VALUE attr_id=20) ──
+
+  Future<void> saveAssignedCategory({
+    required int playerId,
+    required int tId,
+    required AthleticsCategory category,
+  }) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = ?',
+      whereArgs: [pteId, _attrIdAssignedCategory]);
+    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+      'pte_id': pteId,
+      'attr_id': _attrIdAssignedCategory,
+      'attr_value': category.name,
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ac_$playerId',
+    });
+  }
+
+  Future<void> clearAssignedCategory({
+    required int playerId,
+    required int tId,
+  }) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = ?',
+      whereArgs: [pteId, _attrIdAssignedCategory]);
+  }
+
+  /// Map of playerId → assigned AthleticsCategory for the tournament.
+  /// Only contains entries where an override exists.
+  Future<Map<int, AthleticsCategory>> getAssignedCategories(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, v.attr_value
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.t_id = ? AND v.attr_id = ? AND v.attr_value IS NOT NULL
+    ''', [tId, _attrIdAssignedCategory]);
+    final map = <int, AthleticsCategory>{};
+    for (final r in rows) {
+      final pid = r['player_id'] as int;
+      final value = r['attr_value'] as String? ?? '';
+      if (value.isEmpty) continue;
+      map[pid] = AthleticsCategory.fromDb(value);
+    }
+    return map;
+  }
+
+  // ── All participants (for the All-participants results tab) ──
+
+  /// All athletics participants of a tournament with their assignment state
+  /// and existing result (if any). Used by the inline-entry "Всі учасники" tab.
+  Future<List<AthleticsParticipantEntry>> getAllParticipants(int tId) async {
+    final db = await _dbService.database;
+    final referenceYear = await _tournamentReferenceYear(tId);
+
+    // One row per (player, team) assignment in the tournament; left-join the
+    // (latest) athletics subevent for the same player so each player appears
+    // even without a recorded time.
+    final athCategories =
+        AthleticsCategory.values.map((c) => "'${c.name}'").join(',');
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, pt.team_id,
+             p.player_surname, p.player_name, p.player_lastname,
+             p.player_date_birth, p.player_age, p.player_gender,
+             t.team_name,
+             (
+               SELECT v.attr_value FROM CMP_PLAYER_TEAM_ATTR_VALUE v
+               WHERE v.pte_id = pt.pte_id AND v.attr_id = $_attrIdPlayerNumber
+               LIMIT 1
+             ) as player_number,
+             (
+               SELECT v.attr_value FROM CMP_PLAYER_TEAM_ATTR_VALUE v
+               WHERE v.pte_id = pt.pte_id AND v.attr_id = $_attrIdAssignedCategory
+               LIMIT 1
+             ) as assigned_category,
+             (
+               SELECT se.se_id FROM CMP_SUBEVENT se
+               JOIN CMP_EVENT e ON se.ev_id = e.event_id
+               WHERE e.t_id = pt.t_id AND se.entity_id = p.entity_id
+                 AND se.se_note IN ($athCategories)
+               ORDER BY se.se_id DESC LIMIT 1
+             ) as result_id,
+             (
+               SELECT se.se_result FROM CMP_SUBEVENT se
+               JOIN CMP_EVENT e ON se.ev_id = e.event_id
+               WHERE e.t_id = pt.t_id AND se.entity_id = p.entity_id
+                 AND se.se_note IN ($athCategories)
+               ORDER BY se.se_id DESC LIMIT 1
+             ) as result_total,
+             (
+               SELECT se.se_note FROM CMP_SUBEVENT se
+               JOIN CMP_EVENT e ON se.ev_id = e.event_id
+               WHERE e.t_id = pt.t_id AND se.entity_id = p.entity_id
+                 AND se.se_note IN ($athCategories)
+               ORDER BY se.se_id DESC LIMIT 1
+             ) as result_category
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER p ON pt.player_id = p.player_id
+      LEFT JOIN CMP_TEAM t ON pt.team_id = t.team_id
+      WHERE pt.t_id = ? AND pt.player_state IN (0, 1)
+      ORDER BY p.player_surname, p.player_name
+    ''', [tId]);
+
+    final entries = <AthleticsParticipantEntry>[];
+    for (final r in rows) {
+      final dob = r['player_date_birth'] as String?;
+      final dbAge = r['player_age'] as int?;
+      int age = _calculateAge(dob, referenceYear);
+      if (age <= 0 && dbAge != null && dbAge > 0) age = dbAge;
+      final birthYear = (dob != null && dob.isNotEmpty)
+          ? (DateTime.tryParse(dob)?.year ?? (referenceYear - age))
+          : (referenceYear - age);
+      final gender = (r['player_gender'] as int?) ?? 0;
+      final autoCat = AthleticsCategory.detectCategory(
+        age > 0 ? birthYear : null,
+        gender,
+      );
+      final surname = r['player_surname'] as String? ?? '';
+      final name = r['player_name'] as String? ?? '';
+      final lastname = r['player_lastname'] as String? ?? '';
+
+      final assignedRaw = r['assigned_category'] as String?;
+      final assigned = (assignedRaw != null && assignedRaw.isNotEmpty)
+          ? AthleticsCategory.fromDb(assignedRaw)
+          : null;
+
+      final number = int.tryParse(r['player_number'] as String? ?? '');
+      final resultId = r['result_id'] as int?;
+      final resultTotal = (r['result_total'] as num?)?.toInt();
+      final resultCategoryRaw = r['result_category'] as String?;
+      final resultCategory = (resultCategoryRaw != null && resultCategoryRaw.isNotEmpty)
+          ? AthleticsCategory.fromDb(resultCategoryRaw)
+          : null;
+
+      entries.add(AthleticsParticipantEntry(
+        playerId: r['player_id'] as int,
+        teamId: (r['team_id'] as int?) ?? 0,
+        fullName: '$surname $name $lastname'.trim(),
+        teamName: r['team_name'] as String? ?? '',
+        age: age,
+        gender: gender,
+        playerNumber: number,
+        autoCategory: autoCat,
+        assignedCategory: assigned,
+        resultId: resultId,
+        resultTotalDsec: resultTotal,
+        resultCategory: resultCategory,
+      ));
+    }
+    return entries;
   }
 
   // ── Age Coefficient Table (stored in CMP_ATTR_VALUE as JSON) ──

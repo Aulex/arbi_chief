@@ -62,6 +62,29 @@ enum AthleticsCategory {
       return m50;
     }
   }
+
+  /// Categories an athlete may compete in given their auto-detected category.
+  /// Per the rules:
+  ///   - older athletes may drop to any younger age category within their gender;
+  ///   - women may additionally substitute for men in their own age category
+  ///     or younger.
+  /// Movement up the age scale and men-to-women movement are not allowed.
+  static List<AthleticsCategory> allowedCategoriesFor(AthleticsCategory auto) {
+    switch (auto) {
+      case m35:
+        return const [m35];
+      case m49:
+        return const [m35, m49];
+      case m50:
+        return const [m35, m49, m50];
+      case f35:
+        return const [f35, m35];
+      case f49:
+        return const [f35, f49, m35, m49];
+      case f50:
+        return const [f35, f49, f50, m35, m49, m50];
+    }
+  }
 }
 
 /// Individual athletics result for a player in a category.
@@ -190,6 +213,41 @@ class AthleticsTeamStanding {
     this.sumOfAges = 0,
     this.bestWomanTime = double.infinity,
     required this.place,
+  });
+}
+
+/// Row of the "Всі учасники" inline-entry tab. Combines participant identity
+/// with their assigned-category override and existing result (if any).
+class AthleticsParticipantEntry {
+  final int playerId;
+  final int teamId;
+  final String fullName;
+  final String teamName;
+  final int age;
+  final int gender;
+  final int? playerNumber;
+  final AthleticsCategory autoCategory;
+  final AthleticsCategory? assignedCategory;
+  final int? resultId;
+  final int? resultTotalDsec;
+  final AthleticsCategory? resultCategory;
+
+  /// Effective category for the participant: assigned override or auto.
+  AthleticsCategory get effectiveCategory => assignedCategory ?? autoCategory;
+
+  const AthleticsParticipantEntry({
+    required this.playerId,
+    required this.teamId,
+    required this.fullName,
+    required this.teamName,
+    required this.age,
+    required this.gender,
+    this.playerNumber,
+    required this.autoCategory,
+    this.assignedCategory,
+    this.resultId,
+    this.resultTotalDsec,
+    this.resultCategory,
   });
 }
 
