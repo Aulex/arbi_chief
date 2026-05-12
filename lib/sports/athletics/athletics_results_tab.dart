@@ -29,10 +29,13 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab>
     AthleticsCategory.f50,
   ];
 
+  /// Tab count: 1 (Всі учасники) + per-category.
+  int get _tabCount => 1 + _categories.length;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _categories.length, vsync: this);
+    _tabController = TabController(length: _tabCount, vsync: this);
   }
 
   @override
@@ -59,23 +62,33 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab>
             indicatorColor: Colors.indigo,
             indicatorWeight: 2,
             tabAlignment: TabAlignment.start,
-            tabs: _categories
-                .map((c) => Tab(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            c.isMale
-                                ? Icons.man_outlined
-                                : Icons.woman_outlined,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(c.label),
-                        ],
-                      ),
-                    ))
-                .toList(),
+            tabs: [
+              const Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.groups_outlined, size: 18),
+                    SizedBox(width: 6),
+                    Text('Всі учасники'),
+                  ],
+                ),
+              ),
+              ..._categories.map((c) => Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          c.isMale
+                              ? Icons.man_outlined
+                              : Icons.woman_outlined,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(c.label),
+                      ],
+                    ),
+                  )),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -83,12 +96,13 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab>
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: _categories
-                .map((c) => _CategoryResultsView(
-                      tId: widget.tId,
-                      category: c,
-                    ))
-                .toList(),
+            children: [
+              _AllParticipantsView(tId: widget.tId),
+              ..._categories.map((c) => _CategoryResultsView(
+                    tId: widget.tId,
+                    category: c,
+                  )),
+            ],
           ),
         ),
       ],
@@ -889,4 +903,479 @@ class _ParsedResult {
     this.teamId,
     this.timeValid = true,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// All-participants tab: inline category override + inline time entry
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Per-row mutable state for the inline-entry "Всі учасники" tab.
+class _ParticipantRowState {
+  final AthleticsParticipantEntry entry;
+  AthleticsCategory selectedCategory;
+  int? resultId;
+  final TextEditingController minC;
+  final TextEditingController secC;
+  final TextEditingController dsecC;
+  bool saving = false;
+  String? error;
+
+  // Snapshot of what's actually persisted; used to detect "no real change".
+  AthleticsCategory savedCategory;
+  String savedMin;
+  String savedSec;
+  String savedDsec;
+
+  _ParticipantRowState(this.entry)
+      : selectedCategory = entry.assignedCategory
+            ?? entry.resultCategory
+            ?? entry.autoCategory,
+        savedCategory = entry.assignedCategory
+            ?? entry.resultCategory
+            ?? entry.autoCategory,
+        resultId = entry.resultId,
+        minC = TextEditingController(
+          text: entry.resultTotalDsec != null
+              ? (entry.resultTotalDsec! ~/ 6000).toString()
+              : '',
+        ),
+        secC = TextEditingController(
+          text: entry.resultTotalDsec != null
+              ? ((entry.resultTotalDsec! % 6000) ~/ 100)
+                  .toString()
+                  .padLeft(2, '0')
+              : '',
+        ),
+        dsecC = TextEditingController(
+          text: entry.resultTotalDsec != null
+              ? (entry.resultTotalDsec! % 100).toString().padLeft(2, '0')
+              : '',
+        ),
+        savedMin = entry.resultTotalDsec != null
+            ? (entry.resultTotalDsec! ~/ 6000).toString()
+            : '',
+        savedSec = entry.resultTotalDsec != null
+            ? ((entry.resultTotalDsec! % 6000) ~/ 100)
+                .toString()
+                .padLeft(2, '0')
+            : '',
+        savedDsec = entry.resultTotalDsec != null
+            ? (entry.resultTotalDsec! % 100).toString().padLeft(2, '0')
+            : '';
+
+  void dispose() {
+    minC.dispose();
+    secC.dispose();
+    dsecC.dispose();
+  }
+
+  bool get isDirty {
+    if (selectedCategory != savedCategory) return true;
+    if (minC.text.trim() != savedMin) return true;
+    if (secC.text.trim() != savedSec) return true;
+    if (dsecC.text.trim() != savedDsec) return true;
+    return false;
+  }
+
+  /// Returns parsed (min, sec, dsec) when all three fields are present and
+  /// valid (sec 0–59, dsec 0–99, total > 0); otherwise null.
+  ({int min, int sec, int dsec})? parseTime() {
+    final min = int.tryParse(minC.text.trim());
+    final sec = int.tryParse(secC.text.trim());
+    final dsec = int.tryParse(dsecC.text.trim());
+    if (min == null || sec == null || dsec == null) return null;
+    if (sec < 0 || sec > 59) return null;
+    if (dsec < 0 || dsec > 99) return null;
+    if (min + sec + dsec == 0) return null;
+    return (min: min, sec: sec, dsec: dsec);
+  }
+
+  bool get isCleared =>
+      minC.text.trim().isEmpty &&
+      secC.text.trim().isEmpty &&
+      dsecC.text.trim().isEmpty;
+}
+
+class _AllParticipantsView extends ConsumerStatefulWidget {
+  final int tId;
+  const _AllParticipantsView({required this.tId});
+
+  @override
+  ConsumerState<_AllParticipantsView> createState() =>
+      _AllParticipantsViewState();
+}
+
+class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
+    with AutomaticKeepAliveClientMixin {
+  List<_ParticipantRowState> _rows = [];
+  bool _loading = true;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    for (final r in _rows) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _loading = true);
+    final svc = ref.read(athleticsServiceProvider);
+    final entries = await svc.getAllParticipants(widget.tId);
+    if (!mounted) return;
+    for (final r in _rows) {
+      r.dispose();
+    }
+    setState(() {
+      _rows = entries.map((e) => _ParticipantRowState(e)).toList();
+      _loading = false;
+    });
+  }
+
+  Future<void> _saveRow(_ParticipantRowState row) async {
+    if (!row.isDirty || row.saving) return;
+    setState(() {
+      row.saving = true;
+      row.error = null;
+    });
+    final svc = ref.read(athleticsServiceProvider);
+
+    try {
+      // 1) Persist the assigned-category override if it changed from auto.
+      if (row.selectedCategory != row.savedCategory) {
+        if (row.selectedCategory == row.entry.autoCategory) {
+          await svc.clearAssignedCategory(
+            playerId: row.entry.playerId, tId: widget.tId);
+        } else {
+          await svc.saveAssignedCategory(
+            playerId: row.entry.playerId,
+            tId: widget.tId,
+            category: row.selectedCategory,
+          );
+        }
+      }
+
+      // 2) Save / update / delete result based on field state.
+      if (row.isCleared) {
+        // User cleared all 3 fields → delete existing result if any.
+        if (row.resultId != null) {
+          await svc.deleteResult(row.resultId!);
+          row.resultId = null;
+        }
+      } else {
+        final parsed = row.parseTime();
+        if (parsed != null) {
+          final result = AthleticsResult(
+            id: row.resultId,
+            tournamentId: widget.tId,
+            playerId: row.entry.playerId,
+            teamId: row.entry.teamId,
+            category: row.selectedCategory,
+            timeMin: parsed.min,
+            timeSec: parsed.sec,
+            timeDsec: parsed.dsec,
+          );
+          final id = await svc.saveResult(result);
+          row.resultId = id;
+        } else {
+          // Partial / invalid time — keep the input as-is but don't save.
+          // Surface the issue to the user.
+          setState(() {
+            row.saving = false;
+            row.error = 'Невірний час';
+          });
+          return;
+        }
+      }
+
+      // Snapshot the saved state so the next focus-out is a no-op until
+      // the user actually changes something again.
+      row.savedCategory = row.selectedCategory;
+      row.savedMin = row.minC.text.trim();
+      row.savedSec = row.secC.text.trim();
+      row.savedDsec = row.dsecC.text.trim();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        row.error = 'Помилка: $e';
+      });
+    } finally {
+      if (mounted) setState(() => row.saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_rows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.groups_outlined, size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              'Немає учасників у турнірі',
+              style: TextStyle(color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: _loadData,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Оновити'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Всі учасники (${_rows.length})',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            FilledButton.tonalIcon(
+              onPressed: _loadData,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Оновити'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Введіть час прямо у таблиці. Збереження відбувається при переході '
+          'на інший рядок або вкладку. Сек 0–59, Дсек 0–99.',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: Colors.grey.shade300, width: 1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: _rows.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1, color: Colors.grey.shade200),
+                    itemBuilder: (context, i) => _buildRow(_rows[i]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static const double _wNumber = 56;
+  static const double _wAge = 48;
+  static const double _wCategory = 90;
+  static const double _wTimeField = 56;
+  static const double _wStatus = 28;
+
+  Widget _buildHeader() {
+    final st = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+      color: Colors.grey.shade700,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(width: _wNumber, child: Text('№', style: st, textAlign: TextAlign.center)),
+          Expanded(flex: 3, child: Text('ПІБ', style: st)),
+          Expanded(flex: 2, child: Text('Команда', style: st)),
+          SizedBox(width: _wAge, child: Text('Вік', style: st, textAlign: TextAlign.center)),
+          SizedBox(width: _wCategory, child: Text('Категорія', style: st, textAlign: TextAlign.center)),
+          SizedBox(width: _wTimeField, child: Text('Хв', style: st, textAlign: TextAlign.center)),
+          SizedBox(width: _wTimeField, child: Text('Сек', style: st, textAlign: TextAlign.center)),
+          SizedBox(width: _wTimeField, child: Text('Дсек', style: st, textAlign: TextAlign.center)),
+          SizedBox(width: _wStatus, child: Text('', style: st)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRow(_ParticipantRowState row) {
+    final allowed = AthleticsCategory.allowedCategoriesFor(row.entry.autoCategory);
+    // Defensive: if a stored override is no longer allowed (e.g. rules changed),
+    // include it in the items so the dropdown can still display the value.
+    final items = {...allowed, row.selectedCategory}.toList();
+    final overridden = row.selectedCategory != row.entry.autoCategory;
+
+    return Focus(
+      canRequestFocus: false,
+      onFocusChange: (hasFocus) {
+        if (!hasFocus) _saveRow(row);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: _wNumber,
+              child: row.entry.playerNumber != null
+                  ? Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.indigo.shade200),
+                      ),
+                      child: Text(
+                        '${row.entry.playerNumber}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo.shade700,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      '—',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade400),
+                    ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(row.entry.fullName,
+                    style: const TextStyle(fontSize: 13),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(row.entry.teamName,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            SizedBox(
+              width: _wAge,
+              child: Text(
+                row.entry.age > 0 ? '${row.entry.age}' : '—',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            SizedBox(
+              width: _wCategory,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<AthleticsCategory>(
+                  isDense: true,
+                  isExpanded: true,
+                  value: row.selectedCategory,
+                  items: items
+                      .map((c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(
+                              c.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight:
+                                    c == row.entry.autoCategory
+                                        ? FontWeight.normal
+                                        : FontWeight.w600,
+                                color: c == row.entry.autoCategory
+                                    ? Colors.black87
+                                    : Colors.deepOrange.shade700,
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => row.selectedCategory = v);
+                  },
+                ),
+              ),
+            ),
+            _buildTimeField(row.minC, 3),
+            _buildTimeField(row.secC, 2),
+            _buildTimeField(row.dsecC, 2),
+            SizedBox(
+              width: _wStatus,
+              child: row.saving
+                  ? const SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : row.error != null
+                      ? Tooltip(
+                          message: row.error!,
+                          child: Icon(Icons.error_outline,
+                              size: 18, color: Colors.red.shade400),
+                        )
+                      : overridden
+                          ? Tooltip(
+                              message:
+                                  'Призначено в категорію ${row.selectedCategory.label} (авто: ${row.entry.autoCategory.label})',
+                              child: Icon(Icons.swap_horiz,
+                                  size: 18, color: Colors.deepOrange.shade400),
+                            )
+                          : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeField(TextEditingController c, int maxLength) {
+    return SizedBox(
+      width: _wTimeField,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: TextField(
+          controller: c,
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(maxLength),
+          ],
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding:
+                EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+    );
+  }
 }

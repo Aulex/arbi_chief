@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 16,
+      version: 17,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -343,6 +343,17 @@ class DatabaseService {
             'attr_id': 19,
             'attr_name': 'Номер учасника',
             'attr_data_type': 'INTEGER',
+            'attr_entity_type': 2,
+            'attr_t_type': 10,
+          });
+        }
+        if (oldVersion < 17) {
+          // Assigned athletics category override (player-team level).
+          // Stores the AthleticsCategory enum name, e.g. 'm35'.
+          await db.insert('CMP_ATTR', {
+            'attr_id': 20,
+            'attr_name': 'Категорія легкої атлетики',
+            'attr_data_type': 'TEXT',
             'attr_entity_type': 2,
             'attr_t_type': 10,
           });
@@ -760,6 +771,14 @@ class DatabaseService {
           'attr_id': 19,
           'attr_name': 'Номер учасника',
           'attr_data_type': 'INTEGER',
+          'attr_entity_type': 2,
+          'attr_t_type': 10,
+        });
+        // Категорія легкої атлетики — assigned category override (NEW in v17)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 20,
+          'attr_name': 'Категорія легкої атлетики',
+          'attr_data_type': 'TEXT',
           'attr_entity_type': 2,
           'attr_t_type': 10,
         });
