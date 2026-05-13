@@ -98,7 +98,10 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _AllParticipantsView(tId: widget.tId),
+              _AllParticipantsView(
+                tId: widget.tId,
+                tabController: _tabController,
+              ),
               ..._categories.map((c) => _CategoryResultsView(
                     tId: widget.tId,
                     category: c,
@@ -1016,7 +1019,11 @@ class _ParticipantRowState {
 
 class _AllParticipantsView extends ConsumerStatefulWidget {
   final int tId;
-  const _AllParticipantsView({required this.tId});
+  final TabController tabController;
+  const _AllParticipantsView({
+    required this.tId,
+    required this.tabController,
+  });
 
   @override
   ConsumerState<_AllParticipantsView> createState() =>
@@ -1025,8 +1032,11 @@ class _AllParticipantsView extends ConsumerStatefulWidget {
 
 class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     with AutomaticKeepAliveClientMixin {
+  static const int _myTabIndex = 0;
+
   List<_ParticipantRowState> _rows = [];
   bool _loading = true;
+  bool _wasActive = true; // starts on this tab
 
   @override
   bool get wantKeepAlive => true;
@@ -1034,15 +1044,43 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
   @override
   void initState() {
     super.initState();
+    widget.tabController.addListener(_onTabChange);
     _loadData();
   }
 
   @override
   void dispose() {
+    widget.tabController.removeListener(_onTabChange);
     for (final r in _rows) {
       r.dispose();
     }
     super.dispose();
+  }
+
+  /// Re-fetches participants whenever the user returns to this tab.
+  /// Waits for any in-flight row save first so we don't overwrite the user's
+  /// pending edits with the snapshot from before the save committed.
+  void _onTabChange() {
+    final c = widget.tabController;
+    if (c.indexIsChanging) return;
+    final isActive = c.index == _myTabIndex;
+    if (isActive && !_wasActive) {
+      _wasActive = true;
+      _loadDataAfterPendingSaves();
+    } else if (!isActive && _wasActive) {
+      _wasActive = false;
+    }
+  }
+
+  Future<void> _loadDataAfterPendingSaves() async {
+    // Saves are kicked off synchronously by Focus(onFocusChange) right
+    // before the tab switch. Wait for them to settle so we don't read
+    // stale data.
+    while (_rows.any((r) => r.saving)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    if (!mounted) return;
+    await _loadData();
   }
 
   Future<void> _loadData() async {
@@ -1172,12 +1210,6 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
               'Немає учасників у турнірі',
               style: TextStyle(color: Colors.grey.shade500),
             ),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Оновити'),
-            ),
           ],
         ),
       );
@@ -1186,19 +1218,9 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'Всі учасники (${_rows.length})',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const Spacer(),
-            FilledButton.tonalIcon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Оновити'),
-            ),
-          ],
+        Text(
+          'Всі учасники (${_rows.length})',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
