@@ -1017,6 +1017,9 @@ class _ParticipantRowState {
       dsecC.text.trim().isEmpty;
 }
 
+/// Sortable columns in the 'Всі учасники' tab.
+enum _ParticipantSortKey { number, name, team, age, category }
+
 class _AllParticipantsView extends ConsumerStatefulWidget {
   final int tId;
   final TabController tabController;
@@ -1037,6 +1040,8 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
   List<_ParticipantRowState> _rows = [];
   bool _loading = true;
   bool _wasActive = true; // starts on this tab
+  _ParticipantSortKey _sortKey = _ParticipantSortKey.number;
+  bool _sortAsc = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -1091,9 +1096,71 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     for (final r in _rows) {
       r.dispose();
     }
+    final rows = entries.map((e) => _ParticipantRowState(e)).toList();
+    _sortRows(rows);
     setState(() {
-      _rows = entries.map((e) => _ParticipantRowState(e)).toList();
+      _rows = rows;
       _loading = false;
+    });
+  }
+
+  /// Sorts [rows] in-place per the current sort key + direction.
+  /// Missing values (no number, no team, age 0, …) are placed at the end
+  /// on ascending sort and at the front on descending sort.
+  void _sortRows(List<_ParticipantRowState> rows) {
+    final asc = _sortAsc;
+    int cmpInt(int? a, int? b) {
+      if (a == null && b == null) return 0;
+      if (a == null) return asc ? 1 : -1;
+      if (b == null) return asc ? -1 : 1;
+      return a.compareTo(b);
+    }
+    int cmpStr(String a, String b) {
+      final ae = a.trim().isEmpty;
+      final be = b.trim().isEmpty;
+      if (ae && be) return 0;
+      if (ae) return asc ? 1 : -1;
+      if (be) return asc ? -1 : 1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    }
+    rows.sort((a, b) {
+      int r;
+      switch (_sortKey) {
+        case _ParticipantSortKey.number:
+          r = cmpInt(a.parsedNumber, b.parsedNumber);
+          break;
+        case _ParticipantSortKey.name:
+          r = cmpStr(a.entry.fullName, b.entry.fullName);
+          break;
+        case _ParticipantSortKey.team:
+          r = cmpStr(a.entry.teamName, b.entry.teamName);
+          break;
+        case _ParticipantSortKey.age:
+          r = cmpInt(
+            a.entry.age > 0 ? a.entry.age : null,
+            b.entry.age > 0 ? b.entry.age : null,
+          );
+          break;
+        case _ParticipantSortKey.category:
+          r = a.selectedCategory.index.compareTo(b.selectedCategory.index);
+          break;
+      }
+      if (r != 0) return asc ? r : -r;
+      // Stable tiebreaker: name.
+      return a.entry.fullName.toLowerCase()
+          .compareTo(b.entry.fullName.toLowerCase());
+    });
+  }
+
+  void _toggleSort(_ParticipantSortKey key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = true;
+      }
+      _sortRows(_rows);
     });
   }
 
@@ -1268,25 +1335,117 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       color: Colors.grey.shade700,
     );
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
         border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
       ),
       child: Row(
         children: [
-          SizedBox(width: _wNumber, child: Text('№', style: st, textAlign: TextAlign.center)),
-          Expanded(flex: 3, child: Text('ПІБ', style: st)),
-          Expanded(flex: 2, child: Text('Команда', style: st)),
-          SizedBox(width: _wAge, child: Text('Вік', style: st, textAlign: TextAlign.center)),
-          SizedBox(width: _wCategory, child: Text('Категорія', style: st, textAlign: TextAlign.center)),
-          SizedBox(width: _wTimeField, child: Text('Хв', style: st, textAlign: TextAlign.center)),
-          SizedBox(width: _wTimeField, child: Text('Сек', style: st, textAlign: TextAlign.center)),
-          SizedBox(width: _wTimeField, child: Text('Дсек', style: st, textAlign: TextAlign.center)),
-          SizedBox(width: _wStatus, child: Text('', style: st)),
+          _sortableHeader(
+            width: _wNumber,
+            label: '№',
+            style: st,
+            key: _ParticipantSortKey.number,
+            align: TextAlign.center,
+          ),
+          _sortableHeader(
+            flex: 3,
+            label: 'ПІБ',
+            style: st,
+            key: _ParticipantSortKey.name,
+          ),
+          _sortableHeader(
+            flex: 2,
+            label: 'Команда',
+            style: st,
+            key: _ParticipantSortKey.team,
+          ),
+          _sortableHeader(
+            width: _wAge,
+            label: 'Вік',
+            style: st,
+            key: _ParticipantSortKey.age,
+            align: TextAlign.center,
+          ),
+          _sortableHeader(
+            width: _wCategory,
+            label: 'Категорія',
+            style: st,
+            key: _ParticipantSortKey.category,
+            align: TextAlign.center,
+          ),
+          SizedBox(
+            width: _wTimeField,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Text('Хв', style: st, textAlign: TextAlign.center),
+            ),
+          ),
+          SizedBox(
+            width: _wTimeField,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Text('Сек', style: st, textAlign: TextAlign.center),
+            ),
+          ),
+          SizedBox(
+            width: _wTimeField,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Text('Дсек', style: st, textAlign: TextAlign.center),
+            ),
+          ),
+          SizedBox(width: _wStatus, child: const SizedBox.shrink()),
         ],
       ),
     );
+  }
+
+  /// Builds a header cell that toggles sort by [key] on tap. Shows a small
+  /// up/down arrow next to the label when [key] is the active sort.
+  Widget _sortableHeader({
+    double? width,
+    int? flex,
+    required String label,
+    required TextStyle style,
+    required _ParticipantSortKey key,
+    TextAlign align = TextAlign.left,
+  }) {
+    final isActive = _sortKey == key;
+    final content = InkWell(
+      onTap: () => _toggleSort(key),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(
+          mainAxisAlignment: align == TextAlign.center
+              ? MainAxisAlignment.center
+              : MainAxisAlignment.start,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: isActive
+                    ? style.copyWith(color: Colors.indigo.shade700)
+                    : style,
+                textAlign: align,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(width: 2),
+              Icon(
+                _sortAsc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                size: 16,
+                color: Colors.indigo.shade700,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (flex != null) return Expanded(flex: flex, child: content);
+    return SizedBox(width: width, child: content);
   }
 
   Widget _buildRow(_ParticipantRowState row) {
