@@ -496,7 +496,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         expands: true,
                         textAlignVertical: TextAlignVertical.top,
                         decoration: InputDecoration(
-                          hintText: 'Іваненко\tІван\tІванович\tДинамо\nПетренко\tПетро\tПетрович\tДинамо\nСидоренко\tСидір\tСидорович\tШахтар',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           contentPadding: const EdgeInsets.all(12),
                         ),
