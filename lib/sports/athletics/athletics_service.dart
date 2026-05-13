@@ -9,6 +9,7 @@ class AthleticsService {
   static const int _attrIdAgeCoefficients = 18;
   static const int _attrIdPlayerNumber = 19;
   static const int _attrIdAssignedCategory = 20;
+  static const int _attrIdYearOfBirth = 21;
 
   final DatabaseService _dbService;
 
@@ -215,7 +216,14 @@ class AthleticsService {
                WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id
                  AND pt.player_state IN (0,1) AND v.attr_id = 19
                LIMIT 1
-             ) as player_number
+             ) as player_number,
+             (
+               SELECT v.attr_value FROM CMP_PLAYER_TEAM pt
+               JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+               WHERE pt.player_id = p.player_id AND pt.t_id = e.t_id
+                 AND pt.player_state IN (0,1) AND v.attr_id = 21
+               LIMIT 1
+             ) as year_of_birth
       FROM CMP_SUBEVENT se
       JOIN CMP_EVENT e ON se.ev_id = e.event_id
       LEFT JOIN CMP_PLAYER p ON se.entity_id = p.entity_id
@@ -228,7 +236,11 @@ class AthleticsService {
       final total = (row['time_total'] as num?)?.toInt() ?? 0;
       final dob = row['player_date_birth'] as String?;
       final dbAge = row['player_age'] as int?;
-      int age = _calculateAge(dob, referenceYear);
+      final yob = int.tryParse(row['year_of_birth'] as String? ?? '');
+      // Age priority: explicit year-of-birth → DOB year → stored player_age.
+      int age = yob != null && yob > 0
+          ? referenceYear - yob
+          : _calculateAge(dob, referenceYear);
       if (age <= 0 && dbAge != null && dbAge > 0) {
         age = dbAge;
       }
@@ -764,6 +776,77 @@ class AthleticsService {
     return map;
   }
 
+  // ── Year of birth override (CMP_PLAYER_TEAM_ATTR_VALUE attr_id=21) ──
+
+  Future<void> savePlayerYearOfBirth({
+    required int playerId,
+    required int tId,
+    required int year,
+  }) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = ?',
+      whereArgs: [pteId, _attrIdYearOfBirth]);
+    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+      'pte_id': pteId,
+      'attr_id': _attrIdYearOfBirth,
+      'attr_value': year.toString(),
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
+    });
+  }
+
+  Future<void> clearPlayerYearOfBirth({
+    required int playerId,
+    required int tId,
+  }) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = ?',
+      whereArgs: [pteId, _attrIdYearOfBirth]);
+  }
+
+  Future<int?> getPlayerYearOfBirth({
+    required int playerId,
+    required int tId,
+  }) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT v.attr_value
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.player_id = ? AND pt.t_id = ? AND v.attr_id = ?
+      LIMIT 1
+    ''', [playerId, tId, _attrIdYearOfBirth]);
+    if (rows.isEmpty) return null;
+    return int.tryParse(rows.first['attr_value'] as String? ?? '');
+  }
+
+  /// Map of playerId → year-of-birth for every athletics participant in [tId]
+  /// who has an override saved. Used to populate the players-tab list.
+  Future<Map<int, int>> getPlayerYearsOfBirth(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, v.attr_value
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v ON pt.pte_id = v.pte_id
+      WHERE pt.t_id = ? AND v.attr_id = ? AND v.attr_value IS NOT NULL
+    ''', [tId, _attrIdYearOfBirth]);
+    final map = <int, int>{};
+    for (final r in rows) {
+      final y = int.tryParse(r['attr_value'] as String? ?? '');
+      if (y != null) map[r['player_id'] as int] = y;
+    }
+    return map;
+  }
+
   // ── All participants (for the All-participants results tab) ──
 
   /// All athletics participants of a tournament with their assignment state
@@ -792,6 +875,11 @@ class AthleticsService {
                WHERE v.pte_id = pt.pte_id AND v.attr_id = $_attrIdAssignedCategory
                LIMIT 1
              ) as assigned_category,
+             (
+               SELECT v.attr_value FROM CMP_PLAYER_TEAM_ATTR_VALUE v
+               WHERE v.pte_id = pt.pte_id AND v.attr_id = $_attrIdYearOfBirth
+               LIMIT 1
+             ) as year_of_birth,
              (
                SELECT se.se_id FROM CMP_SUBEVENT se
                JOIN CMP_EVENT e ON se.ev_id = e.event_id
@@ -824,11 +912,17 @@ class AthleticsService {
     for (final r in rows) {
       final dob = r['player_date_birth'] as String?;
       final dbAge = r['player_age'] as int?;
-      int age = _calculateAge(dob, referenceYear);
+      final yob = int.tryParse(r['year_of_birth'] as String? ?? '');
+      // Age priority: explicit year-of-birth → DOB year → stored player_age.
+      int age = yob != null && yob > 0
+          ? referenceYear - yob
+          : _calculateAge(dob, referenceYear);
       if (age <= 0 && dbAge != null && dbAge > 0) age = dbAge;
-      final birthYear = (dob != null && dob.isNotEmpty)
-          ? (DateTime.tryParse(dob)?.year ?? (referenceYear - age))
-          : (referenceYear - age);
+      final birthYear = yob != null && yob > 0
+          ? yob
+          : ((dob != null && dob.isNotEmpty)
+              ? (DateTime.tryParse(dob)?.year ?? (referenceYear - age))
+              : (referenceYear - age));
       final gender = (r['player_gender'] as int?) ?? 0;
       final autoCat = AthleticsCategory.detectCategory(
         age > 0 ? birthYear : null,
