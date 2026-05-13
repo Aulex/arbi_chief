@@ -578,7 +578,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                     final playerNotifier = ref.read(playerProvider.notifier);
                                     final tournamentSvc = ref.read(tournamentServiceProvider);
                                     final tType = widget.tType;
-    
+                                    final isAthletics = tType == 10;
+
                                     // Group by team
                                     final groups = <String, List<_ParsedTeamPlayer>>{};
                                     for (final p in currentParsed) {
@@ -588,6 +589,13 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
                                     int totalPlayers = 0;
                                     int totalTeams = 0;
+
+                                    // For athletics: continue numbering from current max.
+                                    int nextNumber = 0;
+                                    if (isAthletics) {
+                                      final existing = await tournamentSvc.getPlayerNumbers(widget.tId);
+                                      nextNumber = existing.values.fold<int>(0, (m, n) => n > m ? n : m) + 1;
+                                    }
 
                                     for (final entry in groups.entries) {
                                       final teamName = entry.key;
@@ -637,6 +645,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                       final currentReserves = await teamSvc.getTeamMemberIds(team.team_id!, widget.tId);
                                       final allReserves = [...currentReserves, ...playerIds];
                                       await teamSvc.saveAssignments(team.team_id!, widget.tId, currentBoards, allReserves);
+
+                                      // Athletics: assign sequential participant numbers (max+1, +2 ...)
+                                      if (isAthletics) {
+                                        for (final pid in playerIds) {
+                                          await tournamentSvc.savePlayerNumber(
+                                            playerId: pid,
+                                            tId: widget.tId,
+                                            number: nextNumber,
+                                          );
+                                          nextNumber++;
+                                        }
+                                      }
 
                                       totalPlayers += playerIds.length;
                                     }
@@ -814,6 +834,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     ref.read(playerProvider.future).then((players) {
       allPlayers = players;
     });
+
+    // Pre-fill the participant number with max(existing) + 1 for athletics.
+    if (isAthletics) {
+      ref.read(tournamentServiceProvider)
+          .getPlayerNumbers(widget.tId)
+          .then((map) {
+        if (numberC.text.trim().isEmpty) {
+          final maxNum = map.values.fold<int>(0, (m, n) => n > m ? n : m);
+          numberC.text = (maxNum + 1).toString();
+        }
+      });
+    }
 
     Future<void> pickDate(BuildContext dialogContext, StateSetter setST) async {
       final picked = await showDatePicker(

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'athletics_model.dart';
 import 'athletics_providers.dart';
 import '../../viewmodels/shared_providers.dart';
+import '../../viewmodels/tournament_viewmodel.dart';
 
 /// Main tab for entering and viewing athletics results per category.
 class AthleticsResultsTab extends ConsumerStatefulWidget {
@@ -914,6 +915,7 @@ class _ParticipantRowState {
   final AthleticsParticipantEntry entry;
   AthleticsCategory selectedCategory;
   int? resultId;
+  final TextEditingController numberC;
   final TextEditingController minC;
   final TextEditingController secC;
   final TextEditingController dsecC;
@@ -922,6 +924,7 @@ class _ParticipantRowState {
 
   // Snapshot of what's actually persisted; used to detect "no real change".
   AthleticsCategory savedCategory;
+  String savedNumber;
   String savedMin;
   String savedSec;
   String savedDsec;
@@ -934,6 +937,10 @@ class _ParticipantRowState {
             ?? entry.resultCategory
             ?? entry.autoCategory,
         resultId = entry.resultId,
+        numberC = TextEditingController(
+          text: entry.playerNumber?.toString() ?? '',
+        ),
+        savedNumber = entry.playerNumber?.toString() ?? '',
         minC = TextEditingController(
           text: entry.resultTotalDsec != null
               ? (entry.resultTotalDsec! ~/ 6000).toString()
@@ -964,6 +971,7 @@ class _ParticipantRowState {
             : '';
 
   void dispose() {
+    numberC.dispose();
     minC.dispose();
     secC.dispose();
     dsecC.dispose();
@@ -971,10 +979,20 @@ class _ParticipantRowState {
 
   bool get isDirty {
     if (selectedCategory != savedCategory) return true;
+    if (numberC.text.trim() != savedNumber) return true;
     if (minC.text.trim() != savedMin) return true;
     if (secC.text.trim() != savedSec) return true;
     if (dsecC.text.trim() != savedDsec) return true;
     return false;
+  }
+
+  /// Parsed positive integer from numberC, or null if empty / invalid.
+  int? get parsedNumber {
+    final t = numberC.text.trim();
+    if (t.isEmpty) return null;
+    final n = int.tryParse(t);
+    if (n == null || n <= 0) return null;
+    return n;
   }
 
   /// Returns parsed (min, sec, dsec) when all three fields are present and
@@ -1048,6 +1066,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       row.error = null;
     });
     final svc = ref.read(athleticsServiceProvider);
+    final tournamentSvc = ref.read(tournamentServiceProvider);
 
     try {
       // 1) Persist the assigned-category override if it changed from auto.
@@ -1064,7 +1083,31 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
         }
       }
 
-      // 2) Save / update / delete result based on field state.
+      // 2) Persist the participant number if it changed.
+      if (row.numberC.text.trim() != row.savedNumber) {
+        final n = row.parsedNumber;
+        if (n != null) {
+          await tournamentSvc.savePlayerNumber(
+            playerId: row.entry.playerId,
+            tId: widget.tId,
+            number: n,
+          );
+        } else if (row.numberC.text.trim().isEmpty) {
+          await tournamentSvc.clearPlayerNumber(
+            playerId: row.entry.playerId,
+            tId: widget.tId,
+          );
+        } else {
+          // Non-empty but unparseable — surface as an error and keep editing.
+          setState(() {
+            row.saving = false;
+            row.error = 'Невірний номер';
+          });
+          return;
+        }
+      }
+
+      // 3) Save / update / delete result based on field state.
       if (row.isCleared) {
         // User cleared all 3 fields → delete existing result if any.
         if (row.resultId != null) {
@@ -1100,6 +1143,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       // Snapshot the saved state so the next focus-out is a no-op until
       // the user actually changes something again.
       row.savedCategory = row.selectedCategory;
+      row.savedNumber = row.numberC.text.trim();
       row.savedMin = row.minC.text.trim();
       row.savedSec = row.secC.text.trim();
       row.savedDsec = row.dsecC.text.trim();
@@ -1242,28 +1286,29 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
           children: [
             SizedBox(
               width: _wNumber,
-              child: row.entry.playerNumber != null
-                  ? Container(
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.indigo.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.indigo.shade200),
-                      ),
-                      child: Text(
-                        '${row.entry.playerNumber}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.indigo.shade700,
-                        ),
-                      ),
-                    )
-                  : Text(
-                      '—',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey.shade400),
-                    ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: TextField(
+                  controller: row.numberC,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(5),
+                  ],
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo.shade700,
+                    fontSize: 14,
+                  ),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
             ),
             Expanded(
               flex: 3,
