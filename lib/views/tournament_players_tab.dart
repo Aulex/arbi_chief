@@ -333,201 +333,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     ref.read(tournamentServiceProvider).removeParticipant(widget.tId, player.player_id!);
   }
 
-  void _showBulkImportDialog() {
-    _focusNode.unfocus();
-    final textC = TextEditingController();
-    int format = 0; // 0: ПІБ, 1: ПІ
-    bool importing = false;
-    String? error;
-    int importedCount = 0;
-
-    List<_ParsedPlayer> parseText(String text, int fmt) {
-      text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
-      final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
-      final result = <_ParsedPlayer>[];
-      for (final line in lines) {
-        final parts = line.split(RegExp(r'\t|;')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-        List<String> finalParts = parts;
-        if (parts.length == 1) {
-          finalParts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-        }
-        if (finalParts.isEmpty) continue;
-        
-        int? age;
-        if (finalParts.length > 2) {
-          final lastPart = finalParts.last;
-          final parsedAge = int.tryParse(lastPart);
-          if (parsedAge != null && parsedAge > 4 && parsedAge < 150) {
-            age = parsedAge;
-            finalParts.removeLast();
-          }
-        }
-
-        if (fmt == 0) {
-          result.add(_ParsedPlayer(
-            surname: finalParts[0],
-            name: finalParts.length > 1 ? finalParts[1] : '',
-            lastname: finalParts.length > 2 ? finalParts.sublist(2).join(' ') : '',
-            age: age,
-          ));
-        } else {
-          result.add(_ParsedPlayer(
-            surname: finalParts[0],
-            name: finalParts.length > 1 ? finalParts.sublist(1).join(' ') : '',
-            lastname: '',
-            age: age,
-          ));
-        }
-      }
-      return result;
-    }
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setST) {
-          final parsed = parseText(textC.text, format);
-          return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.upload_file, color: Colors.indigo),
-                        SizedBox(width: 12),
-                        Text('Швидкий імпорт гравців', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('Формат:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 12),
-                        ChoiceChip(
-                          label: const Text('Прізвище Ім\'я По батькові'),
-                          selected: format == 0,
-                          onSelected: (v) => setST(() => format = 0),
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('Прізвище Ім\'я'),
-                          selected: format == 1,
-                          onSelected: (v) => setST(() => format = 1),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      format == 0 
-                        ? 'Вставте дані з Excel. Кожен рядок: Прізвище  Ім\'я  По батькові (TAB або ;)'
-                        : 'Вставте дані з Excel. Кожен рядок: Прізвище  Ім\'я (TAB або ;)',
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 12),
-                    Flexible(
-                      child: TextField(
-                        controller: textC,
-                        autofocus: true,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        decoration: InputDecoration(
-                          hintText: 'Іваненко\tІван\tІванович\nПетренко\tПетро\tПетрович',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.all(12),
-                        ),
-                        onChanged: (v) => setST(() => error = null),
-                      ),
-                    ),
-                    if (parsed.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text('Розпізнано гравців: ${parsed.length}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.indigo)),
-                      const SizedBox(height: 4),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 120),
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: parsed.length,
-                          itemBuilder: (_, i) {
-                            final p = parsed[i];
-                            final genderLabel = Player.detectGender(p.name, p.lastname) == 0 ? 'Ч' : 'Ж';
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 1),
-                              child: Text('${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($genderLabel)${p.age != null ? ', Вік: ${p.age}' : ''}',
-                                style: TextStyle(fontSize: 12, color: p.surname.isEmpty ? Colors.red : Colors.black87),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                    if (error != null) ...[
-                      const SizedBox(height: 8),
-                      Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
-                    ],
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton(
-                          onPressed: importing ? null : () => Navigator.pop(dialogContext),
-                          child: const Text('Скасувати'),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton.icon(
-                          onPressed: importing || parsed.isEmpty ? null : () async {
-                            setST(() => importing = true);
-                            try {
-                              final currentParsed = parseText(textC.text, format);
-                              final validPlayers = currentParsed.where((p) => p.surname.isNotEmpty).toList();
-                              final playerIds = await ref.read(playerProvider.notifier).bulkAddPlayers(
-                                validPlayers.map((p) => (
-                                  surname: p.surname,
-                                  name: p.name,
-                                  lastname: p.lastname,
-                                  gender: Player.detectGender(p.name, p.lastname),
-                                  dob: '',
-                                  age: p.age,
-                                )).toList(),
-                              );
-                              await ref.read(tournamentServiceProvider).bulkAddParticipants(widget.tId, playerIds);
-                              importedCount = playerIds.length;
-                              if (dialogContext.mounted) Navigator.pop(dialogContext);
-                              _loadData();
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Імпортовано гравців: $importedCount')));
-                              }
-                            } catch (e) {
-                              setST(() {
-                                importing = false;
-                                error = 'Помилка: $e';
-                              });
-                            }
-                          },
-                          icon: importing
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.download_done),
-                          label: Text(importing ? 'Імпорт...' : 'Імпортувати (${parsed.length})'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   void _showBulkImportTeamsDialog() {
     _focusNode.unfocus();
     final textC = TextEditingController();
@@ -677,9 +482,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      format == 0 
-                        ? 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда (через TAB/;/пробіл)'
-                        : 'Кожен рядок: Прізвище  Ім\'я  Команда (через TAB/;/пробіл)',
+                      format == 0
+                        ? 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вік (через TAB/;/пробіл). Вік опційно.'
+                        : 'Кожен рядок: Прізвище  Ім\'я  Команда  Вік (через TAB/;/пробіл). Вік опційно.',
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     const SizedBox(height: 12),
@@ -1337,7 +1142,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           if (event.logicalKey == LogicalKeyboardKey.keyI &&
               (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight))) {
-            _showBulkImportDialog();
+            _showBulkImportTeamsDialog();
             return KeyEventResult.handled;
           }
         }
@@ -1372,18 +1177,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     ],
                   ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: _showBulkImportDialog,
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Імпорт гравців'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.indigo,
-                    side: const BorderSide(color: Colors.indigo),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                ),
-                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _showBulkImportTeamsDialog,
                   icon: const Icon(Icons.group_add, size: 18),
