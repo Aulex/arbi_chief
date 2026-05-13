@@ -1121,20 +1121,33 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     await _loadData();
   }
 
+  bool _reloading = false;
+
   Future<void> _loadData() async {
-    setState(() => _loading = true);
-    final svc = ref.read(athleticsServiceProvider);
-    final entries = await svc.getAllParticipants(widget.tId);
-    if (!mounted) return;
-    for (final r in _rows) {
-      r.dispose();
+    // Skip overlapping reloads — a single fetch will pick up the
+    // latest data anyway.
+    if (_reloading) return;
+    _reloading = true;
+    try {
+      final svc = ref.read(athleticsServiceProvider);
+      final entries = await svc.getAllParticipants(widget.tId);
+      if (!mounted) return;
+      // Snapshot the old rows so we can dispose their controllers AFTER
+      // the new tree is in place (avoids the brief "no data" frame and
+      // the corresponding flicker).
+      final oldRows = _rows;
+      final rows = entries.map((e) => _ParticipantRowState(e)).toList();
+      _sortRows(rows);
+      setState(() {
+        _rows = rows;
+        _loading = false;
+      });
+      for (final r in oldRows) {
+        r.dispose();
+      }
+    } finally {
+      _reloading = false;
     }
-    final rows = entries.map((e) => _ParticipantRowState(e)).toList();
-    _sortRows(rows);
-    setState(() {
-      _rows = rows;
-      _loading = false;
-    });
   }
 
   /// Sorts [rows] in-place per the current sort key + direction.
