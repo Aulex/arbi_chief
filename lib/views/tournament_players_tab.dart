@@ -165,7 +165,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         }
         final yobText = yobC.text.trim();
         final yobVal = int.tryParse(yobText);
-        if (yobVal != null && yobVal >= 1900 && yobVal <= DateTime.now().year) {
+        final maxYob = _referenceYear ?? DateTime.now().year;
+        if (yobVal != null && yobVal >= 1900 && yobVal <= maxYob) {
           await ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
             playerId: player.player_id!, tId: widget.tId, year: yobVal);
         } else if (yobText.isEmpty) {
@@ -971,7 +972,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
             playerId: resolvedPlayerId, tId: widget.tId, number: numVal);
         }
         final yobVal = int.tryParse(yobC.text.trim());
-        if (yobVal != null && yobVal >= 1900 && yobVal <= DateTime.now().year) {
+        final maxYob = _referenceYear ?? DateTime.now().year;
+        if (yobVal != null && yobVal >= 1900 && yobVal <= maxYob) {
           await ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
             playerId: resolvedPlayerId, tId: widget.tId, year: yobVal);
         }

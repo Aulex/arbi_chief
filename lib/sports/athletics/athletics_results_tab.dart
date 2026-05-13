@@ -1115,6 +1115,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     // before the tab switch. Wait for them to settle so we don't read
     // stale data.
     while (_rows.any((r) => r.saving)) {
+      if (!mounted) return;
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }
     if (!mounted) return;
@@ -1122,12 +1123,17 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
   }
 
   bool _reloading = false;
+  bool _pendingReload = false;
 
   Future<void> _loadData() async {
-    // Skip overlapping reloads — a single fetch will pick up the
-    // latest data anyway.
-    if (_reloading) return;
+    // If a reload is already in flight, schedule a follow-up so we don't
+    // discard a refresh triggered after newer data became available.
+    if (_reloading) {
+      _pendingReload = true;
+      return;
+    }
     _reloading = true;
+    _pendingReload = false;
     try {
       final svc = ref.read(athleticsServiceProvider);
       final entries = await svc.getAllParticipants(widget.tId);
@@ -1147,28 +1153,32 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       }
     } finally {
       _reloading = false;
+      if (_pendingReload) {
+        _pendingReload = false;
+        _loadData();
+      }
     }
   }
 
   /// Sorts [rows] in-place per the current sort key + direction.
-  /// Missing values (no number, no team, age 0, …) are placed at the end
-  /// on ascending sort and at the front on descending sort.
+  /// Missing values (no number, no team, age 0, …) are always placed at
+  /// the bottom regardless of sort direction.
   void _sortRows(List<_ParticipantRowState> rows) {
-    final asc = _sortAsc;
     int cmpInt(int? a, int? b) {
       if (a == null && b == null) return 0;
-      if (a == null) return asc ? 1 : -1;
-      if (b == null) return asc ? -1 : 1;
+      if (a == null) return 1;
+      if (b == null) return -1;
       return a.compareTo(b);
     }
     int cmpStr(String a, String b) {
       final ae = a.trim().isEmpty;
       final be = b.trim().isEmpty;
       if (ae && be) return 0;
-      if (ae) return asc ? 1 : -1;
-      if (be) return asc ? -1 : 1;
+      if (ae) return 1;
+      if (be) return -1;
       return a.toLowerCase().compareTo(b.toLowerCase());
     }
+    final asc = _sortAsc;
     rows.sort((a, b) {
       int r;
       switch (_sortKey) {
