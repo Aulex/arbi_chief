@@ -23,6 +23,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   List<Player> _available = [];
   Map<int, int> _playerNumbers = const {};
   Map<int, int> _playerYearsOfBirth = const {};
+  int? _referenceYear;
   bool _loading = true;
   String _search = '';
   final FocusNode _focusNode = FocusNode();
@@ -58,6 +59,10 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         ? await ref.read(athleticsServiceProvider).getPlayerYearsOfBirth(widget.tId)
         : const <int, int>{};
     if (!mounted) return;
+    final referenceYear = isAthletics
+        ? await ref.read(athleticsServiceProvider).getTournamentReferenceYear(widget.tId)
+        : null;
+    if (!mounted) return;
 
     final participantIds = participants.map((p) => p.player_id).toSet();
     final available = allPlayers
@@ -72,6 +77,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         _available = available;
         _playerNumbers = numbers;
         _playerYearsOfBirth = yearsOfBirth;
+        _referenceYear = referenceYear;
         _loading = false;
       });
     }
@@ -1373,13 +1379,22 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                               : null,
                           title: Text(player.fullName),
                           subtitle: () {
-                            // Athletics: prefer year-of-birth from the tournament-scoped
-                            // attribute. Fall back to DOB / age otherwise.
+                            // Athletics: prefer year-of-birth from the
+                            // tournament-scoped attribute and display the
+                            // computed age (= reference_year - YOB). Fall
+                            // back to the stored player_age when YOB is
+                            // empty. Non-athletics tournaments keep the
+                            // existing DOB / age display.
                             if (isAthletics && player.player_id != null) {
                               final yob = _playerYearsOfBirth[player.player_id!];
-                              if (yob != null) {
-                                return Text('Рік: $yob');
+                              final ref = _referenceYear;
+                              if (yob != null && ref != null) {
+                                return Text('Вік: ${ref - yob}');
                               }
+                              if (player.player_age != null) {
+                                return Text('Вік: ${player.player_age}');
+                              }
+                              return null;
                             }
                             if (player.birthDateForUI.isNotEmpty) {
                               return Text(player.birthDateForUI);

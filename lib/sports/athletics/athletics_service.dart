@@ -28,6 +28,10 @@ class AthleticsService {
     return parsed?.year ?? DateTime.now().year;
   }
 
+  /// Public accessor for the tournament reference year used in age math.
+  Future<int> getTournamentReferenceYear(int tId) =>
+      _tournamentReferenceYear(tId);
+
   // ── CRUD ──
 
   Future<int> saveResult(AthleticsResult result) async {

@@ -10,7 +10,20 @@ import '../../viewmodels/tournament_viewmodel.dart';
 class AthleticsResultsTab extends ConsumerStatefulWidget {
   final int tId;
 
-  const AthleticsResultsTab({super.key, required this.tId});
+  /// Outer (tournament-level) tab controller, used by the inline-entry
+  /// 'Всі учасники' subtab to also refresh when the user returns to the
+  /// Results section from a sibling top-level tab (Players, Teams, …).
+  final TabController? outerTabController;
+
+  /// Index of the Results tab inside [outerTabController].
+  final int outerTabIndex;
+
+  const AthleticsResultsTab({
+    super.key,
+    required this.tId,
+    this.outerTabController,
+    this.outerTabIndex = 0,
+  });
 
   @override
   ConsumerState<AthleticsResultsTab> createState() =>
@@ -101,6 +114,8 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab>
               _AllParticipantsView(
                 tId: widget.tId,
                 tabController: _tabController,
+                outerTabController: widget.outerTabController,
+                outerTabIndex: widget.outerTabIndex,
               ),
               ..._categories.map((c) => _CategoryResultsView(
                     tId: widget.tId,
@@ -1023,9 +1038,13 @@ enum _ParticipantSortKey { number, name, team, age, category }
 class _AllParticipantsView extends ConsumerStatefulWidget {
   final int tId;
   final TabController tabController;
+  final TabController? outerTabController;
+  final int outerTabIndex;
   const _AllParticipantsView({
     required this.tId,
     required this.tabController,
+    this.outerTabController,
+    this.outerTabIndex = 0,
   });
 
   @override
@@ -1039,7 +1058,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
 
   List<_ParticipantRowState> _rows = [];
   bool _loading = true;
-  bool _wasActive = true; // starts on this tab
+  bool _wasVisible = true; // starts visible on this tab
   _ParticipantSortKey _sortKey = _ParticipantSortKey.number;
   bool _sortAsc = true;
 
@@ -1050,30 +1069,44 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
   void initState() {
     super.initState();
     widget.tabController.addListener(_onTabChange);
+    widget.outerTabController?.addListener(_onTabChange);
     _loadData();
   }
 
   @override
   void dispose() {
     widget.tabController.removeListener(_onTabChange);
+    widget.outerTabController?.removeListener(_onTabChange);
     for (final r in _rows) {
       r.dispose();
     }
     super.dispose();
   }
 
-  /// Re-fetches participants whenever the user returns to this tab.
-  /// Waits for any in-flight row save first so we don't overwrite the user's
-  /// pending edits with the snapshot from before the save committed.
+  /// Whether this tab is currently the user's focused view. The inner tab
+  /// must be 'Всі учасники' AND, if there is an outer tournament-level
+  /// controller, it must be on the Results tab.
+  bool _isCurrentlyVisible() {
+    final inner = widget.tabController;
+    if (inner.indexIsChanging || inner.index != _myTabIndex) return false;
+    final outer = widget.outerTabController;
+    if (outer == null) return true;
+    if (outer.indexIsChanging) return false;
+    return outer.index == widget.outerTabIndex;
+  }
+
+  /// Re-fetches participants whenever the user returns to this tab — either
+  /// by switching between Results subtabs or by navigating back to Results
+  /// from a sibling tournament-level tab (Players, Teams, …). Waits for any
+  /// in-flight row save first so we don't overwrite pending edits with a
+  /// stale snapshot.
   void _onTabChange() {
-    final c = widget.tabController;
-    if (c.indexIsChanging) return;
-    final isActive = c.index == _myTabIndex;
-    if (isActive && !_wasActive) {
-      _wasActive = true;
+    final visible = _isCurrentlyVisible();
+    if (visible && !_wasVisible) {
+      _wasVisible = true;
       _loadDataAfterPendingSaves();
-    } else if (!isActive && _wasActive) {
-      _wasActive = false;
+    } else if (!visible && _wasVisible) {
+      _wasVisible = false;
     }
   }
 
