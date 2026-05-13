@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 17,
+      version: 18,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -354,6 +354,17 @@ class DatabaseService {
             'attr_id': 20,
             'attr_name': 'Категорія легкої атлетики',
             'attr_data_type': 'TEXT',
+            'attr_entity_type': 2,
+            'attr_t_type': 10,
+          });
+        }
+        if (oldVersion < 18) {
+          // Year of birth for athletics participants (player-team level).
+          // Used as the primary age source: age = tournament_year - year_of_birth.
+          await db.insert('CMP_ATTR', {
+            'attr_id': 21,
+            'attr_name': 'Рік народження',
+            'attr_data_type': 'INTEGER',
             'attr_entity_type': 2,
             'attr_t_type': 10,
           });
@@ -779,6 +790,14 @@ class DatabaseService {
           'attr_id': 20,
           'attr_name': 'Категорія легкої атлетики',
           'attr_data_type': 'TEXT',
+          'attr_entity_type': 2,
+          'attr_t_type': 10,
+        });
+        // Рік народження for athletics — primary age source (NEW in v18)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 21,
+          'attr_name': 'Рік народження',
+          'attr_data_type': 'INTEGER',
           'attr_entity_type': 2,
           'attr_t_type': 10,
         });

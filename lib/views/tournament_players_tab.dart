@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../models/team_model.dart';
+import '../sports/athletics/athletics_providers.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
@@ -21,6 +22,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   List<Player> _participants = [];
   List<Player> _available = [];
   Map<int, int> _playerNumbers = const {};
+  Map<int, int> _playerYearsOfBirth = const {};
   bool _loading = true;
   String _search = '';
   final FocusNode _focusNode = FocusNode();
@@ -52,6 +54,10 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         ? await svc.getPlayerNumbers(widget.tId)
         : const <int, int>{};
     if (!mounted) return;
+    final yearsOfBirth = isAthletics
+        ? await ref.read(athleticsServiceProvider).getPlayerYearsOfBirth(widget.tId)
+        : const <int, int>{};
+    if (!mounted) return;
 
     final participantIds = participants.map((p) => p.player_id).toSet();
     final available = allPlayers
@@ -65,6 +71,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           ..sort((a, b) => a.player_surname.compareTo(b.player_surname));
         _available = available;
         _playerNumbers = numbers;
+        _playerYearsOfBirth = yearsOfBirth;
         _loading = false;
       });
     }
@@ -78,6 +85,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final ageC = TextEditingController(text: player.player_age != null ? player.player_age.toString() : '');
     final weightC = TextEditingController();
     final numberC = TextEditingController();
+    final yobC = TextEditingController();
     int gender = player.player_gender;
     final needsWeight = const {8, 9, 13}.contains(widget.tType);
     final isAthletics = widget.tType == 10;
@@ -91,12 +99,17 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       });
     }
 
-    // Load existing participant number
+    // Load existing participant number and year of birth
     if (isAthletics && player.player_id != null) {
       ref.read(tournamentServiceProvider).getPlayerNumber(
         playerId: player.player_id!, tId: widget.tId,
       ).then((n) {
         if (n != null) numberC.text = n.toString();
+      });
+      ref.read(athleticsServiceProvider).getPlayerYearOfBirth(
+        playerId: player.player_id!, tId: widget.tId,
+      ).then((y) {
+        if (y != null) yobC.text = y.toString();
       });
     }
 
@@ -142,6 +155,15 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
             playerId: player.player_id!, tId: widget.tId, number: numVal);
         } else if (numText.isEmpty) {
           await ref.read(tournamentServiceProvider).clearPlayerNumber(
+            playerId: player.player_id!, tId: widget.tId);
+        }
+        final yobText = yobC.text.trim();
+        final yobVal = int.tryParse(yobText);
+        if (yobVal != null && yobVal >= 1900 && yobVal <= DateTime.now().year) {
+          await ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
+            playerId: player.player_id!, tId: widget.tId, year: yobVal);
+        } else if (yobText.isEmpty) {
+          await ref.read(athleticsServiceProvider).clearPlayerYearOfBirth(
             playerId: player.player_id!, tId: widget.tId);
         }
       }
@@ -222,23 +244,25 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: dobC,
-                            readOnly: true,
-                            decoration: InputDecoration(
-                              labelText: 'Дата народження',
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.calendar_today, size: 20),
-                                onPressed: () => pickDate(dialogContext, setST),
+                        if (!isAthletics) ...[
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: dobC,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'Дата народження',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.calendar_today, size: 20),
+                                  onPressed: () => pickDate(dialogContext, setST),
+                                ),
                               ),
+                              onTap: () => pickDate(dialogContext, setST),
                             ),
-                            onTap: () => pickDate(dialogContext, setST),
                           ),
-                        ),
-                        const SizedBox(width: 8),
+                          const SizedBox(width: 8),
+                        ],
                         Expanded(
                           flex: 1,
                           child: TextField(
@@ -283,14 +307,35 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     ],
                     if (isAthletics) ...[
                       const SizedBox(height: 16),
-                      TextField(
-                        controller: numberC,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: InputDecoration(
-                          labelText: 'Номер учасника',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: numberC,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              decoration: InputDecoration(
+                                labelText: 'Номер учасника',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: yobC,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(4),
+                              ],
+                              decoration: InputDecoration(
+                                labelText: 'Рік народження',
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                     const SizedBox(height: 24),
@@ -823,6 +868,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final dobC = TextEditingController();
     final weightC = TextEditingController();
     final numberC = TextEditingController();
+    final yobC = TextEditingController();
     int gender = 0;
     String searchQuery = '';
     Player? selectedExisting;
@@ -917,6 +963,11 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         if (numVal != null && numVal > 0) {
           await ref.read(tournamentServiceProvider).savePlayerNumber(
             playerId: resolvedPlayerId, tId: widget.tId, number: numVal);
+        }
+        final yobVal = int.tryParse(yobC.text.trim());
+        if (yobVal != null && yobVal >= 1900 && yobVal <= DateTime.now().year) {
+          await ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
+            playerId: resolvedPlayerId, tId: widget.tId, year: yobVal);
         }
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1059,22 +1110,24 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: dobC,
-                              readOnly: true,
-                              decoration: InputDecoration(
-                                labelText: 'Дата народження',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.calendar_today, size: 20),
-                                  onPressed: () => pickDate(dialogContext, setST),
+                          if (!isAthletics) ...[
+                            Expanded(
+                              child: TextField(
+                                controller: dobC,
+                                readOnly: true,
+                                decoration: InputDecoration(
+                                  labelText: 'Дата народження',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.calendar_today, size: 20),
+                                    onPressed: () => pickDate(dialogContext, setST),
+                                  ),
                                 ),
+                                onTap: () => pickDate(dialogContext, setST),
                               ),
-                              onTap: () => pickDate(dialogContext, setST),
                             ),
-                          ),
-                          const SizedBox(width: 16),
+                            const SizedBox(width: 16),
+                          ],
                           Expanded(
                             child: DropdownButtonFormField<int>(
                               value: gender,
@@ -1105,14 +1158,35 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       ],
                       if (isAthletics) ...[
                         const SizedBox(height: 16),
-                        TextField(
-                          controller: numberC,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          decoration: InputDecoration(
-                            labelText: 'Номер учасника',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: numberC,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: InputDecoration(
+                                  labelText: 'Номер учасника',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: TextField(
+                                controller: yobC,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(4),
+                                ],
+                                decoration: InputDecoration(
+                                  labelText: 'Рік народження',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                       const SizedBox(height: 24),
@@ -1298,9 +1372,23 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                 )
                               : null,
                           title: Text(player.fullName),
-                          subtitle: player.birthDateForUI.isNotEmpty
-                              ? Text(player.birthDateForUI)
-                              : (player.player_age != null ? Text('Вік: ${player.player_age}') : null),
+                          subtitle: () {
+                            // Athletics: prefer year-of-birth from the tournament-scoped
+                            // attribute. Fall back to DOB / age otherwise.
+                            if (isAthletics && player.player_id != null) {
+                              final yob = _playerYearsOfBirth[player.player_id!];
+                              if (yob != null) {
+                                return Text('Рік: $yob');
+                              }
+                            }
+                            if (player.birthDateForUI.isNotEmpty) {
+                              return Text(player.birthDateForUI);
+                            }
+                            if (player.player_age != null) {
+                              return Text('Вік: ${player.player_age}');
+                            }
+                            return null;
+                          }(),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
