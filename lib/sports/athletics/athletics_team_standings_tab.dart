@@ -17,6 +17,8 @@ class AthleticsTeamStandingsTab extends ConsumerStatefulWidget {
 class _AthleticsTeamStandingsTabState
     extends ConsumerState<AthleticsTeamStandingsTab> {
   List<AthleticsTeamStanding> _standings = [];
+  int _penaltyPlace = 0;
+  AthleticsCategory? _largestCategory;
   bool _loading = true;
 
   @override
@@ -29,12 +31,14 @@ class _AthleticsTeamStandingsTabState
     setState(() => _loading = true);
     final svc = ref.read(athleticsServiceProvider);
     final customCoefficients = await svc.getCustomCoefficients(widget.tId);
-    final standings = await svc.getTeamStandings(
+    final result = await svc.getTeamStandings(
       widget.tId, customCoefficients: customCoefficients,
     );
     if (mounted) {
       setState(() {
-        _standings = standings;
+        _standings = result.standings;
+        _penaltyPlace = result.penaltyPlace;
+        _largestCategory = result.largestCategory;
         _loading = false;
       });
     }
@@ -83,10 +87,16 @@ class _AthleticsTeamStandingsTabState
         ),
         const SizedBox(height: 4),
         Text(
-          'Очки = сума місць (2 чоловіки + 1 жінка з різних вікових категорій). '
-          'Менше очок = краще. '
-          'Якщо команда не представлена у категорії, нараховується штраф = '
-          'кількість учасників у найбільшій категорії + 1.',
+          _largestCategory != null && _penaltyPlace > 1
+              ? 'Очки = сума місць (2 чоловіки + 1 жінка з різних вікових '
+                  'категорій). Менше очок = краще. Якщо команда не '
+                  'представлена у категорії, нараховується штраф = '
+                  '$_penaltyPlace (${_largestCategory!.label}: '
+                  '${_penaltyPlace - 1} учасників + 1).'
+              : 'Очки = сума місць (2 чоловіки + 1 жінка з різних вікових '
+                  'категорій). Менше очок = краще. Якщо команда не '
+                  'представлена у категорії, нараховується штраф = '
+                  'кількість учасників у найбільшій категорії + 1.',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 12),

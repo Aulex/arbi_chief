@@ -44,9 +44,10 @@ class AthleticsReportBuilder {
     final overallWomen = await _service.getOverallStandings(
       tId, isMale: false, customCoefficients: coeffs,
     );
-    final teamStandings = await _service.getTeamStandings(
+    final teamResult = await _service.getTeamStandings(
       tId, customCoefficients: coeffs,
     );
+    final teamStandings = teamResult.standings;
 
     final theme = await _loadTheme();
 
@@ -85,6 +86,8 @@ class AthleticsReportBuilder {
       pdf.addPage(_buildTeamStandingsPage(
         tournamentName: tournamentName,
         standings: teamStandings,
+        penaltyPlace: teamResult.penaltyPlace,
+        largestCategory: teamResult.largestCategory,
         theme: theme,
       ));
     }
@@ -289,6 +292,8 @@ class AthleticsReportBuilder {
   pw.Page _buildTeamStandingsPage({
     required String tournamentName,
     required List<AthleticsTeamStanding> standings,
+    required int penaltyPlace,
+    required AthleticsCategory? largestCategory,
     required pw.ThemeData theme,
   }) {
     final hdrStyle = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
@@ -354,7 +359,13 @@ class AthleticsReportBuilder {
           ),
           pw.SizedBox(height: 6),
           pw.Text(
-            'Сума місць — менше краще. Залікові місця: 2 чоловіки + 1 жінка з різних вікових категорій.',
+            largestCategory != null && penaltyPlace > 1
+                ? 'Сума місць — менше краще. Залікові місця: 2 чоловіки + '
+                    '1 жінка з різних вікових категорій. Штраф за відсутність '
+                    'у категорії = $penaltyPlace (${largestCategory.label}: '
+                    '${penaltyPlace - 1} учасників + 1).'
+                : 'Сума місць — менше краще. Залікові місця: 2 чоловіки + '
+                    '1 жінка з різних вікових категорій.',
             style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
           ),
         ],

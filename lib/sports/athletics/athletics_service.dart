@@ -346,7 +346,15 @@ class AthleticsService {
   /// Missing entries = last place in largest category + 1 penalty.
   /// Tiebreakers: 1) more 1st/2nd/3rd places, 2) lowest sum of times,
   ///              3) largest sum of ages, 4) best woman result.
-  Future<List<AthleticsTeamStanding>> getTeamStandings(
+  ///
+  /// Returns the ranked standings plus the missing-entry penalty value and
+  /// the category that determined it (largest active category, after merging).
+  /// [largestCategory] is null when there are no participants at all.
+  Future<({
+    List<AthleticsTeamStanding> standings,
+    int penaltyPlace,
+    AthleticsCategory? largestCategory,
+  })> getTeamStandings(
     int tId, {
     Map<int, ({double men3000, double women1500})>? customCoefficients,
   }) async {
@@ -361,7 +369,9 @@ class AthleticsService {
       ORDER BY t.team_name
     ''', [tId]);
 
-    if (teamRows.isEmpty) return [];
+    if (teamRows.isEmpty) {
+      return (standings: <AthleticsTeamStanding>[], penaltyPlace: 1, largestCategory: null);
+    }
 
     // Get standings for each category (with per-player age coefficients)
     final categoryStandings = <AthleticsCategory, List<RankedAthleticsResult>>{};
@@ -377,8 +387,12 @@ class AthleticsService {
 
     // Penalty for missing entry = last place in largest category + 1
     int maxCatSize = 0;
-    for (final standings in categoryStandings.values) {
-      if (standings.length > maxCatSize) maxCatSize = standings.length;
+    AthleticsCategory? maxCat;
+    for (final entry in categoryStandings.entries) {
+      if (entry.value.length > maxCatSize) {
+        maxCatSize = entry.value.length;
+        maxCat = entry.key;
+      }
     }
     final penaltyPlace = maxCatSize + 1;
 
@@ -575,7 +589,11 @@ class AthleticsService {
         place: place,
       ));
     }
-    return result;
+    return (
+      standings: result,
+      penaltyPlace: penaltyPlace,
+      largestCategory: maxCat,
+    );
   }
 
   /// Apply category merging: if a category has <5 participants, merge into younger category.
