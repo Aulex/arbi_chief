@@ -289,6 +289,7 @@ class StreetballReportBuilder {
         .split(',')
         .map((s) => int.tryParse(s.trim()))
         .whereType<int>()
+        .toSet()
         .toList();
   }
 
