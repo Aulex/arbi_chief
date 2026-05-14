@@ -111,7 +111,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     });
   }
 
-  Future<void> _saveCoeffTable(int tId, AthleticsService svc, int sportType) async {
+  Future<void> _saveCoeffTable(int tId, AthleticsService svc, int? sportType) async {
     // Only save for athletics tournaments (type 10)
     if (widget.tournament?.t_type != 10 && sportType != 10) return;
     await svc.saveCustomCoefficients(tId, _coeffTable);
