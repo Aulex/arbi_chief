@@ -156,7 +156,7 @@ class AthleticsResult {
 
 /// A ranked result with place number.
 class RankedAthleticsResult {
-  final AthleticsResult result;
+  final AthleticsResult? result;
   final int place;
   final String? playerName;
   final String? teamName;
@@ -164,9 +164,11 @@ class RankedAthleticsResult {
   final double coefficient;
   final double adjustedDsec;
   final int? playerNumber;
+  final int? pendingPlayerId;
+  final int? pendingTeamId;
 
   const RankedAthleticsResult({
-    required this.result,
+    this.result,
     required this.place,
     this.playerName,
     this.teamName,
@@ -174,7 +176,12 @@ class RankedAthleticsResult {
     this.coefficient = 1.0,
     this.adjustedDsec = 0,
     this.playerNumber,
+    this.pendingPlayerId,
+    this.pendingTeamId,
   });
+
+  int get effectivePlayerId => result?.playerId ?? pendingPlayerId ?? 0;
+  int get effectiveTeamId => result?.teamId ?? pendingTeamId ?? 0;
 }
 
 /// Team athletics standings entry.

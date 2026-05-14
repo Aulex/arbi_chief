@@ -151,7 +151,7 @@ class CyclingReportBuilder {
           _cell(s.playerName ?? '', cellSt, align: pw.Alignment.centerLeft),
           _cell(s.teamName ?? '', cellSt, align: pw.Alignment.centerLeft),
           _cell(s.age > 0 ? '${s.age}' : '—', cellSt),
-          _cell(s.result.timeFormatted, cellSt),
+          _cell(s.result!.timeFormatted, cellSt),
           _cell('${s.place}', cellBold),
         ],
       ));

@@ -81,6 +81,53 @@ class AthleticsService {
     }
   }
 
+  /// Bulk saves multiple results using a single transaction to drastically improve performance.
+  Future<void> saveResults(List<AthleticsResult> results) async {
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final result in results) {
+        final rows = await txn.query('CMP_PLAYER', columns: ['entity_id'],
+            where: 'player_id = ?', whereArgs: [result.playerId]);
+        if (rows.isEmpty) continue;
+        final entityId = rows.first['entity_id'] as int;
+
+        int eventId;
+        if (result.id != null) {
+          final subRows = await txn.query('CMP_SUBEVENT', columns: ['ev_id'],
+              where: 'se_id = ?', whereArgs: [result.id]);
+          if (subRows.isEmpty) continue;
+          eventId = subRows.first['ev_id'] as int;
+
+          await txn.update('CMP_EVENT', {
+            'event_result': result.totalDsec,
+          }, where: 'event_id = ?', whereArgs: [eventId]);
+        } else {
+          eventId = await txn.insert('CMP_EVENT', {
+            't_id': result.tournamentId,
+            'et_id': _eventTypeIndividual,
+            'event_result': result.totalDsec,
+            'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ath_ev',
+          });
+        }
+
+        final subEventMap = {
+          'ev_id': eventId,
+          'entity_id': entityId,
+          'se_result': result.totalDsec,
+          'se_note': result.category.name,
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ath_se',
+        };
+
+        if (result.id != null) {
+          await txn.update('CMP_SUBEVENT', subEventMap,
+              where: 'se_id = ?', whereArgs: [result.id]);
+        } else {
+          await txn.insert('CMP_SUBEVENT', subEventMap);
+        }
+      }
+    });
+  }
+
   Future<void> deleteResult(int seId) async {
     final db = await _dbService.database;
     final rows = await db.query('CMP_SUBEVENT', columns: ['ev_id'],
@@ -419,7 +466,7 @@ class AthleticsService {
     List<int> placesForTeam(
         List<RankedAthleticsResult> standings, int teamId) {
       final teamResults = standings
-          .where((r) => r.result.teamId == teamId)
+          .where((r) => r.effectiveTeamId == teamId && r.result != null)
           .map((r) => r.place)
           .toList();
       if (teamResults.isEmpty) return const [];
@@ -447,12 +494,12 @@ class AthleticsService {
       final maleOptions = <({AthleticsCategory cat, int place, int time, int age})>[];
       for (final cat in activeMaleCats) {
         final standings = categoryStandings[cat]!;
-        final teamResults = standings.where((r) => r.result.teamId == teamId).toList();
+        final teamResults = standings.where((r) => r.effectiveTeamId == teamId && r.result != null).toList();
         if (teamResults.isNotEmpty) {
           maleOptions.add((
             cat: cat,
             place: teamResults.first.place,
-            time: teamResults.first.result.totalDsec,
+            time: teamResults.first.result!.totalDsec,
             age: teamResults.first.age,
           ));
         }
@@ -473,12 +520,12 @@ class AthleticsService {
       final femaleOptions = <({AthleticsCategory cat, int place, int time, int age})>[];
       for (final cat in activeFemaleCats) {
         final standings = categoryStandings[cat]!;
-        final teamResults = standings.where((r) => r.result.teamId == teamId).toList();
+        final teamResults = standings.where((r) => r.effectiveTeamId == teamId && r.result != null).toList();
         if (teamResults.isNotEmpty) {
           femaleOptions.add((
             cat: cat,
             place: teamResults.first.place,
-            time: teamResults.first.result.totalDsec,
+            time: teamResults.first.result!.totalDsec,
             age: teamResults.first.age,
           ));
         }
@@ -725,6 +772,55 @@ class AthleticsService {
 
   // ── Assigned category override (CMP_PLAYER_TEAM_ATTR_VALUE attr_id=20) ──
 
+  Future<void> savePlayerYearOfBirth({
+    required int playerId,
+    required int tId,
+    required int year,
+  }) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = ?',
+      whereArgs: [pteId, _attrIdYearOfBirth]);
+    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+      'pte_id': pteId,
+      'attr_id': _attrIdYearOfBirth,
+      'attr_value': year.toString(),
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
+    });
+  }
+
+  /// Bulk save year of birth overrides for multiple players in a tournament.
+  Future<void> bulkSavePlayerYearsOfBirth({
+    required int tId,
+    required Map<int, int> yearsOfBirth,
+  }) async {
+    if (yearsOfBirth.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final entry in yearsOfBirth.entries) {
+        final playerId = entry.key;
+        final year = entry.value;
+        final pteRows = await txn.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+          where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+        if (pteRows.isEmpty) continue;
+        final pteId = pteRows.first['pte_id'] as int;
+        await txn.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+          where: 'pte_id = ? AND attr_id = ?',
+          whereArgs: [pteId, _attrIdYearOfBirth]);
+        await txn.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+          'pte_id': pteId,
+          'attr_id': _attrIdYearOfBirth,
+          'attr_value': year.toString(),
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
+        });
+      }
+    });
+  }
+
   Future<void> saveAssignedCategory({
     required int playerId,
     required int tId,
@@ -743,6 +839,34 @@ class AthleticsService {
       'attr_id': _attrIdAssignedCategory,
       'attr_value': category.name,
       'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ac_$playerId',
+    });
+  }
+
+  /// Bulk save assigned category overrides for multiple players in a tournament.
+  Future<void> bulkSaveAssignedCategories({
+    required int tId,
+    required Map<int, AthleticsCategory> categories,
+  }) async {
+    if (categories.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final entry in categories.entries) {
+        final playerId = entry.key;
+        final category = entry.value;
+        final pteRows = await txn.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+          where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+        if (pteRows.isEmpty) continue;
+        final pteId = pteRows.first['pte_id'] as int;
+        await txn.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+          where: 'pte_id = ? AND attr_id = ?',
+          whereArgs: [pteId, _attrIdAssignedCategory]);
+        await txn.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+          'pte_id': pteId,
+          'attr_id': _attrIdAssignedCategory,
+          'attr_value': category.name,
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ac_$playerId',
+        });
+      }
     });
   }
 
@@ -778,29 +902,6 @@ class AthleticsService {
       map[pid] = AthleticsCategory.fromDb(value);
     }
     return map;
-  }
-
-  // ── Year of birth override (CMP_PLAYER_TEAM_ATTR_VALUE attr_id=21) ──
-
-  Future<void> savePlayerYearOfBirth({
-    required int playerId,
-    required int tId,
-    required int year,
-  }) async {
-    final db = await _dbService.database;
-    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
-      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
-    if (pteRows.isEmpty) return;
-    final pteId = pteRows.first['pte_id'] as int;
-    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
-      where: 'pte_id = ? AND attr_id = ?',
-      whereArgs: [pteId, _attrIdYearOfBirth]);
-    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
-      'pte_id': pteId,
-      'attr_id': _attrIdYearOfBirth,
-      'attr_value': year.toString(),
-      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
-    });
   }
 
   Future<void> clearPlayerYearOfBirth({
@@ -965,6 +1066,54 @@ class AthleticsService {
       ));
     }
     return entries;
+  }
+
+  /// Get participants for a specific category, including result-less ones.
+  /// Result-less participants will have a null `result` and place = 0.
+  Future<List<RankedAthleticsResult>> getCategoryParticipants(
+    int tId,
+    AthleticsCategory category, {
+    Map<int, ({double men3000, double women1500})>? customCoefficients,
+  }) async {
+    // 1. Get ranked standings (those who have results)
+    final standings = await getCategoryStandings(
+      tId,
+      category,
+      customCoefficients: customCoefficients,
+    );
+
+    // 2. Get all participants
+    final allParticipants = await getAllParticipants(tId);
+
+    // 3. Find participants whose effective category matches, but have no result
+    final resultLess = allParticipants.where((p) {
+      if (p.effectiveCategory != category) return false;
+      return p.resultId == null;
+    }).toList();
+
+    // 4. Convert result-less to RankedAthleticsResult
+    final pending = resultLess.map((p) {
+      final coeff = AthleticsCoefficients.getCoefficientFromTable(
+        p.age,
+        category.isMale,
+        customCoefficients,
+      );
+
+      return RankedAthleticsResult(
+        result: null,
+        place: 0, // 0 signifies no place yet
+        playerName: p.fullName,
+        teamName: p.teamName,
+        age: p.age,
+        coefficient: coeff,
+        adjustedDsec: 0,
+        playerNumber: p.playerNumber,
+        pendingPlayerId: p.playerId,
+        pendingTeamId: p.teamId,
+      );
+    });
+
+    return [...standings, ...pending];
   }
 
   // ── Age Coefficient Table (stored in CMP_ATTR_VALUE as JSON) ──

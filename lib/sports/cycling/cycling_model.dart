@@ -144,21 +144,28 @@ class CyclingResult {
 /// A ranked result with place number. Cycling ranks by raw time, so there is
 /// no coefficient / adjusted time (unlike athletics).
 class RankedCyclingResult {
-  final CyclingResult result;
+  final CyclingResult? result;
   final int place;
   final String? playerName;
   final String? teamName;
   final int age;
   final int? playerNumber;
+  final int? pendingPlayerId;
+  final int? pendingTeamId;
 
   const RankedCyclingResult({
-    required this.result,
+    this.result,
     required this.place,
     this.playerName,
     this.teamName,
     this.age = 0,
     this.playerNumber,
+    this.pendingPlayerId,
+    this.pendingTeamId,
   });
+
+  int get effectivePlayerId => result?.playerId ?? pendingPlayerId ?? 0;
+  int get effectiveTeamId => result?.teamId ?? pendingTeamId ?? 0;
 }
 
 /// Team cycling standings entry.

@@ -158,7 +158,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     setState(() => _loading = true);
     final svc = ref.read(cyclingServiceProvider);
     final standings =
-        await svc.getCategoryStandings(widget.tId, widget.category);
+        await svc.getCategoryParticipants(widget.tId, widget.category);
     if (mounted) {
       setState(() {
         _standings = standings;
@@ -189,6 +189,8 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
         tId: widget.tId,
         category: widget.category,
         existing: ranked.result,
+        prefilledPlayerId: ranked.pendingPlayerId,
+        prefilledTeamId: ranked.pendingTeamId,
       ),
     );
     if (result != null) {
@@ -216,7 +218,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     );
     if (confirmed == true) {
       final svc = ref.read(cyclingServiceProvider);
-      await svc.deleteResult(ranked.result.id!);
+      await svc.deleteResult(ranked.result!.id!);
       await _loadStandings();
     }
   }
@@ -425,11 +427,12 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                       try {
                         final svc = ref.read(cyclingServiceProvider);
                         int count = 0;
+                        final resultsToSave = <CyclingResult>[];
                         for (final p in preview) {
                           if (p.teamId != null &&
                               p.playerId != null &&
                               p.timeValid) {
-                            await svc.saveResult(CyclingResult(
+                            resultsToSave.add(CyclingResult(
                               tournamentId: widget.tId,
                               category: widget.category,
                               playerId: p.playerId!,
@@ -440,6 +443,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                             ));
                             count++;
                           }
+                        }
+                        if (resultsToSave.isNotEmpty) {
+                          await svc.saveResults(resultsToSave);
                         }
                         if (ctx.mounted) Navigator.pop(ctx);
                         _loadStandings();
@@ -471,6 +477,14 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    // Re-load if a global refresh was triggered (e.g. from the 'All participants' tab)
+    ref.listen(resultsRefreshProvider, (prev, next) {
+      if (prev != next) {
+        _loadStandings();
+      }
+    });
+
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     return LayoutBuilder(
@@ -576,13 +590,13 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
               DataCell(Text(r.teamName ?? '')),
               DataCell(Text('${r.age > 0 ? r.age : '-'}')),
               DataCell(Text(
-                r.result.timeFormatted,
+                r.result != null ? r.result!.timeFormatted : '—',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
               )),
               DataCell(Text(
-                '${r.place}',
+                r.place > 0 ? '${r.place}' : '—',
                 style: TextStyle(
-                  fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: r.place > 0 && r.place <= 3 ? FontWeight.bold : FontWeight.normal,
                   color: r.place == 1
                       ? Colors.amber.shade800
                       : r.place == 2
@@ -596,11 +610,11 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    icon: Icon(r.result == null ? Icons.add_circle_outline : Icons.edit_outlined, size: 18),
                     onPressed: () => _editResult(r),
-                    tooltip: 'Редагувати',
+                    tooltip: r.result == null ? 'Додати результат' : 'Редагувати',
                   ),
-                  if (!isNarrow)
+                  if (!isNarrow && r.result != null)
                     IconButton(
                       icon: Icon(Icons.delete_outline,
                           size: 18, color: Colors.red.shade400),
@@ -622,11 +636,15 @@ class _CyclingResultDialog extends ConsumerStatefulWidget {
   final int tId;
   final CyclingCategory category;
   final CyclingResult? existing;
+  final int? prefilledPlayerId;
+  final int? prefilledTeamId;
 
   const _CyclingResultDialog({
     required this.tId,
     required this.category,
     this.existing,
+    this.prefilledPlayerId,
+    this.prefilledTeamId,
   });
 
   @override
@@ -659,6 +677,10 @@ class _CyclingResultDialogState
       _selectedPlayerId = widget.existing!.playerId;
     } else {
       _hourCtrl.text = '0';
+      if (widget.prefilledTeamId != null) {
+        _selectedTeamId = widget.prefilledTeamId;
+        _selectedPlayerId = widget.prefilledPlayerId;
+      }
     }
     _loadTeams();
   }
@@ -1289,6 +1311,9 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       row.savedHour = row.hourC.text.trim();
       row.savedMin = row.minC.text.trim();
       row.savedSec = row.secC.text.trim();
+
+      // Trigger a refresh for other tabs (category standings)
+      ref.read(resultsRefreshProvider.notifier).increment();
     } catch (e) {
       if (!mounted) return;
       setState(() {

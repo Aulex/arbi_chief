@@ -80,26 +80,35 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       : ref.read(athleticsServiceProvider)
           .clearPlayerYearOfBirth(playerId: playerId, tId: widget.tId);
 
-  /// Save an assigned category from an imported label/name (e.g. "Ч49" or
-  /// "m49"). Dispatches to the sport that owns the tournament; unknown
-  /// labels are ignored (the category then auto-detects from year of birth).
-  Future<void> _saveAssignedCategoryFromLabel(int playerId, String label) async {
-    final key = label.toLowerCase().trim();
+
+
+  Future<void> _bulkSaveAssignedCategoriesFromLabels(Map<int, String> playerLabels) async {
+    if (playerLabels.isEmpty) return;
     if (widget.tType == 12) {
-      final cat = CyclingCategory.values.where(
-        (c) => c.label.toLowerCase() == key || c.name.toLowerCase() == key,
-      ).firstOrNull;
-      if (cat != null) {
-        await ref.read(cyclingServiceProvider).saveAssignedCategory(
-            playerId: playerId, tId: widget.tId, category: cat);
+      final categories = <int, CyclingCategory>{};
+      for (final entry in playerLabels.entries) {
+        final key = entry.value.toLowerCase().trim();
+        final cat = CyclingCategory.values.where(
+          (c) => c.label.toLowerCase() == key || c.name.toLowerCase() == key,
+        ).firstOrNull;
+        if (cat != null) categories[entry.key] = cat;
+      }
+      if (categories.isNotEmpty) {
+        await ref.read(cyclingServiceProvider).bulkSaveAssignedCategories(
+            tId: widget.tId, categories: categories);
       }
     } else {
-      final cat = AthleticsCategory.values.where(
-        (c) => c.label.toLowerCase() == key || c.name.toLowerCase() == key,
-      ).firstOrNull;
-      if (cat != null) {
-        await ref.read(athleticsServiceProvider).saveAssignedCategory(
-            playerId: playerId, tId: widget.tId, category: cat);
+      final categories = <int, AthleticsCategory>{};
+      for (final entry in playerLabels.entries) {
+        final key = entry.value.toLowerCase().trim();
+        final cat = AthleticsCategory.values.where(
+          (c) => c.label.toLowerCase() == key || c.name.toLowerCase() == key,
+        ).firstOrNull;
+        if (cat != null) categories[entry.key] = cat;
+      }
+      if (categories.isNotEmpty) {
+        await ref.read(athleticsServiceProvider).bulkSaveAssignedCategories(
+            tId: widget.tId, categories: categories);
       }
     }
   }
@@ -709,15 +718,48 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                       groups.putIfAbsent(p.teamName, () => []).add(p);
                                     }
 
+                                    // Flatten all players for bulk creation
+                                    final allValidPlayers = <_ParsedTeamPlayer>[];
+                                    for (final group in groups.values) {
+                                      allValidPlayers.addAll(group);
+                                    }
+
+                                    if (allValidPlayers.isEmpty) return;
+
+                                    // Bulk-create ALL players
+                                    final allPlayerIds = await playerNotifier.bulkAddPlayers(
+                                      allValidPlayers.map((p) => (
+                                        surname: p.surname,
+                                        name: p.name,
+                                        lastname: p.lastname,
+                                        gender: Player.detectGender(p.name, p.lastname),
+                                        dob: (!usesAgeCats && p.yob != null)
+                                            ? '01.01.${p.yob}'
+                                            : '',
+                                        age: null,
+                                      )).toList(),
+                                    );
+
+                                    // Associate IDs back to players
+                                    for (int i = 0; i < allValidPlayers.length; i++) {
+                                      allValidPlayers[i].tempId = allPlayerIds[i];
+                                    }
+
+                                    // Add ALL players to tournament in one transaction
+                                    await tournamentSvc.bulkAddParticipants(widget.tId, allPlayerIds);
+
+                                    // Pre-fetch all teams to find/create as needed
+                                    final allTeams = await teamSvc.getAllTeams(tType: tType);
+
                                     int totalPlayers = 0;
                                     int totalTeams = 0;
 
                                     for (final entry in groups.entries) {
                                       final teamName = entry.key;
-                                      final players = entry.value;
+                                      final playersInGroup = entry.value;
+                                      final playerIdsInGroup = playersInGroup.map((p) => p.tempId!).toList();
 
                                       // Create or find team
-                                      final allTeams = await teamSvc.getAllTeams(tType: tType);
                                       var team = allTeams.cast<Team?>().firstWhere(
                                         (t) => t!.team_name.toLowerCase() == teamName.toLowerCase(),
                                         orElse: () => null,
@@ -727,28 +769,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                           team_name: teamName,
                                           t_type: tType,
                                         ));
+                                        allTeams.add(team);
                                         totalTeams++;
                                       }
-
-                                      // Bulk-create players. Age-category sports
-                                      // keep the year of birth as a per-tournament
-                                      // attribute; other sports store it as the
-                                      // player's date of birth (01.01.YYYY).
-                                      final playerIds = await playerNotifier.bulkAddPlayers(
-                                        players.map((p) => (
-                                          surname: p.surname,
-                                          name: p.name,
-                                          lastname: p.lastname,
-                                          gender: Player.detectGender(p.name, p.lastname),
-                                          dob: (!usesAgeCats && p.yob != null)
-                                              ? '01.01.${p.yob}'
-                                              : '',
-                                          age: null,
-                                        )).toList(),
-                                      );
-
-                                      // Add players to tournament
-                                      await tournamentSvc.bulkAddParticipants(widget.tId, playerIds);
 
                                       // Assign players to team in tournament
                                       // Get existing team number or assign next
@@ -763,35 +786,51 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                       // Get current board members and add new players as reserves
                                       final currentBoards = await teamSvc.getBoardMembers(team.team_id!, widget.tId);
                                       final currentReserves = await teamSvc.getTeamMemberIds(team.team_id!, widget.tId);
-                                      final allReserves = [...currentReserves, ...playerIds];
+                                      final allReserves = [...currentReserves, ...playerIdsInGroup];
                                       await teamSvc.saveAssignments(team.team_id!, widget.tId, currentBoards, allReserves);
 
-                                      // Persist imported per-player data: player
-                                      // number for everyone, plus year of birth
-                                      // and assigned category for age-category
-                                      // sports.
-                                      for (var idx = 0; idx < playerIds.length; idx++) {
-                                        final pid = playerIds[idx];
-                                        final p = players[idx];
+                                      // Bulk save player attributes for this team
+                                      final playerNumbers = <int, int>{};
+                                      final yearsOfBirth = <int, int>{};
+                                      final categoryLabels = <int, String>{};
+
+                                      for (final p in playersInGroup) {
+                                        final pid = p.tempId!;
                                         if (p.playerNumber != null) {
-                                          await tournamentSvc.savePlayerNumber(
-                                            playerId: pid,
-                                            tId: widget.tId,
-                                            number: p.playerNumber!,
-                                          );
+                                          playerNumbers[pid] = p.playerNumber!;
                                         }
                                         if (usesAgeCats) {
                                           if (p.yob != null) {
-                                            await _saveYearOfBirth(pid, p.yob!);
+                                            yearsOfBirth[pid] = p.yob!;
                                           }
                                           if (p.category != null) {
-                                            await _saveAssignedCategoryFromLabel(
-                                                pid, p.category!);
+                                            categoryLabels[pid] = p.category!;
                                           }
                                         }
                                       }
 
-                                      totalPlayers += playerIds.length;
+                                      if (playerNumbers.isNotEmpty) {
+                                        await tournamentSvc.bulkSavePlayerNumbers(
+                                          tId: widget.tId,
+                                          playerNumbers: playerNumbers,
+                                        );
+                                      }
+                                      if (usesAgeCats) {
+                                        if (yearsOfBirth.isNotEmpty) {
+                                          if (widget.tType == 12) {
+                                            await ref.read(cyclingServiceProvider).bulkSavePlayerYearsOfBirth(
+                                              tId: widget.tId, yearsOfBirth: yearsOfBirth);
+                                          } else {
+                                            await ref.read(athleticsServiceProvider).bulkSavePlayerYearsOfBirth(
+                                              tId: widget.tId, yearsOfBirth: yearsOfBirth);
+                                          }
+                                        }
+                                        if (categoryLabels.isNotEmpty) {
+                                          await _bulkSaveAssignedCategoriesFromLabels(categoryLabels);
+                                        }
+                                      }
+
+                                      totalPlayers += playerIdsInGroup.length;
                                     }
 
                                     if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1548,7 +1587,9 @@ class _ParsedTeamPlayer {
   final int? yob;
   final String? category;
   final int? playerNumber;
-  const _ParsedTeamPlayer({
+  int? tempId;
+
+  _ParsedTeamPlayer({
     required this.teamName,
     required this.surname,
     required this.name,

@@ -781,6 +781,27 @@ class TournamentService {
     });
   }
 
+  /// Bulk save participant (bib) numbers for multiple players in a tournament.
+  Future<void> bulkSavePlayerNumbers({required int tId, required Map<int, int> playerNumbers}) async {
+    if (playerNumbers.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final entry in playerNumbers.entries) {
+        final playerId = entry.key;
+        final number = entry.value;
+        final pteRows = await txn.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+          where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+        if (pteRows.isEmpty) continue;
+        final pteId = pteRows.first['pte_id'] as int;
+        await txn.delete('CMP_PLAYER_TEAM_ATTR_VALUE', where: 'pte_id = ? AND attr_id = 19', whereArgs: [pteId]);
+        await txn.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+          'pte_id': pteId, 'attr_id': 19, 'attr_value': number.toString(),
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_pn_$playerId',
+        });
+      }
+    });
+  }
+
   /// Clear participant number for a player in a tournament.
   Future<void> clearPlayerNumber({required int playerId, required int tId}) async {
     final db = await _dbService.database;

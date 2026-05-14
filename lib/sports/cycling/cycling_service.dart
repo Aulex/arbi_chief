@@ -87,6 +87,53 @@ class CyclingService {
     }
   }
 
+  /// Bulk saves multiple results using a single transaction to drastically improve performance.
+  Future<void> saveResults(List<CyclingResult> results) async {
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final result in results) {
+        final rows = await txn.query('CMP_PLAYER', columns: ['entity_id'],
+            where: 'player_id = ?', whereArgs: [result.playerId]);
+        if (rows.isEmpty) continue;
+        final entityId = rows.first['entity_id'] as int;
+
+        int eventId;
+        if (result.id != null) {
+          final subRows = await txn.query('CMP_SUBEVENT', columns: ['ev_id'],
+              where: 'se_id = ?', whereArgs: [result.id]);
+          if (subRows.isEmpty) continue;
+          eventId = subRows.first['ev_id'] as int;
+
+          await txn.update('CMP_EVENT', {
+            'event_result': result.totalSec,
+          }, where: 'event_id = ?', whereArgs: [eventId]);
+        } else {
+          eventId = await txn.insert('CMP_EVENT', {
+            't_id': result.tournamentId,
+            'et_id': _eventTypeIndividual,
+            'event_result': result.totalSec,
+            'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_cy_ev',
+          });
+        }
+
+        final subEventMap = {
+          'ev_id': eventId,
+          'entity_id': entityId,
+          'se_result': result.totalSec,
+          'se_note': result.category.name,
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_cy_se',
+        };
+
+        if (result.id != null) {
+          await txn.update('CMP_SUBEVENT', subEventMap,
+              where: 'se_id = ?', whereArgs: [result.id]);
+        } else {
+          await txn.insert('CMP_SUBEVENT', subEventMap);
+        }
+      }
+    });
+  }
+
   Future<void> deleteResult(int seId) async {
     final db = await _dbService.database;
     final rows = await db.query('CMP_SUBEVENT', columns: ['ev_id'],
@@ -313,13 +360,13 @@ class CyclingService {
     for (final cat in cats) {
       all.addAll(await getCategoryStandings(tId, cat));
     }
-    all.sort((a, b) => a.result.totalSec.compareTo(b.result.totalSec));
+    all.sort((a, b) => a.result!.totalSec.compareTo(b.result!.totalSec));
 
     final ranked = <RankedCyclingResult>[];
     int place = 1;
     for (int i = 0; i < all.length; i++) {
       final r = all[i];
-      if (i > 0 && r.result.totalSec != all[i - 1].result.totalSec) {
+      if (i > 0 && r.result!.totalSec != all[i - 1].result!.totalSec) {
         place = i + 1;
       }
       ranked.add(RankedCyclingResult(
@@ -392,7 +439,7 @@ class CyclingService {
     List<int> placesForTeam(
         List<RankedCyclingResult> standings, int teamId) {
       final teamResults = standings
-          .where((r) => r.result.teamId == teamId)
+          .where((r) => r.effectiveTeamId == teamId && r.result != null)
           .map((r) => r.place)
           .toList();
       if (teamResults.isEmpty) return const [];
@@ -417,12 +464,12 @@ class CyclingService {
       final maleOptions = <({CyclingCategory cat, int place, int time, int age})>[];
       for (final cat in activeMaleCats) {
         final standings = categoryStandings[cat]!;
-        final teamResults = standings.where((r) => r.result.teamId == teamId).toList();
+        final teamResults = standings.where((r) => r.effectiveTeamId == teamId && r.result != null).toList();
         if (teamResults.isNotEmpty) {
           maleOptions.add((
             cat: cat,
             place: teamResults.first.place,
-            time: teamResults.first.result.totalSec,
+            time: teamResults.first.result!.totalSec,
             age: teamResults.first.age,
           ));
         }
@@ -442,12 +489,12 @@ class CyclingService {
       final femaleOptions = <({CyclingCategory cat, int place, int time, int age})>[];
       for (final cat in activeFemaleCats) {
         final standings = categoryStandings[cat]!;
-        final teamResults = standings.where((r) => r.result.teamId == teamId).toList();
+        final teamResults = standings.where((r) => r.effectiveTeamId == teamId && r.result != null).toList();
         if (teamResults.isNotEmpty) {
           femaleOptions.add((
             cat: cat,
             place: teamResults.first.place,
-            time: teamResults.first.result.totalSec,
+            time: teamResults.first.result!.totalSec,
             age: teamResults.first.age,
           ));
         }
@@ -589,7 +636,7 @@ class CyclingService {
         standings[merge.to]!.addAll(standings[merge.from]!);
         standings[merge.from] = [];
         standings[merge.to]!.sort((a, b) =>
-            a.result.totalSec.compareTo(b.result.totalSec));
+            a.result!.totalSec.compareTo(b.result!.totalSec));
         _reRank(standings[merge.to]!);
       }
     }
@@ -599,7 +646,7 @@ class CyclingService {
     int place = 1;
     for (int i = 0; i < standings.length; i++) {
       if (i > 0 &&
-          standings[i].result.totalSec != standings[i - 1].result.totalSec) {
+          standings[i].result!.totalSec != standings[i - 1].result!.totalSec) {
         place = i + 1;
       }
       final current = standings[i];
@@ -677,6 +724,55 @@ class CyclingService {
 
   // ── Assigned category override (CMP_PLAYER_TEAM_ATTR_VALUE attr_id=20) ──
 
+  Future<void> savePlayerYearOfBirth({
+    required int playerId,
+    required int tId,
+    required int year,
+  }) async {
+    final db = await _dbService.database;
+    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+    if (pteRows.isEmpty) return;
+    final pteId = pteRows.first['pte_id'] as int;
+    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+      where: 'pte_id = ? AND attr_id = ?',
+      whereArgs: [pteId, _attrIdYearOfBirth]);
+    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+      'pte_id': pteId,
+      'attr_id': _attrIdYearOfBirth,
+      'attr_value': year.toString(),
+      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
+    });
+  }
+
+  /// Bulk save year of birth overrides for multiple players in a tournament.
+  Future<void> bulkSavePlayerYearsOfBirth({
+    required int tId,
+    required Map<int, int> yearsOfBirth,
+  }) async {
+    if (yearsOfBirth.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final entry in yearsOfBirth.entries) {
+        final playerId = entry.key;
+        final year = entry.value;
+        final pteRows = await txn.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+          where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+        if (pteRows.isEmpty) continue;
+        final pteId = pteRows.first['pte_id'] as int;
+        await txn.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+          where: 'pte_id = ? AND attr_id = ?',
+          whereArgs: [pteId, _attrIdYearOfBirth]);
+        await txn.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+          'pte_id': pteId,
+          'attr_id': _attrIdYearOfBirth,
+          'attr_value': year.toString(),
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
+        });
+      }
+    });
+  }
+
   Future<void> saveAssignedCategory({
     required int playerId,
     required int tId,
@@ -695,6 +791,34 @@ class CyclingService {
       'attr_id': _attrIdAssignedCategory,
       'attr_value': category.name,
       'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ac_$playerId',
+    });
+  }
+
+  /// Bulk save assigned category overrides for multiple players in a tournament.
+  Future<void> bulkSaveAssignedCategories({
+    required int tId,
+    required Map<int, CyclingCategory> categories,
+  }) async {
+    if (categories.isEmpty) return;
+    final db = await _dbService.database;
+    await db.transaction((txn) async {
+      for (final entry in categories.entries) {
+        final playerId = entry.key;
+        final category = entry.value;
+        final pteRows = await txn.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
+          where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
+        if (pteRows.isEmpty) continue;
+        final pteId = pteRows.first['pte_id'] as int;
+        await txn.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
+          where: 'pte_id = ? AND attr_id = ?',
+          whereArgs: [pteId, _attrIdAssignedCategory]);
+        await txn.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+          'pte_id': pteId,
+          'attr_id': _attrIdAssignedCategory,
+          'attr_value': category.name,
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ac_$playerId',
+        });
+      }
     });
   }
 
@@ -730,29 +854,6 @@ class CyclingService {
       map[pid] = CyclingCategory.fromDb(value);
     }
     return map;
-  }
-
-  // ── Year of birth override (CMP_PLAYER_TEAM_ATTR_VALUE attr_id=21) ──
-
-  Future<void> savePlayerYearOfBirth({
-    required int playerId,
-    required int tId,
-    required int year,
-  }) async {
-    final db = await _dbService.database;
-    final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
-      where: 'player_id = ? AND t_id = ?', whereArgs: [playerId, tId], limit: 1);
-    if (pteRows.isEmpty) return;
-    final pteId = pteRows.first['pte_id'] as int;
-    await db.delete('CMP_PLAYER_TEAM_ATTR_VALUE',
-      where: 'pte_id = ? AND attr_id = ?',
-      whereArgs: [pteId, _attrIdYearOfBirth]);
-    await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
-      'pte_id': pteId,
-      'attr_id': _attrIdYearOfBirth,
-      'attr_value': year.toString(),
-      'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_yob_$playerId',
-    });
   }
 
   Future<void> clearPlayerYearOfBirth({
@@ -914,6 +1015,41 @@ class CyclingService {
       ));
     }
     return entries;
+  }
+
+  /// Get participants for a specific category, including result-less ones.
+  /// Result-less participants will have a null `result` and place = 0.
+  Future<List<RankedCyclingResult>> getCategoryParticipants(
+    int tId,
+    CyclingCategory category,
+  ) async {
+    // 1. Get ranked standings (those who have results)
+    final standings = await getCategoryStandings(tId, category);
+
+    // 2. Get all participants
+    final allParticipants = await getAllParticipants(tId);
+
+    // 3. Find participants whose effective category matches, but have no result
+    final resultLess = allParticipants.where((p) {
+      if (p.effectiveCategory != category) return false;
+      return p.resultId == null;
+    }).toList();
+
+    // 4. Convert result-less to RankedCyclingResult
+    final pending = resultLess.map((p) {
+      return RankedCyclingResult(
+        result: null,
+        place: 0, // 0 signifies no place yet
+        playerName: p.fullName,
+        teamName: p.teamName,
+        age: p.age,
+        playerNumber: p.playerNumber,
+        pendingPlayerId: p.playerId,
+        pendingTeamId: p.teamId,
+      );
+    });
+
+    return [...standings, ...pending];
   }
 }
 

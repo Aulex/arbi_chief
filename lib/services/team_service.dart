@@ -114,78 +114,80 @@ class TeamService {
     final db = await _dbService.database;
     final today = DateTime.now().toIso8601String().split('T').first;
 
-    // Preserve existing team_number if not provided
-    if (teamNumber == null) {
-      final existing = await db.query(
-        'CMP_PLAYER_TEAM',
-        columns: ['team_number'],
-        where: 'team_id = ? AND t_id = ? AND team_number IS NOT NULL',
-        whereArgs: [teamId, tId],
-        limit: 1,
-      );
-      if (existing.isNotEmpty) {
-        teamNumber = existing.first['team_number'] as int?;
+    await db.transaction((txn) async {
+      // Preserve existing team_number if not provided
+      if (teamNumber == null) {
+        final existing = await txn.query(
+          'CMP_PLAYER_TEAM',
+          columns: ['team_number'],
+          where: 'team_id = ? AND t_id = ? AND team_number IS NOT NULL',
+          whereArgs: [teamId, tId],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) {
+          teamNumber = existing.first['team_number'] as int?;
+        }
       }
-    }
 
-    // Clean up old attr values before deleting assignments
-    final oldAssignments = await db.query(
-      'CMP_PLAYER_TEAM',
-      columns: ['pte_id'],
-      where: 'team_id = ? AND t_id = ?',
-      whereArgs: [teamId, tId],
-    );
-    for (final a in oldAssignments) {
-      await db.delete(
-        'CMP_PLAYER_TEAM_ATTR_VALUE',
-        where: 'pte_id = ?',
-        whereArgs: [a['pte_id']],
+      // Clean up old attr values before deleting assignments
+      final oldAssignments = await txn.query(
+        'CMP_PLAYER_TEAM',
+        columns: ['pte_id'],
+        where: 'team_id = ? AND t_id = ?',
+        whereArgs: [teamId, tId],
       );
-    }
+      for (final a in oldAssignments) {
+        await txn.delete(
+          'CMP_PLAYER_TEAM_ATTR_VALUE',
+          where: 'pte_id = ?',
+          whereArgs: [a['pte_id']],
+        );
+      }
 
-    // Remove old assignments for this team+tournament
-    await db.delete('CMP_PLAYER_TEAM', where: 'team_id = ? AND t_id = ?', whereArgs: [teamId, tId]);
+      // Remove old assignments for this team+tournament
+      await txn.delete('CMP_PLAYER_TEAM', where: 'team_id = ? AND t_id = ?', whereArgs: [teamId, tId]);
 
-    // Insert board members with board number attribute (attr_id = 9)
-    for (final entry in boardMembers.entries) {
-      final pteId = await db.insert('CMP_PLAYER_TEAM', {
-        'team_id': teamId,
-        'player_id': entry.value,
-        't_id': tId,
-        'team_number': teamNumber,
-        'player_state': 0,
-        'asgn_date': today,
-      });
-      await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
-        'pte_id': pteId,
-        'attr_id': 9,
-        'attr_value': '${entry.key}',
-      });
-    }
+      // Insert board members with board number attribute (attr_id = 9)
+      for (final entry in boardMembers.entries) {
+        final pteId = await txn.insert('CMP_PLAYER_TEAM', {
+          'team_id': teamId,
+          'player_id': entry.value,
+          't_id': tId,
+          'team_number': teamNumber,
+          'player_state': 0,
+          'asgn_date': today,
+        });
+        await txn.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+          'pte_id': pteId,
+          'attr_id': 9,
+          'attr_value': '${entry.key}',
+        });
+      }
 
-    // Insert bench (reserves)
-    for (final playerId in reserves) {
-      await db.insert('CMP_PLAYER_TEAM', {
-        'team_id': teamId,
-        'player_id': playerId,
-        't_id': tId,
-        'team_number': teamNumber,
-        'player_state': 1,
-        'asgn_date': today,
-      });
-    }
+      // Insert bench (reserves)
+      for (final playerId in reserves) {
+        await txn.insert('CMP_PLAYER_TEAM', {
+          'team_id': teamId,
+          'player_id': playerId,
+          't_id': tId,
+          'team_number': teamNumber,
+          'player_state': 1,
+          'asgn_date': today,
+        });
+      }
 
-    // Keep a placeholder row so the team stays visible in the tournament
-    if (boardMembers.isEmpty && reserves.isEmpty) {
-      await db.insert('CMP_PLAYER_TEAM', {
-        'team_id': teamId,
-        'player_id': null,
-        't_id': tId,
-        'team_number': teamNumber,
-        'player_state': 2,
-        'asgn_date': today,
-      });
-    }
+      // Keep a placeholder row so the team stays visible in the tournament
+      if (boardMembers.isEmpty && reserves.isEmpty) {
+        await txn.insert('CMP_PLAYER_TEAM', {
+          'team_id': teamId,
+          'player_id': null,
+          't_id': tId,
+          'team_number': teamNumber,
+          'player_state': 2,
+          'asgn_date': today,
+        });
+      }
+    });
   }
 
   /// Get team number for a team in a tournament.

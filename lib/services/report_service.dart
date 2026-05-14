@@ -386,11 +386,12 @@ class ReportService {
     pw.Font fontRegular;
     pw.Font fontBold;
     try {
-      final regBytes = await File('C:\\Windows\\Fonts\\times.ttf').readAsBytes();
-      final boldBytes = await File('C:\\Windows\\Fonts\\timesbd.ttf').readAsBytes();
-      fontRegular = pw.Font.ttf(ByteData.sublistView(regBytes));
-      fontBold = pw.Font.ttf(ByteData.sublistView(boldBytes));
-    } catch (_) {
+      final regData = await rootBundle.load('assets/fonts/times.ttf');
+      final boldData = await rootBundle.load('assets/fonts/timesbd.ttf');
+      fontRegular = pw.Font.ttf(regData.buffer.asUint8List(regData.offsetInBytes, regData.lengthInBytes));
+      fontBold = pw.Font.ttf(boldData.buffer.asUint8List(boldData.offsetInBytes, boldData.lengthInBytes));
+    } catch (e) {
+      debugPrint('Error loading local fonts: $e');
       fontRegular = await PdfGoogleFonts.notoSansRegular();
       fontBold = await PdfGoogleFonts.notoSansBold();
     }

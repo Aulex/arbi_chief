@@ -67,7 +67,29 @@ class StreetballReportBuilder {
       ));
     }
 
-    if (teams.isEmpty) return pdf;
+    // --- Fonts ---
+    pw.Font fontRegular;
+    pw.Font fontBold;
+    try {
+      final regData = await rootBundle.load('assets/fonts/times.ttf');
+      final boldData = await rootBundle.load('assets/fonts/timesbd.ttf');
+      fontRegular = pw.Font.ttf(regData.buffer.asUint8List(regData.offsetInBytes, regData.lengthInBytes));
+      fontBold = pw.Font.ttf(boldData.buffer.asUint8List(boldData.offsetInBytes, boldData.lengthInBytes));
+    } catch (e) {
+      debugPrint('Error loading local fonts: $e');
+      fontRegular = await PdfGoogleFonts.notoSansRegular();
+      fontBold = await PdfGoogleFonts.notoSansBold();
+    }
+    final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+
+    if (teams.isEmpty) {
+      // Add a fallback page so we don't return an empty (invalid) PDF
+      pdf.addPage(pw.Page(
+        theme: theme,
+        build: (pw.Context context) => pw.Center(child: pw.Text('Немає даних про команди')),
+      ));
+      return pdf;
+    }
 
     final gamesMap = <(int, int), String>{}; // one direction only
     final gamesMapBidi = <(int, int), String>{}; // both directions
@@ -85,20 +107,6 @@ class StreetballReportBuilder {
         noShowPairs.add((g.teamAEntityId, g.teamBEntityId));
       }
     }
-
-    // --- Fonts ---
-    pw.Font fontRegular;
-    pw.Font fontBold;
-    try {
-      final regBytes = await rootBundle.load('assets/fonts/times.ttf');
-      final boldBytes = await rootBundle.load('assets/fonts/timesbd.ttf');
-      fontRegular = pw.Font.ttf(regBytes);
-      fontBold = pw.Font.ttf(boldBytes);
-    } catch (_) {
-      fontRegular = await PdfGoogleFonts.notoSansRegular();
-      fontBold = await PdfGoogleFonts.notoSansBold();
-    }
-    final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
 
     // --- Build context for phase helpers ---
     final ctx = _BuildContext(
@@ -396,25 +404,27 @@ class StreetballReportBuilder {
     };
 
     ctx.pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(20),
         theme: ctx.theme,
-        build: (context) => pw.Column(
+        header: (pw.Context context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(ctx.tournamentName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
             pw.Text(subtitle, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 6),
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400),
-              columnWidths: colWidths,
-              defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-              children: rows,
-            ),
           ],
         ),
+        build: (pw.Context context) => [
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            columnWidths: colWidths,
+            defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: rows,
+          ),
+        ],
       ),
     );
   }
@@ -541,25 +551,27 @@ class StreetballReportBuilder {
     };
 
     ctx.pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
         theme: ctx.theme,
-        build: (context) => pw.Column(
+        header: (pw.Context context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(ctx.tournamentName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
             pw.Text('Загальний підсумок', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 6),
-            pw.Table(
-              border: pw.TableBorder.all(color: PdfColors.grey400),
-              columnWidths: colWidths,
-              defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-              children: rows,
-            ),
           ],
         ),
+        build: (pw.Context context) => [
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            columnWidths: colWidths,
+            defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+            children: rows,
+          ),
+        ],
       ),
     );
   }
