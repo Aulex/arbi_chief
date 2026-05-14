@@ -141,11 +141,6 @@ List<StreetballStanding> calculateStandings({
       bool isIdentical = curr.matchPoints == prev.matchPoints &&
                          curr.goalDifference == prev.goalDifference &&
                          curr.pointsScored == prev.pointsScored;
-                         
-      if (curr.entityId != null && prev.entityId != null) {
-        // Also ensure they had the same H2H points and diff within their tied group if they were tied
-        // But for a global rank, the above 3 are the main indicators if they couldn't be separated
-      }
 
       if (isIdentical) {
         curr.rank = prev.rank;
@@ -183,6 +178,11 @@ List<StreetballStanding> _resolveTieGroup(
       continue;
     }
     if (aEntId == bEntId) continue;
+    // Rules: games against no-show teams are not counted in tie resolution.
+    if (noShowGamePairs.contains((aEntId, bEntId)) ||
+        noShowGamePairs.contains((bEntId, aEntId))) {
+      continue;
+    }
 
     final parts = entry.value.split(':');
     if (parts.length != 2) continue;
