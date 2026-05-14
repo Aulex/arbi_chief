@@ -115,38 +115,48 @@ List<StreetballStanding> calculateStandings({
   // 1) head-to-head result,
   // 2) better scored/conceded difference in games among tied teams,
   // 3) more scored points.
+  //
+  // tieKeys records the tiebreaker signature for teams within a tie group.
+  // Teams that share a signature could not be separated by the tiebreakers
+  // and therefore share a rank.
+  final tieKeys = <int, (int, int, int)>{};
   final resolved = <StreetballStanding>[];
   int i = 0;
   while (i < result.length) {
     final tied = <StreetballStanding>[result[i]];
     int j = i + 1;
-    while (j < result.length && result[j].matchPoints == result[i].matchPoints) {
+    while (j < result.length &&
+        result[j].matchPoints == result[i].matchPoints &&
+        result[j].isRemoved == result[i].isRemoved) {
       tied.add(result[j]);
       j++;
     }
     if (tied.length == 1) {
       resolved.add(tied.first);
     } else {
-      resolved.addAll(_resolveTieGroup(tied, games, noShowGamePairs));
+      resolved.addAll(_resolveTieGroup(tied, games, noShowGamePairs, tieKeys));
     }
     i = j;
   }
 
+  // Assign ranks: a team shares the previous team's rank only when they have
+  // equal match points and the tiebreakers could not separate them.
   if (resolved.isNotEmpty) {
     resolved[0].rank = 1;
     for (int k = 1; k < resolved.length; k++) {
       final curr = resolved[k];
       final prev = resolved[k - 1];
-      
-      bool isIdentical = curr.matchPoints == prev.matchPoints &&
-                         curr.goalDifference == prev.goalDifference &&
-                         curr.pointsScored == prev.pointsScored;
 
-      if (isIdentical) {
-        curr.rank = prev.rank;
-      } else {
-        curr.rank = k + 1;
-      }
+      final sameGroup = curr.matchPoints == prev.matchPoints &&
+          curr.isRemoved == prev.isRemoved;
+      final currKey = tieKeys[curr.teamId];
+      final prevKey = tieKeys[prev.teamId];
+      final inseparable = sameGroup &&
+          currKey != null &&
+          prevKey != null &&
+          currKey == prevKey;
+
+      curr.rank = inseparable ? prev.rank : k + 1;
     }
   }
 
@@ -157,6 +167,7 @@ List<StreetballStanding> _resolveTieGroup(
   List<StreetballStanding> group,
   Map<(int, int), String> games,
   Set<(int, int)> noShowGamePairs,
+  Map<int, (int, int, int)> tieKeys,
 ) {
   if (group.length <= 1) return group;
 
@@ -219,6 +230,13 @@ List<StreetballStanding> _resolveTieGroup(
 
     return (scored[bEnt] ?? 0).compareTo(scored[aEnt] ?? 0);
   });
+
+  for (final s in group) {
+    final ent = s.entityId;
+    tieKeys[s.teamId] = ent == null
+        ? (0, 0, s.pointsScored)
+        : (h2hPoints[ent] ?? 0, h2hDiff[ent] ?? 0, scored[ent] ?? 0);
+  }
 
   return group;
 }
