@@ -4,6 +4,7 @@ import '../services/report_service.dart';
 import '../sports/volleyball/volleyball_providers.dart';
 import '../sports/streetball/streetball_providers.dart';
 import '../sports/athletics/athletics_providers.dart';
+import '../sports/cycling/cycling_providers.dart';
 import 'tournament_viewmodel.dart';
 import 'team_viewmodel.dart';
 
@@ -14,6 +15,7 @@ final reportServiceProvider = Provider(
     ref.watch(volleyballServiceProvider),
     ref.watch(streetballServiceProvider),
     ref.watch(athleticsServiceProvider),
+    ref.watch(cyclingServiceProvider),
   ),
 );
 

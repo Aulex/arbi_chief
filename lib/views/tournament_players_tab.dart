@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../models/team_model.dart';
 import '../sports/athletics/athletics_providers.dart';
+import '../sports/cycling/cycling_providers.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
@@ -40,6 +41,43 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     super.dispose();
   }
 
+  // ── Age-category sports (athletics t_type 10, cycling t_type 12) ──
+  //
+  // Both expose the participant-number / year-of-birth / assigned-category
+  // attributes and the "hide DOB, show year of birth" player form. The
+  // year-of-birth helpers below dispatch to whichever sport service owns
+  // the current tournament; the participant number lives on the generic
+  // TournamentService and needs no dispatch.
+
+  bool get _usesAgeCategories =>
+      widget.tType == 10 || widget.tType == 12;
+
+  Future<Map<int, int>> _fetchYearsOfBirth() => widget.tType == 12
+      ? ref.read(cyclingServiceProvider).getPlayerYearsOfBirth(widget.tId)
+      : ref.read(athleticsServiceProvider).getPlayerYearsOfBirth(widget.tId);
+
+  Future<int> _fetchReferenceYear() => widget.tType == 12
+      ? ref.read(cyclingServiceProvider).getTournamentReferenceYear(widget.tId)
+      : ref.read(athleticsServiceProvider).getTournamentReferenceYear(widget.tId);
+
+  Future<int?> _fetchYearOfBirth(int playerId) => widget.tType == 12
+      ? ref.read(cyclingServiceProvider)
+          .getPlayerYearOfBirth(playerId: playerId, tId: widget.tId)
+      : ref.read(athleticsServiceProvider)
+          .getPlayerYearOfBirth(playerId: playerId, tId: widget.tId);
+
+  Future<void> _saveYearOfBirth(int playerId, int year) => widget.tType == 12
+      ? ref.read(cyclingServiceProvider).savePlayerYearOfBirth(
+          playerId: playerId, tId: widget.tId, year: year)
+      : ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
+          playerId: playerId, tId: widget.tId, year: year);
+
+  Future<void> _clearYearOfBirth(int playerId) => widget.tType == 12
+      ? ref.read(cyclingServiceProvider)
+          .clearPlayerYearOfBirth(playerId: playerId, tId: widget.tId)
+      : ref.read(athleticsServiceProvider)
+          .clearPlayerYearOfBirth(playerId: playerId, tId: widget.tId);
+
   Future<void> _loadData() async {
     final svc = ref.read(tournamentServiceProvider);
     final allPlayersFuture = ref.read(playerProvider.future);
@@ -50,18 +88,16 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final allPlayers = await allPlayersFuture;
     if (!mounted) return;
 
-    final isAthletics = widget.tType == 10;
-    final numbers = isAthletics
+    final usesAgeCats = _usesAgeCategories;
+    final numbers = usesAgeCats
         ? await svc.getPlayerNumbers(widget.tId)
         : const <int, int>{};
     if (!mounted) return;
-    final yearsOfBirth = isAthletics
-        ? await ref.read(athleticsServiceProvider).getPlayerYearsOfBirth(widget.tId)
+    final yearsOfBirth = usesAgeCats
+        ? await _fetchYearsOfBirth()
         : const <int, int>{};
     if (!mounted) return;
-    final referenceYear = isAthletics
-        ? await ref.read(athleticsServiceProvider).getTournamentReferenceYear(widget.tId)
-        : null;
+    final referenceYear = usesAgeCats ? await _fetchReferenceYear() : null;
     if (!mounted) return;
 
     final participantIds = participants.map((p) => p.player_id).toSet();
@@ -94,7 +130,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     final yobC = TextEditingController();
     int gender = player.player_gender;
     final needsWeight = const {8, 9, 13}.contains(widget.tType);
-    final isAthletics = widget.tType == 10;
+    final isAthletics = _usesAgeCategories;
 
     // Load existing weight
     if (needsWeight && player.player_id != null) {
@@ -112,9 +148,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       ).then((n) {
         if (n != null) numberC.text = n.toString();
       });
-      ref.read(athleticsServiceProvider).getPlayerYearOfBirth(
-        playerId: player.player_id!, tId: widget.tId,
-      ).then((y) {
+      _fetchYearOfBirth(player.player_id!).then((y) {
         if (y != null) yobC.text = y.toString();
       });
     }
@@ -167,11 +201,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         final yobVal = int.tryParse(yobText);
         final maxYob = _referenceYear ?? DateTime.now().year;
         if (yobVal != null && yobVal >= 1900 && yobVal <= maxYob) {
-          await ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
-            playerId: player.player_id!, tId: widget.tId, year: yobVal);
+          await _saveYearOfBirth(player.player_id!, yobVal);
         } else if (yobText.isEmpty) {
-          await ref.read(athleticsServiceProvider).clearPlayerYearOfBirth(
-            playerId: player.player_id!, tId: widget.tId);
+          await _clearYearOfBirth(player.player_id!);
         }
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -630,7 +662,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                     final playerNotifier = ref.read(playerProvider.notifier);
                                     final tournamentSvc = ref.read(tournamentServiceProvider);
                                     final tType = widget.tType;
-                                    final isAthletics = tType == 10;
+                                    final isAthletics = tType == 10 || tType == 12;
 
                                     // Group by team
                                     final groups = <String, List<_ParsedTeamPlayer>>{};
@@ -881,7 +913,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     Player? selectedExisting;
     List<Player> allPlayers = [];
     final needsWeight = const {8, 9, 13}.contains(widget.tType);
-    final isAthletics = widget.tType == 10;
+    final isAthletics = _usesAgeCategories;
 
     // Load all players for search
     ref.read(playerProvider.future).then((players) {
@@ -974,8 +1006,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         final yobVal = int.tryParse(yobC.text.trim());
         final maxYob = _referenceYear ?? DateTime.now().year;
         if (yobVal != null && yobVal >= 1900 && yobVal <= maxYob) {
-          await ref.read(athleticsServiceProvider).savePlayerYearOfBirth(
-            playerId: resolvedPlayerId, tId: widget.tId, year: yobVal);
+          await _saveYearOfBirth(resolvedPlayerId, yobVal);
         }
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1347,7 +1378,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final player = filtered[index];
-                        final isAthletics = widget.tType == 10;
+                        final isAthletics = _usesAgeCategories;
                         final number = player.player_id == null
                             ? null
                             : _playerNumbers[player.player_id!];

@@ -283,3 +283,4 @@ bool isArmWrestling(int? typeId) => typeId == 9;
 bool isTableTennis(int? typeId) => typeId == 11;
 bool isStreetball(int? typeId) => typeId == 5;
 bool isAthletics(int? typeId) => typeId == 10;
+bool isCycling(int? typeId) => typeId == 12;

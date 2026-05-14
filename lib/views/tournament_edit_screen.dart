@@ -245,7 +245,11 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
-        CyclingResultsTab(tId: widget.tournament.t_id!),
+        CyclingResultsTab(
+          tId: widget.tournament.t_id!,
+          outerTabController: _tabController,
+          outerTabIndex: 0,
+        ),
         CyclingTeamStandingsTab(tId: widget.tournament.t_id!),
         TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
