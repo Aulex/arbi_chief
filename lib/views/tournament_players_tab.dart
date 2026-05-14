@@ -784,10 +784,22 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     );
   }
 
+  /// Player age for export: computed from the year-of-birth override for
+  /// age-category sports (athletics / cycling), otherwise the stored
+  /// player_age. Null when unknown.
+  int? _playerExportAge(Player p) {
+    if (_usesAgeCategories && p.player_id != null) {
+      final yob = _playerYearsOfBirth[p.player_id!];
+      final refYear = _referenceYear;
+      if (yob != null && refYear != null) return refYear - yob;
+    }
+    return p.player_age;
+  }
+
   void _showExportDialog() {
     bool includeTeams = true;
     final svc = ref.read(tournamentServiceProvider);
-    
+
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -798,7 +810,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
             if (snapshot.hasData) {
               final players = snapshot.data!;
               players.sort((a, b) => a.player_surname.compareTo(b.player_surname));
-              
+
               if (includeTeams) {
                 // Fetch team assignments for everyone
                 content = '';
@@ -809,14 +821,20 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       final teamMap = teamSnapshot.data!;
                       content = players.map((p) {
                         final team = teamMap[p.player_id];
-                        return '${p.fullName}${team != null ? ' ${team.team_name}' : ''}';
+                        final age = _playerExportAge(p);
+                        return '${p.fullName}'
+                            '${team != null ? ' ${team.team_name}' : ''}'
+                            '${age != null ? ' $age' : ''}';
                       }).join('\n');
                     }
                     return _buildExportUI(ctx, setST, content, includeTeams, (val) => setST(() => includeTeams = val));
                   },
                 );
               } else {
-                content = players.map((p) => p.fullName).join('\n');
+                content = players.map((p) {
+                  final age = _playerExportAge(p);
+                  return '${p.fullName}${age != null ? ' $age' : ''}';
+                }).join('\n');
               }
             }
             return _buildExportUI(ctx, setST, content, includeTeams, (val) => setST(() => includeTeams = val));
@@ -846,13 +864,13 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                 const Text('Формат:'),
                 const SizedBox(width: 16),
                 ChoiceChip(
-                  label: const Text('Тільки ПІБ'),
+                  label: const Text('ПІБ + Вік'),
                   selected: !includeTeams,
                   onSelected: (val) => onToggle(false),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('ПІБ + Команда'),
+                  label: const Text('ПІБ + Команда + Вік'),
                   selected: includeTeams,
                   onSelected: (val) => onToggle(true),
                 ),
