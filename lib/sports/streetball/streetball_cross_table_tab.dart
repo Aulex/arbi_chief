@@ -173,6 +173,7 @@ class _StreetballCrossTableTabState
         .split(',')
         .map((s) => int.tryParse(s.trim()))
         .whereType<int>()
+        .toSet()
         .toList();
   }
 
@@ -986,6 +987,9 @@ class _StreetballCrossTableTabState
     if (i == j) return Container(height: 36, color: Colors.grey.shade300);
     final tA = teams[i];
     final tB = teams[j];
+    if (tA.teamId == tB.teamId) {
+      return Container(height: 36, color: Colors.grey.shade300);
+    }
     if (tA.entityId == null || tB.entityId == null) return const SizedBox(height: 36);
 
     final game = _games[(tA.entityId!, tB.entityId!)];

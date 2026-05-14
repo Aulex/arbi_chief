@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../models/team_model.dart';
+import '../sports/athletics/athletics_model.dart';
 import '../sports/athletics/athletics_providers.dart';
+import '../sports/cycling/cycling_model.dart';
 import '../sports/cycling/cycling_providers.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
@@ -77,6 +79,30 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           .clearPlayerYearOfBirth(playerId: playerId, tId: widget.tId)
       : ref.read(athleticsServiceProvider)
           .clearPlayerYearOfBirth(playerId: playerId, tId: widget.tId);
+
+  /// Save an assigned category from an imported label/name (e.g. "Ч49" or
+  /// "m49"). Dispatches to the sport that owns the tournament; unknown
+  /// labels are ignored (the category then auto-detects from year of birth).
+  Future<void> _saveAssignedCategoryFromLabel(int playerId, String label) async {
+    final key = label.toLowerCase().trim();
+    if (widget.tType == 12) {
+      final cat = CyclingCategory.values.where(
+        (c) => c.label.toLowerCase() == key || c.name.toLowerCase() == key,
+      ).firstOrNull;
+      if (cat != null) {
+        await ref.read(cyclingServiceProvider).saveAssignedCategory(
+            playerId: playerId, tId: widget.tId, category: cat);
+      }
+    } else {
+      final cat = AthleticsCategory.values.where(
+        (c) => c.label.toLowerCase() == key || c.name.toLowerCase() == key,
+      ).firstOrNull;
+      if (cat != null) {
+        await ref.read(athleticsServiceProvider).saveAssignedCategory(
+            playerId: playerId, tId: widget.tId, category: cat);
+      }
+    }
+  }
 
   Future<void> _loadData() async {
     final svc = ref.read(tournamentServiceProvider);
@@ -424,85 +450,82 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     bool importing = false;
     String? error;
 
+    // Row layout:
+    //   age-category sports: <\u041F\u0406\u0411/\u041F\u0406>  \u0420\u0456\u043A  \u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0456\u044F  \u041A\u043E\u043C\u0430\u043D\u0434\u0430  \u041D\u043E\u043C\u0435\u0440
+    //   other sports:        <\u041F\u0406\u0411/\u041F\u0406>  \u0420\u0456\u043A  \u041A\u043E\u043C\u0430\u043D\u0434\u0430  \u041D\u043E\u043C\u0435\u0440
+    // Fields are TAB/;-separated; a fully space-separated line is also
+    // accepted (team name must then be a single word run between the
+    // year/category and the trailing number).
     List<_ParsedTeamPlayer> parseText(String text, int fmt) {
+      final usesAgeCats = _usesAgeCategories;
+      final nameWords = fmt == 0 ? 3 : 2;
       text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedTeamPlayer>[];
+
       for (final line in lines) {
-        List<String> parts = line.split(RegExp(r'\t|;')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-        int? age;
-        if (parts.length >= 3) {
-          final lastPart = parts.last;
-          final parsedAge = int.tryParse(lastPart);
-          if (parsedAge != null && parsedAge > 4 && parsedAge < 150) {
-            age = parsedAge;
-            parts.removeLast();
-          }
-        }
+        final fields = line
+            .split(RegExp(r'\t|;'))
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
 
-        if (parts.length == 1) {
-          final spaceParts = line.split(RegExp(r'\s+')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-          int? spaceAge;
-          if (spaceParts.length >= 4) {
-            final lastSpace = spaceParts.last;
-            final parsedSpaceAge = int.tryParse(lastSpace);
-            if (parsedSpaceAge != null && parsedSpaceAge > 4 && parsedSpaceAge < 150) {
-              spaceAge = parsedSpaceAge;
-              spaceParts.removeLast();
-            }
-          }
+        String nameBlock;
+        String? yobStr;
+        String? catStr;
+        String teamName;
+        String? numStr;
 
-          if (fmt == 0) {
-            if (spaceParts.length >= 4) {
-              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: spaceParts[2], teamName: spaceParts.sublist(3).join(' '), age: spaceAge));
-            }
+        final minFields = usesAgeCats ? 5 : 4;
+        if (fields.length >= minFields) {
+          nameBlock = fields[0];
+          yobStr = fields[1];
+          numStr = fields.last;
+          if (usesAgeCats) {
+            catStr = fields[2];
+            teamName = fields.sublist(3, fields.length - 1).join(' ');
           } else {
-            if (spaceParts.length >= 3) {
-              result.add(_ParsedTeamPlayer(surname: spaceParts[0], name: spaceParts[1], lastname: '', teamName: spaceParts.sublist(2).join(' '), age: spaceAge));
-            }
-          }
-        } else if (parts.length == 2) {
-          // Two tab-separated fields: first = "Surname Name [Patronymic]", second = team
-          final nameParts = parts[0].split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-          final teamName = parts[1];
-          if (fmt == 0) {
-            if (nameParts.length >= 2) {
-              result.add(_ParsedTeamPlayer(
-                surname: nameParts[0],
-                name: nameParts[1],
-                lastname: nameParts.length > 2 ? nameParts.sublist(2).join(' ') : '',
-                teamName: teamName,
-                age: age,
-              ));
-            }
-          } else {
-            if (nameParts.length >= 2) {
-              result.add(_ParsedTeamPlayer(
-                surname: nameParts[0],
-                name: nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '',
-                lastname: '',
-                teamName: teamName,
-                age: age,
-              ));
-            }
+            teamName = fields.sublist(2, fields.length - 1).join(' ');
           }
         } else {
-          if (fmt == 0) {
-            if (parts.length >= 4) {
-              result.add(_ParsedTeamPlayer(surname: parts[0], name: parts[1], lastname: parts[2], teamName: parts.sublist(3).join(' '), age: age));
-            }
-          } else {
-            if (parts.length >= 3) {
-              result.add(_ParsedTeamPlayer(
-                surname: parts[0],
-                name: parts[1],
-                lastname: '',
-                teamName: parts.sublist(2).join(' '),
-                age: age,
-              ));
-            }
-          }
+          // Fallback: whole line is space-separated.
+          final w = line.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+          final lead = nameWords + (usesAgeCats ? 2 : 1);
+          if (w.length < lead + 2) continue; // need team + number
+          nameBlock = w.sublist(0, nameWords).join(' ');
+          yobStr = w[nameWords];
+          if (usesAgeCats) catStr = w[nameWords + 1];
+          numStr = w.last;
+          teamName = w.sublist(lead, w.length - 1).join(' ');
         }
+
+        final nameParts =
+            nameBlock.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+        if (nameParts.length < 2 || teamName.isEmpty) continue;
+
+        final String surname = nameParts[0];
+        final String name;
+        final String lastname;
+        if (fmt == 0) {
+          name = nameParts[1];
+          lastname = nameParts.length > 2 ? nameParts.sublist(2).join(' ') : '';
+        } else {
+          name = nameParts.sublist(1).join(' ');
+          lastname = '';
+        }
+
+        final yob = int.tryParse(yobStr ?? '');
+        result.add(_ParsedTeamPlayer(
+          teamName: teamName,
+          surname: surname,
+          name: name,
+          lastname: lastname,
+          yob: (yob != null && yob > 1900 && yob < 2100) ? yob : null,
+          category: (usesAgeCats && catStr != null && catStr.isNotEmpty)
+              ? catStr
+              : null,
+          playerNumber: int.tryParse(numStr ?? ''),
+        ));
       }
       return result;
     }
@@ -566,9 +589,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      format == 0
-                        ? 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вік (через TAB/;/пробіл). Вік опційно.'
-                        : 'Кожен рядок: Прізвище  Ім\'я  Команда  Вік (через TAB/;/пробіл). Вік опційно.',
+                      () {
+                        final namePart = format == 0
+                            ? 'Прізвище  Ім\'я  По батькові'
+                            : 'Прізвище  Ім\'я';
+                        return _usesAgeCategories
+                            ? 'Кожен рядок: $namePart  Рік народження  Категорія (Ч49)  Команда  Номер (через TAB/;).'
+                            : 'Кожен рядок: $namePart  Рік народження  Команда  Номер (через TAB/;).';
+                      }(),
                       style: const TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                     const SizedBox(height: 12),
@@ -623,8 +651,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                     Padding(
                                       padding: const EdgeInsets.only(left: 16),
                                         child: Text(
-                                          '${i + 1}. ${entry.value[i].surname} ${entry.value[i].name} ${entry.value[i].lastname} '
-                                          '(${Player.detectGender(entry.value[i].name, entry.value[i].lastname) == 0 ? 'Ч' : 'Ж'}${entry.value[i].age != null ? ', Вік: ${entry.value[i].age}' : ''})',
+                                          () {
+                                            final p = entry.value[i];
+                                            final gender =
+                                                Player.detectGender(p.name, p.lastname) == 0 ? 'Ч' : 'Ж';
+                                            final extra = [
+                                              gender,
+                                              if (p.yob != null) '${p.yob}',
+                                              if (p.category != null) p.category!,
+                                              if (p.playerNumber != null) '№${p.playerNumber}',
+                                            ].join(', ');
+                                            return '${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($extra)';
+                                          }(),
                                           style: TextStyle(
                                           fontSize: 12,
                                           color: entry.value[i].surname.isEmpty ? Colors.red : Colors.black87,
@@ -662,7 +700,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                     final playerNotifier = ref.read(playerProvider.notifier);
                                     final tournamentSvc = ref.read(tournamentServiceProvider);
                                     final tType = widget.tType;
-                                    final isAthletics = tType == 10 || tType == 12;
+                                    final usesAgeCats = _usesAgeCategories;
 
                                     // Group by team
                                     final groups = <String, List<_ParsedTeamPlayer>>{};
@@ -673,13 +711,6 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
                                     int totalPlayers = 0;
                                     int totalTeams = 0;
-
-                                    // For athletics: continue numbering from current max.
-                                    int nextNumber = 0;
-                                    if (isAthletics) {
-                                      final existing = await tournamentSvc.getPlayerNumbers(widget.tId);
-                                      nextNumber = existing.values.fold<int>(0, (m, n) => n > m ? n : m) + 1;
-                                    }
 
                                     for (final entry in groups.entries) {
                                       final teamName = entry.key;
@@ -699,15 +730,20 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                         totalTeams++;
                                       }
 
-                                      // Bulk-create players
+                                      // Bulk-create players. Age-category sports
+                                      // keep the year of birth as a per-tournament
+                                      // attribute; other sports store it as the
+                                      // player's date of birth (01.01.YYYY).
                                       final playerIds = await playerNotifier.bulkAddPlayers(
                                         players.map((p) => (
                                           surname: p.surname,
                                           name: p.name,
                                           lastname: p.lastname,
                                           gender: Player.detectGender(p.name, p.lastname),
-                                          dob: '',
-                                          age: p.age,
+                                          dob: (!usesAgeCats && p.yob != null)
+                                              ? '01.01.${p.yob}'
+                                              : '',
+                                          age: null,
                                         )).toList(),
                                       );
 
@@ -730,15 +766,28 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                       final allReserves = [...currentReserves, ...playerIds];
                                       await teamSvc.saveAssignments(team.team_id!, widget.tId, currentBoards, allReserves);
 
-                                      // Athletics: assign sequential participant numbers (max+1, +2 ...)
-                                      if (isAthletics) {
-                                        for (final pid in playerIds) {
+                                      // Persist imported per-player data: player
+                                      // number for everyone, plus year of birth
+                                      // and assigned category for age-category
+                                      // sports.
+                                      for (var idx = 0; idx < playerIds.length; idx++) {
+                                        final pid = playerIds[idx];
+                                        final p = players[idx];
+                                        if (p.playerNumber != null) {
                                           await tournamentSvc.savePlayerNumber(
                                             playerId: pid,
                                             tId: widget.tId,
-                                            number: nextNumber,
+                                            number: p.playerNumber!,
                                           );
-                                          nextNumber++;
+                                        }
+                                        if (usesAgeCats) {
+                                          if (p.yob != null) {
+                                            await _saveYearOfBirth(pid, p.yob!);
+                                          }
+                                          if (p.category != null) {
+                                            await _saveAssignedCategoryFromLabel(
+                                                pid, p.category!);
+                                          }
                                         }
                                       }
 
@@ -1496,6 +1545,16 @@ class _ParsedTeamPlayer {
   final String surname;
   final String name;
   final String lastname;
-  final int? age;
-  const _ParsedTeamPlayer({required this.teamName, required this.surname, required this.name, required this.lastname, this.age});
+  final int? yob;
+  final String? category;
+  final int? playerNumber;
+  const _ParsedTeamPlayer({
+    required this.teamName,
+    required this.surname,
+    required this.name,
+    required this.lastname,
+    this.yob,
+    this.category,
+    this.playerNumber,
+  });
 }
