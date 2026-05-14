@@ -84,24 +84,28 @@ enum CyclingCategory {
 const String kCyclingDistanceLabel = 'Крос-кантрі веломарафон (до 30 км)';
 
 /// Individual cycling result for a player in a category.
+///
+/// A cross-country marathon takes hours, so times are stored as
+/// hours / minutes / seconds (the underlying `se_result` value is the
+/// total in whole seconds).
 class CyclingResult {
   final int? id;
   final int tournamentId;
   final int playerId;
   final int teamId;
   final CyclingCategory category;
+  final int timeHour;
   final int timeMin;
   final int timeSec;
-  final int timeDsec;
 
-  /// Total time in deciseconds for sorting (min*6000 + sec*100 + dsec).
-  int get totalDsec => timeMin * 6000 + timeSec * 100 + timeDsec;
+  /// Total time in whole seconds for sorting (h*3600 + m*60 + s).
+  int get totalSec => timeHour * 3600 + timeMin * 60 + timeSec;
 
-  /// Formatted time string: "5:24.43" or "12:10.00"
+  /// Formatted time string: "1:24:43" or "0:48:05"
   String get timeFormatted {
-    final sec = timeSec.toString().padLeft(2, '0');
-    final dsec = timeDsec.toString().padLeft(2, '0');
-    return '$timeMin:$sec.$dsec';
+    final m = timeMin.toString().padLeft(2, '0');
+    final s = timeSec.toString().padLeft(2, '0');
+    return '$timeHour:$m:$s';
   }
 
   const CyclingResult({
@@ -110,9 +114,9 @@ class CyclingResult {
     required this.playerId,
     required this.teamId,
     required this.category,
+    required this.timeHour,
     required this.timeMin,
     required this.timeSec,
-    required this.timeDsec,
   });
 
   CyclingResult copyWith({
@@ -121,9 +125,9 @@ class CyclingResult {
     int? playerId,
     int? teamId,
     CyclingCategory? category,
+    int? timeHour,
     int? timeMin,
     int? timeSec,
-    int? timeDsec,
   }) =>
       CyclingResult(
         id: id ?? this.id,
@@ -131,9 +135,9 @@ class CyclingResult {
         playerId: playerId ?? this.playerId,
         teamId: teamId ?? this.teamId,
         category: category ?? this.category,
+        timeHour: timeHour ?? this.timeHour,
         timeMin: timeMin ?? this.timeMin,
         timeSec: timeSec ?? this.timeSec,
-        timeDsec: timeDsec ?? this.timeDsec,
       );
 }
 
@@ -171,7 +175,7 @@ class CyclingTeamStanding {
   /// Total points (sum of scoring places).
   final int totalPoints;
 
-  /// Sum of raw times (deciseconds) of 3 contributing participants for tiebreak.
+  /// Sum of raw times (whole seconds) of 3 contributing participants for tiebreak.
   final int sumOfTimes;
 
   /// Sum of ages of 3 contributing participants for tiebreak.
@@ -209,7 +213,7 @@ class CyclingParticipantEntry {
   final CyclingCategory autoCategory;
   final CyclingCategory? assignedCategory;
   final int? resultId;
-  final int? resultTotalDsec;
+  final int? resultTotalSec;
   final CyclingCategory? resultCategory;
 
   /// Effective category for the participant: assigned override or auto.
@@ -226,7 +230,7 @@ class CyclingParticipantEntry {
     required this.autoCategory,
     this.assignedCategory,
     this.resultId,
-    this.resultTotalDsec,
+    this.resultTotalSec,
     this.resultCategory,
   });
 }

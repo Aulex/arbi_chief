@@ -275,23 +275,23 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
 
         final fullName = parts[0];
         final teamName = parts[1];
-        final min = int.tryParse(parts[2]) ?? -1;
-        final sec = int.tryParse(parts[3]) ?? -1;
-        final ms = int.tryParse(parts[4]) ?? -1;
+        final hour = int.tryParse(parts[2]) ?? -1;
+        final min = int.tryParse(parts[3]) ?? -1;
+        final sec = int.tryParse(parts[4]) ?? -1;
 
-        final timeValid = min >= 0 &&
+        final timeValid = hour >= 0 &&
+            min >= 0 && min <= 59 &&
             sec >= 0 && sec <= 59 &&
-            ms >= 0 && ms <= 99 &&
-            (min + sec + ms) > 0;
+            (hour + min + sec) > 0;
 
         final ids = await svc.findParticipant(widget.tId, fullName, teamName);
         if (myToken != parseToken) return; // a newer parse has started
         results.add(_ParsedResult(
           fullName: fullName,
           teamName: teamName,
+          hour: hour < 0 ? 0 : hour,
           min: min < 0 ? 0 : min,
           sec: sec < 0 ? 0 : sec,
-          ms: ms < 0 ? 0 : ms,
           playerId: ids.playerId,
           teamId: ids.teamId,
           timeValid: timeValid,
@@ -316,7 +316,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Вставте дані з Excel (5 стовпців):\nПІБ | Команда | Хв | Сек | Дсек',
+                  'Вставте дані з Excel (5 стовпців):\nПІБ | Команда | Год | Хв | Сек',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
@@ -377,7 +377,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                                                       : null,
                                                 )),
                                             Text(
-                                                '${p.teamName} • ${p.min}:${p.sec.toString().padLeft(2, '0')}.${p.ms.toString().padLeft(2, '0')}',
+                                                '${p.teamName} • ${p.hour}:${p.min.toString().padLeft(2, '0')}:${p.sec.toString().padLeft(2, '0')}',
                                                 style: TextStyle(
                                                     fontSize: 12,
                                                     color: (p.teamId == null ||
@@ -434,9 +434,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                               category: widget.category,
                               playerId: p.playerId!,
                               teamId: p.teamId!,
+                              timeHour: p.hour,
                               timeMin: p.min,
                               timeSec: p.sec,
-                              timeDsec: p.ms,
                             ));
                             count++;
                           }
@@ -637,9 +637,9 @@ class _CyclingResultDialog extends ConsumerStatefulWidget {
 class _CyclingResultDialogState
     extends ConsumerState<_CyclingResultDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _hourCtrl = TextEditingController();
   final _minCtrl = TextEditingController();
   final _secCtrl = TextEditingController();
-  final _dsecCtrl = TextEditingController();
 
   List<({int teamId, String teamName})> _teams = [];
   List<({int playerId, String fullName, String? birthDate, int? gender})>
@@ -652,22 +652,22 @@ class _CyclingResultDialogState
   void initState() {
     super.initState();
     if (widget.existing != null) {
+      _hourCtrl.text = widget.existing!.timeHour.toString();
       _minCtrl.text = widget.existing!.timeMin.toString();
       _secCtrl.text = widget.existing!.timeSec.toString();
-      _dsecCtrl.text = widget.existing!.timeDsec.toString();
       _selectedTeamId = widget.existing!.teamId;
       _selectedPlayerId = widget.existing!.playerId;
     } else {
-      _minCtrl.text = '0';
+      _hourCtrl.text = '0';
     }
     _loadTeams();
   }
 
   @override
   void dispose() {
+    _hourCtrl.dispose();
     _minCtrl.dispose();
     _secCtrl.dispose();
-    _dsecCtrl.dispose();
     super.dispose();
   }
 
@@ -713,9 +713,9 @@ class _CyclingResultDialogState
       playerId: _selectedPlayerId!,
       teamId: _selectedTeamId!,
       category: widget.category,
+      timeHour: int.tryParse(_hourCtrl.text) ?? 0,
       timeMin: int.tryParse(_minCtrl.text) ?? 0,
       timeSec: int.tryParse(_secCtrl.text) ?? 0,
-      timeDsec: int.tryParse(_dsecCtrl.text) ?? 0,
     );
     Navigator.pop(context, result);
   }
@@ -799,6 +799,27 @@ class _CyclingResultDialogState
                         SizedBox(
                           width: 80,
                           child: TextFormField(
+                            controller: _hourCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Год',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            validator: (v) =>
+                                v == null || v.isEmpty ? '!' : null,
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(':', style: TextStyle(fontSize: 20)),
+                        ),
+                        SizedBox(
+                          width: 80,
+                          child: TextFormField(
                             controller: _minCtrl,
                             decoration: const InputDecoration(
                               labelText: 'Хв',
@@ -809,8 +830,12 @@ class _CyclingResultDialogState
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly
                             ],
-                            validator: (v) =>
-                                v == null || v.isEmpty ? '!' : null,
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return '!';
+                              final min = int.tryParse(v);
+                              if (min == null || min > 59) return '0-59';
+                              return null;
+                            },
                           ),
                         ),
                         const Padding(
@@ -838,31 +863,6 @@ class _CyclingResultDialogState
                             },
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('.', style: TextStyle(fontSize: 20)),
-                        ),
-                        SizedBox(
-                          width: 80,
-                          child: TextFormField(
-                            controller: _dsecCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Дсек',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly
-                            ],
-                            validator: (v) {
-                              if (v == null || v.isEmpty) return '!';
-                              final dsec = int.tryParse(v);
-                              if (dsec == null || dsec > 99) return '0-99';
-                              return null;
-                            },
-                          ),
-                        ),
                       ],
                     ),
                   ],
@@ -886,9 +886,9 @@ class _CyclingResultDialogState
 class _ParsedResult {
   final String fullName;
   final String teamName;
+  final int hour;
   final int min;
   final int sec;
-  final int ms;
   final int? playerId;
   final int? teamId;
   final bool timeValid;
@@ -896,9 +896,9 @@ class _ParsedResult {
   _ParsedResult({
     required this.fullName,
     required this.teamName,
+    required this.hour,
     required this.min,
     required this.sec,
-    required this.ms,
     this.playerId,
     this.teamId,
     this.timeValid = true,
@@ -915,18 +915,18 @@ class _ParticipantRowState {
   CyclingCategory selectedCategory;
   int? resultId;
   final TextEditingController numberC;
+  final TextEditingController hourC;
   final TextEditingController minC;
   final TextEditingController secC;
-  final TextEditingController dsecC;
   bool saving = false;
   String? error;
 
   // Snapshot of what's actually persisted; used to detect "no real change".
   CyclingCategory savedCategory;
   String savedNumber;
+  String savedHour;
   String savedMin;
   String savedSec;
-  String savedDsec;
 
   _ParticipantRowState(this.entry)
       : selectedCategory = entry.assignedCategory
@@ -940,48 +940,48 @@ class _ParticipantRowState {
           text: entry.playerNumber?.toString() ?? '',
         ),
         savedNumber = entry.playerNumber?.toString() ?? '',
-        minC = TextEditingController(
-          text: entry.resultTotalDsec != null
-              ? (entry.resultTotalDsec! ~/ 6000).toString()
+        hourC = TextEditingController(
+          text: entry.resultTotalSec != null
+              ? (entry.resultTotalSec! ~/ 3600).toString()
               : '',
         ),
-        secC = TextEditingController(
-          text: entry.resultTotalDsec != null
-              ? ((entry.resultTotalDsec! % 6000) ~/ 100)
+        minC = TextEditingController(
+          text: entry.resultTotalSec != null
+              ? ((entry.resultTotalSec! % 3600) ~/ 60)
                   .toString()
                   .padLeft(2, '0')
               : '',
         ),
-        dsecC = TextEditingController(
-          text: entry.resultTotalDsec != null
-              ? (entry.resultTotalDsec! % 100).toString().padLeft(2, '0')
+        secC = TextEditingController(
+          text: entry.resultTotalSec != null
+              ? (entry.resultTotalSec! % 60).toString().padLeft(2, '0')
               : '',
         ),
-        savedMin = entry.resultTotalDsec != null
-            ? (entry.resultTotalDsec! ~/ 6000).toString()
+        savedHour = entry.resultTotalSec != null
+            ? (entry.resultTotalSec! ~/ 3600).toString()
             : '',
-        savedSec = entry.resultTotalDsec != null
-            ? ((entry.resultTotalDsec! % 6000) ~/ 100)
+        savedMin = entry.resultTotalSec != null
+            ? ((entry.resultTotalSec! % 3600) ~/ 60)
                 .toString()
                 .padLeft(2, '0')
             : '',
-        savedDsec = entry.resultTotalDsec != null
-            ? (entry.resultTotalDsec! % 100).toString().padLeft(2, '0')
+        savedSec = entry.resultTotalSec != null
+            ? (entry.resultTotalSec! % 60).toString().padLeft(2, '0')
             : '';
 
   void dispose() {
     numberC.dispose();
+    hourC.dispose();
     minC.dispose();
     secC.dispose();
-    dsecC.dispose();
   }
 
   bool get isDirty {
     if (selectedCategory != savedCategory) return true;
     if (numberC.text.trim() != savedNumber) return true;
+    if (hourC.text.trim() != savedHour) return true;
     if (minC.text.trim() != savedMin) return true;
     if (secC.text.trim() != savedSec) return true;
-    if (dsecC.text.trim() != savedDsec) return true;
     return false;
   }
 
@@ -994,23 +994,23 @@ class _ParticipantRowState {
     return n;
   }
 
-  /// Returns parsed (min, sec, dsec) when all three fields are present and
-  /// valid (sec 0–59, dsec 0–99, total > 0); otherwise null.
-  ({int min, int sec, int dsec})? parseTime() {
+  /// Returns parsed (hour, min, sec) when all three fields are present and
+  /// valid (min 0–59, sec 0–59, total > 0); otherwise null.
+  ({int hour, int min, int sec})? parseTime() {
+    final hour = int.tryParse(hourC.text.trim());
     final min = int.tryParse(minC.text.trim());
     final sec = int.tryParse(secC.text.trim());
-    final dsec = int.tryParse(dsecC.text.trim());
-    if (min == null || sec == null || dsec == null) return null;
+    if (hour == null || min == null || sec == null) return null;
+    if (min < 0 || min > 59) return null;
     if (sec < 0 || sec > 59) return null;
-    if (dsec < 0 || dsec > 99) return null;
-    if (min + sec + dsec == 0) return null;
-    return (min: min, sec: sec, dsec: dsec);
+    if (hour + min + sec == 0) return null;
+    return (hour: hour, min: min, sec: sec);
   }
 
   bool get isCleared =>
+      hourC.text.trim().isEmpty &&
       minC.text.trim().isEmpty &&
-      secC.text.trim().isEmpty &&
-      dsecC.text.trim().isEmpty;
+      secC.text.trim().isEmpty;
 }
 
 /// Sortable columns in the 'Всі учасники' tab.
@@ -1265,9 +1265,9 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
             playerId: row.entry.playerId,
             teamId: row.entry.teamId,
             category: row.selectedCategory,
+            timeHour: parsed.hour,
             timeMin: parsed.min,
             timeSec: parsed.sec,
-            timeDsec: parsed.dsec,
           );
           final id = await svc.saveResult(result);
           row.resultId = id;
@@ -1286,9 +1286,9 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       // the user actually changes something again.
       row.savedCategory = row.selectedCategory;
       row.savedNumber = row.numberC.text.trim();
+      row.savedHour = row.hourC.text.trim();
       row.savedMin = row.minC.text.trim();
       row.savedSec = row.secC.text.trim();
-      row.savedDsec = row.dsecC.text.trim();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1329,7 +1329,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
         const SizedBox(height: 6),
         Text(
           'Введіть час прямо у таблиці. Збереження відбувається при переході '
-          'на інший рядок або вкладку. Сек 0–59, Дсек 0–99.',
+          'на інший рядок або вкладку. Хв 0–59, Сек 0–59.',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 8),
@@ -1416,6 +1416,13 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
             width: _wTimeField,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Text('Год', style: st, textAlign: TextAlign.center),
+            ),
+          ),
+          SizedBox(
+            width: _wTimeField,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               child: Text('Хв', style: st, textAlign: TextAlign.center),
             ),
           ),
@@ -1424,13 +1431,6 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               child: Text('Сек', style: st, textAlign: TextAlign.center),
-            ),
-          ),
-          SizedBox(
-            width: _wTimeField,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-              child: Text('Дсек', style: st, textAlign: TextAlign.center),
             ),
           ),
           SizedBox(width: _wStatus, child: const SizedBox.shrink()),
@@ -1586,9 +1586,9 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
                 ),
               ),
             ),
-            _buildTimeField(row.minC, 3),
+            _buildTimeField(row.hourC, 2),
+            _buildTimeField(row.minC, 2),
             _buildTimeField(row.secC, 2),
-            _buildTimeField(row.dsecC, 2),
             SizedBox(
               width: _wStatus,
               child: row.saving

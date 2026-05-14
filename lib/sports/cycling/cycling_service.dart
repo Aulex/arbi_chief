@@ -58,13 +58,13 @@ class CyclingService {
       eventId = subRows.first['ev_id'] as int;
 
       await db.update('CMP_EVENT', {
-        'event_result': result.totalDsec,
+        'event_result': result.totalSec,
       }, where: 'event_id = ?', whereArgs: [eventId]);
     } else {
       eventId = await db.insert('CMP_EVENT', {
         't_id': result.tournamentId,
         'et_id': _eventTypeIndividual,
-        'event_result': result.totalDsec,
+        'event_result': result.totalSec,
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_cy_ev',
       });
     }
@@ -73,7 +73,7 @@ class CyclingService {
     final subEventMap = {
       'ev_id': eventId,
       'entity_id': entityId,
-      'se_result': result.totalDsec,
+      'se_result': result.totalSec,
       'se_note': result.category.name,
       'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_cy_se',
     };
@@ -174,9 +174,9 @@ class CyclingService {
         playerId: r['player_id'] as int? ?? 0,
         teamId: r['team_id'] as int? ?? 0,
         category: CyclingCategory.fromDb(r['category'] as String),
-        timeMin: total ~/ 6000,
-        timeSec: (total % 6000) ~/ 100,
-        timeDsec: total % 100,
+        timeHour: total ~/ 3600,
+        timeMin: (total % 3600) ~/ 60,
+        timeSec: total % 60,
       );
     }).toList();
   }
@@ -256,9 +256,9 @@ class CyclingService {
         playerId: row['player_id'] as int? ?? 0,
         teamId: row['team_id'] as int? ?? 0,
         category: category,
-        timeMin: total ~/ 6000,
-        timeSec: (total % 6000) ~/ 100,
-        timeDsec: total % 100,
+        timeHour: total ~/ 3600,
+        timeMin: (total % 3600) ~/ 60,
+        timeSec: total % 60,
       );
 
       final surname = row['player_surname'] as String? ?? '';
@@ -276,14 +276,14 @@ class CyclingService {
     }
 
     // Sort by raw time.
-    results.sort((a, b) => a.result.totalDsec.compareTo(b.result.totalDsec));
+    results.sort((a, b) => a.result.totalSec.compareTo(b.result.totalSec));
 
     // Assign places with tie handling (equal raw times share a place).
     final ranked = <RankedCyclingResult>[];
     int place = 1;
     for (int i = 0; i < results.length; i++) {
       final r = results[i];
-      if (i > 0 && r.result.totalDsec != results[i - 1].result.totalDsec) {
+      if (i > 0 && r.result.totalSec != results[i - 1].result.totalSec) {
         place = i + 1;
       }
       ranked.add(RankedCyclingResult(
@@ -313,13 +313,13 @@ class CyclingService {
     for (final cat in cats) {
       all.addAll(await getCategoryStandings(tId, cat));
     }
-    all.sort((a, b) => a.result.totalDsec.compareTo(b.result.totalDsec));
+    all.sort((a, b) => a.result.totalSec.compareTo(b.result.totalSec));
 
     final ranked = <RankedCyclingResult>[];
     int place = 1;
     for (int i = 0; i < all.length; i++) {
       final r = all[i];
-      if (i > 0 && r.result.totalDsec != all[i - 1].result.totalDsec) {
+      if (i > 0 && r.result.totalSec != all[i - 1].result.totalSec) {
         place = i + 1;
       }
       ranked.add(RankedCyclingResult(
@@ -422,7 +422,7 @@ class CyclingService {
           maleOptions.add((
             cat: cat,
             place: teamResults.first.place,
-            time: teamResults.first.result.totalDsec,
+            time: teamResults.first.result.totalSec,
             age: teamResults.first.age,
           ));
         }
@@ -447,7 +447,7 @@ class CyclingService {
           femaleOptions.add((
             cat: cat,
             place: teamResults.first.place,
-            time: teamResults.first.result.totalDsec,
+            time: teamResults.first.result.totalSec,
             age: teamResults.first.age,
           ));
         }
@@ -589,7 +589,7 @@ class CyclingService {
         standings[merge.to]!.addAll(standings[merge.from]!);
         standings[merge.from] = [];
         standings[merge.to]!.sort((a, b) =>
-            a.result.totalDsec.compareTo(b.result.totalDsec));
+            a.result.totalSec.compareTo(b.result.totalSec));
         _reRank(standings[merge.to]!);
       }
     }
@@ -599,7 +599,7 @@ class CyclingService {
     int place = 1;
     for (int i = 0; i < standings.length; i++) {
       if (i > 0 &&
-          standings[i].result.totalDsec != standings[i - 1].result.totalDsec) {
+          standings[i].result.totalSec != standings[i - 1].result.totalSec) {
         place = i + 1;
       }
       final current = standings[i];
@@ -909,7 +909,7 @@ class CyclingService {
         autoCategory: autoCat,
         assignedCategory: assigned,
         resultId: resultId,
-        resultTotalDsec: resultTotal,
+        resultTotalSec: resultTotal,
         resultCategory: resultCategory,
       ));
     }
