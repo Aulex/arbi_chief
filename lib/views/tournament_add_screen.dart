@@ -111,9 +111,9 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     });
   }
 
-  Future<void> _saveCoeffTable(int tId, AthleticsService svc) async {
+  Future<void> _saveCoeffTable(int tId, AthleticsService svc, int sportType) async {
     // Only save for athletics tournaments (type 10)
-    if (widget.tournament?.t_type != 10 && ref.read(selectedSportTypeProvider) != 10) return;
+    if (widget.tournament?.t_type != 10 && sportType != 10) return;
     await svc.saveCustomCoefficients(tId, _coeffTable);
   }
 
@@ -242,6 +242,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
         .toList();
 
     final athleticsSvc = ref.read(athleticsServiceProvider);
+    final sportType = ref.read(selectedSportTypeProvider);
     
     final tId = await ref.read(tournamentProvider.notifier).addTournament(
       existingId: widget.isEditMode ? widget.tournament?.t_id : null,
@@ -266,7 +267,7 @@ class _TournamentAddScreenState extends ConsumerState<TournamentAddScreen>
     );
 
     // Save athletics coefficients
-    await _saveCoeffTable(tId, athleticsSvc);
+    await _saveCoeffTable(tId, athleticsSvc, sportType);
 
     if (!mounted) return;
     setState(() => _isLoading = false);

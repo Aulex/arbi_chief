@@ -211,7 +211,11 @@ class _StreetballGroupManagementTabState
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
-                children: unassigned.map((t) => Chip(label: Text(t.teamName))).toList(),
+                children: unassigned.map((t) => ActionChip(
+                  label: Text(t.teamName),
+                  tooltip: 'Призначити в групу',
+                  onPressed: () => _reassignTeam(t.teamId, ''),
+                )).toList(),
               ),
             ],
           ],

@@ -132,24 +132,32 @@ class _StreetballCrossTableTabState
 
     final groupMode = teams.length >= 9;
 
+    if (!mounted) return;
+
     setState(() {
       _teams = teams;
       _games = gamesMap;
       _groupAssignments = groups;
       _removedTeamIds = removed;
       _noShowGamePairs = noShowPairs;
-      _finalsPlaces = _parsePlaces(
-        finalsPlacesStr,
-        defaultPlaces: groupMode ? [1, 2] : const [],
-      );
-      _crossGroupMatchPlaces = _parsePlaces(
-        crossGroupStr,
-        defaultPlaces: groupMode ? [3, 4] : const [],
-      );
-      _cyclePlaces = _parsePlaces(
-        cycleStr,
-        defaultPlaces: groupMode ? [5, 6] : const [],
-      );
+
+      final newFinals = _parsePlaces(finalsPlacesStr);
+      final newCross = _parsePlaces(crossGroupStr).where((p) => !newFinals.contains(p)).toList();
+      final newCycle = _parsePlaces(cycleStr).where((p) => !newFinals.contains(p) && !newCross.contains(p)).toList();
+
+      final groupNamesSet = groups.values.toSet();
+      _groupVCtrls.keys.where((k) => !groupNamesSet.contains(k)).toList().forEach((k) {
+        _groupVCtrls[k]?.dispose();
+        _groupVCtrls.remove(k);
+      });
+      _groupHCtrls.keys.where((k) => !groupNamesSet.contains(k)).toList().forEach((k) {
+        _groupHCtrls[k]?.dispose();
+        _groupHCtrls.remove(k);
+      });
+
+      _finalsPlaces = newFinals;
+      _crossGroupMatchPlaces = newCross;
+      _cyclePlaces = newCycle;
       _loading = false;
     });
   }
@@ -280,20 +288,20 @@ class _StreetballCrossTableTabState
       const ButtonSegment(value: 0, label: Text('Групи')),
     ];
 
-    if (_finalsPlaces.isNotEmpty) {
+    if (_finalsPlaces.isNotEmpty && numGroups > 0) {
       final endPlace = finalsTeamCount.clamp(1, totalTeamCount);
       final range = endPlace == 1 ? '1' : '1–$endPlace';
       segments.add(ButtonSegment(value: 1, label: Text('Фінал ($range)')));
     }
 
-    if (_crossGroupMatchPlaces.isNotEmpty) {
+    if (_crossGroupMatchPlaces.isNotEmpty && numGroups > 0) {
       final start = finalsTeamCount + 1;
       final end = (finalsTeamCount + crossGroupTeamCount).clamp(start, totalTeamCount);
       final range = start == end ? '$start' : '$start–$end';
       segments.add(ButtonSegment(value: 2, label: Text('Стикові ($range)')));
     }
 
-    if (_cyclePlaces.isNotEmpty) {
+    if (_cyclePlaces.isNotEmpty && numGroups > 0) {
       final cycleTeamCount = (_cyclePlaces.length * numGroups)
           .clamp(0, totalTeamCount - finalsTeamCount - crossGroupTeamCount);
       final start = finalsTeamCount + crossGroupTeamCount + 1;
@@ -1022,7 +1030,7 @@ class _StreetballCrossTableTabState
         child: Container(
           height: 36,
           alignment: Alignment.center,
-          color: bg ?? (_hoveredCol == j && _hoveredRow == i ? Colors.indigo.shade50 : null),
+          color: bg ?? (_hoveredRow == i || _hoveredCol == j ? Colors.indigo.shade50 : null),
           child: Text(
             cellText,
             style: TextStyle(
@@ -1424,6 +1432,12 @@ class _StreetballScoreDialogState extends State<_StreetballScoreDialog> {
               onPressed: () {
                 final a = int.tryParse(_controllerA.text) ?? 0;
                 final b = int.tryParse(_controllerB.text) ?? 0;
+                if (a == b && a != 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('У стрітболі не буває нічиїх')),
+                  );
+                  return;
+                }
                 Navigator.pop(context, _ScoreDialogResult.goals(a, b));
               },
               child: const Text('Зберегти'),

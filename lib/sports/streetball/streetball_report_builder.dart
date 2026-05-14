@@ -30,8 +30,9 @@ class StreetballReportBuilder {
 
   /// Build the full streetball PDF report.
   Future<pw.Document> buildPdf(Tournament tournament, SportTypeConfig config) async {
-    final tId = tournament.t_id!;
     final pdf = pw.Document();
+    if (tournament.t_id == null) return pdf;
+    final tId = tournament.t_id!;
     final tournamentName = tournament.t_name;
 
     // --- Load data ---
@@ -45,9 +46,9 @@ class StreetballReportBuilder {
     final crossGroupStr = await _tournamentService.getAttrValue(tId, 13);
     final cycleStr = await _tournamentService.getAttrValue(tId, 14);
 
-    final finalsPlaces = _parsePlaces(finalsPlacesStr, defaultPlaces: [1, 2]);
-    final crossGroupMatchPlaces = _parsePlaces(crossGroupStr);
-    final cyclePlaces = _parsePlaces(cycleStr);
+    final finalsPlaces = _parsePlaces(finalsPlacesStr);
+    final crossGroupMatchPlaces = _parsePlaces(crossGroupStr).where((p) => !finalsPlaces.contains(p)).toList();
+    final cyclePlaces = _parsePlaces(cycleStr).where((p) => !finalsPlaces.contains(p) && !crossGroupMatchPlaces.contains(p)).toList();
 
     // Build team info with entity IDs
     final allTeams = await _teamService.getAllTeams();
@@ -89,10 +90,10 @@ class StreetballReportBuilder {
     pw.Font fontRegular;
     pw.Font fontBold;
     try {
-      final regBytes = await File('C:\\Windows\\Fonts\\times.ttf').readAsBytes();
-      final boldBytes = await File('C:\\Windows\\Fonts\\timesbd.ttf').readAsBytes();
-      fontRegular = pw.Font.ttf(ByteData.sublistView(regBytes));
-      fontBold = pw.Font.ttf(ByteData.sublistView(boldBytes));
+      final regBytes = await rootBundle.load('assets/fonts/times.ttf');
+      final boldBytes = await rootBundle.load('assets/fonts/timesbd.ttf');
+      fontRegular = pw.Font.ttf(regBytes);
+      fontBold = pw.Font.ttf(boldBytes);
     } catch (_) {
       fontRegular = await PdfGoogleFonts.notoSansRegular();
       fontBold = await PdfGoogleFonts.notoSansBold();

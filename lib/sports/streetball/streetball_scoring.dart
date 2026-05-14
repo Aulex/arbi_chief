@@ -31,8 +31,6 @@ class StreetballStanding {
   int get goalDifference => pointsScored - pointsConceded;
 }
 
-const String noShowWinScore = '21:0';
-const String noShowLossScore = '0:21';
 
 enum StreetballConductionSystem {
   roundRobin,
@@ -134,8 +132,27 @@ List<StreetballStanding> calculateStandings({
     i = j;
   }
 
-  for (int k = 0; k < resolved.length; k++) {
-    resolved[k].rank = k + 1;
+  if (resolved.isNotEmpty) {
+    resolved[0].rank = 1;
+    for (int k = 1; k < resolved.length; k++) {
+      final curr = resolved[k];
+      final prev = resolved[k - 1];
+      
+      bool isIdentical = curr.matchPoints == prev.matchPoints &&
+                         curr.goalDifference == prev.goalDifference &&
+                         curr.pointsScored == prev.pointsScored;
+                         
+      if (curr.entityId != null && prev.entityId != null) {
+        // Also ensure they had the same H2H points and diff within their tied group if they were tied
+        // But for a global rank, the above 3 are the main indicators if they couldn't be separated
+      }
+
+      if (isIdentical) {
+        curr.rank = prev.rank;
+      } else {
+        curr.rank = k + 1;
+      }
+    }
   }
 
   return resolved;
@@ -166,10 +183,6 @@ List<StreetballStanding> _resolveTieGroup(
       continue;
     }
     if (aEntId == bEntId) continue;
-    if (noShowGamePairs.contains((aEntId, bEntId)) ||
-        noShowGamePairs.contains((bEntId, aEntId))) {
-      continue;
-    }
 
     final parts = entry.value.split(':');
     if (parts.length != 2) continue;
@@ -184,9 +197,12 @@ List<StreetballStanding> _resolveTieGroup(
     if (aPts > bPts) {
       h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 2;
       h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 1;
-    } else {
+    } else if (bPts > aPts) {
       h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 2;
       h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 1;
+    } else {
+      h2hPoints[aEntId] = (h2hPoints[aEntId] ?? 0) + 1;
+      h2hPoints[bEntId] = (h2hPoints[bEntId] ?? 0) + 1;
     }
   }
 

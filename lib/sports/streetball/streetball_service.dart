@@ -30,19 +30,30 @@ class StreetballService {
 
   Future<List<({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult, int? esId})>> getTeamGamesForTournament(int tId) async {
     final db = await _dbService.database;
-    final events = await db.query('CMP_EVENT', where: 't_id = ? AND et_id = 2', whereArgs: [tId], orderBy: 'event_id');
+    final rows = await db.rawQuery('''
+      SELECT e.event_id, e.event_result, e.es_id,
+             se1.entity_id as entity_a, t1.team_id as team_a,
+             se2.entity_id as entity_b, t2.team_id as team_b
+      FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id
+      JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se1.se_id < se2.se_id
+      LEFT JOIN CMP_TEAM t1 ON t1.entity_id = se1.entity_id
+      LEFT JOIN CMP_TEAM t2 ON t2.entity_id = se2.entity_id
+      WHERE e.t_id = ? AND e.et_id = 2
+      ORDER BY e.event_id
+    ''', [tId]);
+
     final result = <({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult, int? esId})>[];
-    for (final event in events) {
-      final eventId = event['event_id'] as int;
-      final eventResult = event['event_result'] as String?;
-      final esId = event['es_id'] as int?;
-      final subevents = await db.query('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId], orderBy: 'se_id');
-      if (subevents.isEmpty) continue;
-      final entityIds = subevents.map((s) => s['entity_id'] as int).toSet().toList();
-      if (entityIds.length < 2) continue;
-      final aTeam = await db.query('CMP_TEAM', columns: ['team_id'], where: 'entity_id = ?', whereArgs: [entityIds[0]]);
-      final bTeam = await db.query('CMP_TEAM', columns: ['team_id'], where: 'entity_id = ?', whereArgs: [entityIds[1]]);
-      result.add((eventId: eventId, teamAEntityId: entityIds[0], teamBEntityId: entityIds[1], teamAId: aTeam.isNotEmpty ? aTeam.first['team_id'] as int? : null, teamBId: bTeam.isNotEmpty ? bTeam.first['team_id'] as int? : null, eventResult: eventResult, esId: esId));
+    for (final r in rows) {
+      result.add((
+        eventId: r['event_id'] as int,
+        teamAEntityId: r['entity_a'] as int,
+        teamBEntityId: r['entity_b'] as int,
+        teamAId: r['team_a'] as int?,
+        teamBId: r['team_b'] as int?,
+        eventResult: r['event_result'] as String?,
+        esId: r['es_id'] as int?
+      ));
     }
     return result;
   }
@@ -66,7 +77,7 @@ class StreetballService {
     final rows = await db.rawQuery('''
       SELECT COUNT(DISTINCT e.event_id) as cnt FROM CMP_EVENT e
       JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id AND se.entity_id = ?
-      WHERE e.t_id = ? AND e.es_id = 4
+      WHERE e.t_id = ? AND e.es_id = 4 AND e.et_id = 2
       AND NOT EXISTS (
         SELECT 1 FROM CMP_SUBEVENT se2
         WHERE se2.ev_id = e.event_id AND se2.entity_id = ?
