@@ -16,6 +16,8 @@ import '../sports/streetball/streetball_report_builder.dart';
 import '../sports/streetball/streetball_service.dart';
 import '../sports/athletics/athletics_report_builder.dart';
 import '../sports/athletics/athletics_service.dart';
+import '../sports/cycling/cycling_report_builder.dart';
+import '../sports/cycling/cycling_service.dart';
 import 'team_service.dart';
 import 'tournament_service.dart';
 
@@ -25,6 +27,7 @@ class ReportService {
   final VolleyballService _volleyballService;
   final StreetballService _streetballService;
   final AthleticsService _athleticsService;
+  final CyclingService _cyclingService;
 
   ReportService(
     this._teamService,
@@ -32,6 +35,7 @@ class ReportService {
     this._volleyballService,
     this._streetballService,
     this._athleticsService,
+    this._cyclingService,
   );
 
   /// Load all data needed for a tournament report.
@@ -43,6 +47,17 @@ class ReportService {
     // Athletics: delegate to athletics-specific builder for data check.
     if (isAthletics(sportType)) {
       final hasData = await AthleticsReportBuilder(_athleticsService).hasData(tId);
+      return ReportData(
+        boardPlayers: {},
+        boardResults: {},
+        boardResultDetails: {},
+        hasTeamData: hasData,
+      );
+    }
+
+    // Cycling: delegate to cycling-specific builder for data check.
+    if (isCycling(sportType)) {
+      final hasData = await CyclingReportBuilder(_cyclingService).hasData(tId);
       return ReportData(
         boardPlayers: {},
         boardResults: {},
@@ -353,6 +368,10 @@ class ReportService {
     // Athletics: delegate to athletics builder.
     if (isAthletics(tournament.t_type)) {
       return AthleticsReportBuilder(_athleticsService).buildPdf(tournament);
+    }
+    // Cycling: delegate to cycling builder.
+    if (isCycling(tournament.t_type)) {
+      return CyclingReportBuilder(_cyclingService).buildPdf(tournament);
     }
     // Delegate to sport-specific builders for team sports
     if (config.hasTeamCrossTable && !config.hasBoardCrossTables) {
