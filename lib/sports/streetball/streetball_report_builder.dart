@@ -215,6 +215,14 @@ class StreetballReportBuilder {
       );
     }
 
+    // A PDF with zero pages is invalid and Chrome refuses to render it.
+    if (ctx.pagesAdded == 0) {
+      pdf.addPage(pw.Page(
+        theme: theme,
+        build: (_) => pw.Center(child: pw.Text('Немає даних для звіту')),
+      ));
+    }
+
     return pdf;
   }
 
@@ -403,6 +411,7 @@ class StreetballReportBuilder {
       2 + n + 5: const pw.FixedColumnWidth(32),
     };
 
+    ctx.pagesAdded++;
     ctx.pdf.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
@@ -550,6 +559,7 @@ class StreetballReportBuilder {
       2: const pw.FixedColumnWidth(100),
     };
 
+    ctx.pagesAdded++;
     ctx.pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -646,8 +656,9 @@ class _BuildContext {
   final pw.ThemeData theme;
   final pw.Font fontRegular;
   final pw.Font fontBold;
+  int pagesAdded = 0;
 
-  const _BuildContext({
+  _BuildContext({
     required this.pdf,
     required this.tournamentName,
     required this.teams,
