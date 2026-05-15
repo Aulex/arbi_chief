@@ -91,10 +91,10 @@ class VolleyballReportBuilder {
     try {
       final regData = await rootBundle.load('assets/fonts/times.ttf');
       final boldData = await rootBundle.load('assets/fonts/timesbd.ttf');
-      fontRegular = pw.Font.ttf(regData.buffer.asUint8List(regData.offsetInBytes, regData.lengthInBytes));
-      fontBold = pw.Font.ttf(boldData.buffer.asUint8List(boldData.offsetInBytes, boldData.lengthInBytes));
+      fontRegular = pw.Font.ttf(regData);
+      fontBold = pw.Font.ttf(boldData);
     } catch (e) {
-      debugPrint('Error loading local fonts: $e');
+      print('Error loading local fonts: $e');
       fontRegular = await PdfGoogleFonts.notoSansRegular();
       fontBold = await PdfGoogleFonts.notoSansBold();
     }
