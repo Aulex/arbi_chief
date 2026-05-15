@@ -371,9 +371,10 @@ class StreetballReportBuilder {
         _cell('${sorted[i].teamNumber ?? (i + 1)}', hdrStyle),
       _cell('Очки', hdrStyle),
       _cell('П', hdrStyle),
-      _cell('Пр', hdrStyle),
+      _cell('Пор', hdrStyle),
       _cell('М+', hdrStyle),
       _cell('М-', hdrStyle),
+      _cell('РМ', hdrStyle),
       _cell('Місце', hdrStyle),
     ];
 
@@ -404,6 +405,7 @@ class StreetballReportBuilder {
         _cell('${standing?.losses ?? 0}', cellSt),
         _cell('${standing?.pointsScored ?? 0}', cellSt),
         _cell('${standing?.pointsConceded ?? 0}', cellSt),
+        _cell(_signed((standing?.pointsScored ?? 0) - (standing?.pointsConceded ?? 0)), cellSt),
         _cell('${rankMap[team.teamId] ?? ''}', cellBold),
       ];
 
@@ -421,7 +423,8 @@ class StreetballReportBuilder {
       2 + n + 2: const pw.FixedColumnWidth(22),
       2 + n + 3: const pw.FixedColumnWidth(26),
       2 + n + 4: const pw.FixedColumnWidth(26),
-      2 + n + 5: const pw.FixedColumnWidth(32),
+      2 + n + 5: const pw.FixedColumnWidth(28),
+      2 + n + 6: const pw.FixedColumnWidth(32),
     };
 
     ctx.pagesAdded++;
@@ -629,6 +632,8 @@ class StreetballReportBuilder {
       ),
     );
   }
+
+  String _signed(int v) => v > 0 ? '+$v' : '$v';
 
   pw.Widget _cell(String text, pw.TextStyle style, {pw.Alignment align = pw.Alignment.center}) {
     return pw.Container(
