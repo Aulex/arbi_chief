@@ -331,20 +331,23 @@ class StreetballReportBuilder {
     final n = teams.length;
     if (n == 0) return;
 
-    // Sort teams by number
+    final standings = _calculateStandings(ctx, teams);
+    final rankMap = <int, int>{};
+    for (final s in standings) {
+      rankMap[s.teamId] = s.rank;
+    }
+
+    // Sort teams by final place (rank); fall back to team number, then name.
     final sorted = List.of(teams)
       ..sort((a, b) {
+        final aRank = rankMap[a.teamId] ?? 9999;
+        final bRank = rankMap[b.teamId] ?? 9999;
+        if (aRank != bRank) return aRank.compareTo(bRank);
         final aNum = a.teamNumber ?? 9999;
         final bNum = b.teamNumber ?? 9999;
         if (aNum != bNum) return aNum.compareTo(bNum);
         return a.teamName.compareTo(b.teamName);
       });
-
-    final standings = _calculateStandings(ctx, sorted);
-    final rankMap = <int, int>{};
-    for (final s in standings) {
-      rankMap[s.teamId] = s.rank;
-    }
 
     final useA3 = n > 8;
     final pageFormat = useA3 ? PdfPageFormat.a3.landscape : PdfPageFormat.a4.landscape;
