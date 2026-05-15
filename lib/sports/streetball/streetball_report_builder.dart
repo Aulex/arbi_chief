@@ -215,7 +215,17 @@ class StreetballReportBuilder {
       );
     }
 
-    // A PDF with zero pages is invalid and Chrome refuses to render it.
+    // If no phase produced a page (e.g. group assignments exist but reference
+    // missing teams), fall back to a single round-robin cross-table over all
+    // teams — that's what the UI shows in simple mode, and an empty PDF would
+    // be invalid anyway.
+    if (ctx.pagesAdded == 0) {
+      _addCrossTablePage(
+        ctx: ctx,
+        subtitle: 'Крос-таблиця',
+        teams: teams,
+      );
+    }
     if (ctx.pagesAdded == 0) {
       pdf.addPage(pw.Page(
         theme: theme,
