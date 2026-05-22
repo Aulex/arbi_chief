@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/database_sync_service.dart';
 import '../viewmodels/font_scale_provider.dart';
+import '../viewmodels/high_contrast_provider.dart';
 import '../viewmodels/shared_providers.dart';
 import '../viewmodels/theme_provider.dart';
 
@@ -50,6 +51,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   Widget build(BuildContext context) {
     final isDark = ref.watch(themeProvider);
     final fontScale = ref.watch(fontScaleProvider);
+    final highContrast = ref.watch(highContrastProvider);
 
     return SingleChildScrollView(
       child: Column(
@@ -88,6 +90,26 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     subtitle: Text(isDark ? 'Увімкнено' : 'Вимкнено'),
                     value: isDark,
                     onChanged: (_) => ref.read(themeProvider.notifier).toggle(),
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    secondary: Icon(
+                      highContrast ? Icons.wb_sunny : Icons.wb_sunny_outlined,
+                      color: highContrast ? Colors.orange : Colors.grey,
+                    ),
+                    title: const Text('Режим «на вулиці» (висока контрастність)'),
+                    subtitle: Text(
+                      highContrast
+                          ? 'Увімкнено — посилений контраст тексту для яскравого сонця'
+                          : 'Вимкнено',
+                    ),
+                    value: highContrast,
+                    onChanged: (_) =>
+                        ref.read(highContrastProvider.notifier).toggle(),
                     shape: RoundedRectangleBorder(
                       side: BorderSide(color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),
@@ -195,7 +217,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                   Text(
                     'Синхронізація та експорт даних.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                   const SizedBox(height: 16),
@@ -213,8 +235,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     trailing:
                         const Icon(Icons.arrow_forward_ios, size: 16),
                     shape: RoundedRectangleBorder(
-                      side:
-                          BorderSide(color: Colors.grey.shade300, width: 1),
+                      side: BorderSide(
+                          color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     onTap: () => _syncDatabase(context, ref),
@@ -233,8 +255,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     trailing:
                         const Icon(Icons.arrow_forward_ios, size: 16),
                     shape: RoundedRectangleBorder(
-                      side:
-                          BorderSide(color: Colors.grey.shade300, width: 1),
+                      side: BorderSide(
+                          color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     onTap: () => _exportStructure(context, ref),
@@ -253,8 +275,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     trailing:
                         const Icon(Icons.arrow_forward_ios, size: 16),
                     shape: RoundedRectangleBorder(
-                      side:
-                          BorderSide(color: Colors.grey.shade300, width: 1),
+                      side: BorderSide(
+                          color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     onTap: () => _exportData(context, ref),
@@ -272,8 +294,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     trailing:
                         const Icon(Icons.arrow_forward_ios, size: 16),
                     shape: RoundedRectangleBorder(
-                      side:
-                          BorderSide(color: Colors.grey.shade300, width: 1),
+                      side: BorderSide(
+                          color: Theme.of(context).dividerColor, width: 1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     onTap: () => _exportFull(context, ref),

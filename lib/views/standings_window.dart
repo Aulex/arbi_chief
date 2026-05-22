@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../theme/app_themes.dart';
 import '../viewmodels/standings_window_provider.dart';
 
 /// Standalone app that runs in the sub-window.
@@ -23,10 +24,13 @@ class StandingsWindowApp extends StatefulWidget {
 
 class _StandingsWindowAppState extends State<StandingsWindowApp> {
   StandingsSnapshot? _snapshot;
+  bool _isDark = false;
+  bool _highContrast = false;
 
   @override
   void initState() {
     super.initState();
+    _loadDisplayPrefs();
     // Parse initial data
     try {
       final data = jsonDecode(widget.argument) as Map<String, dynamic>;
@@ -53,18 +57,34 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
     });
   }
 
+  /// Loads the global theme / outdoor-mode preferences so the sub-window
+  /// matches the main window.
+  Future<void> _loadDisplayPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dark = prefs.getBool('dark_theme') ?? false;
+      final highContrast = prefs.getBool('high_contrast') ?? false;
+      if (mounted && (dark != _isDark || highContrast != _highContrast)) {
+        setState(() {
+          _isDark = dark;
+          _highContrast = highContrast;
+        });
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Турнірна таблиця',
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        colorSchemeSeed: Colors.indigo,
-      ),
+      theme: buildLightTheme(highContrast: _highContrast),
+      darkTheme: buildDarkTheme(highContrast: _highContrast),
+      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
       home: _StandingsDisplay(
         snapshot: _snapshot,
+        isDark: _isDark,
+        highContrast: _highContrast,
         onSnapshotRefreshed: (fresh) {
           if (mounted) {
             setState(() {
@@ -79,15 +99,73 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
 
 class _StandingsDisplay extends StatefulWidget {
   final StandingsSnapshot? snapshot;
+  final bool isDark;
+  final bool highContrast;
   final ValueChanged<StandingsSnapshot>? onSnapshotRefreshed;
-  const _StandingsDisplay({required this.snapshot, this.onSnapshotRefreshed});
+  const _StandingsDisplay({
+    required this.snapshot,
+    this.isDark = false,
+    this.highContrast = false,
+    this.onSnapshotRefreshed,
+  });
 
   @override
   State<_StandingsDisplay> createState() => _StandingsDisplayState();
 }
 
+/// Theme-aware colour palette for the standings tables. Computed from the
+/// global dark-theme and outdoor (high-contrast) preferences.
+class _StandingsPalette {
+  final bool isDark;
+  final bool highContrast;
+  const _StandingsPalette({required this.isDark, required this.highContrast});
+
+  Color get gridLine => isDark
+      ? (highContrast ? Colors.white : const Color(0xFF5C7088))
+      : Colors.black;
+
+  Color get headerBg => isDark
+      ? const Color(0xFF1B2838)
+      : (highContrast ? Colors.grey.shade300 : Colors.grey.shade100);
+
+  Color get oddRowBg => isDark
+      ? const Color(0xFF152238)
+      : (highContrast ? Colors.grey.shade200 : Colors.grey.shade50);
+
+  Color get text => isDark
+      ? (highContrast ? Colors.white : const Color(0xFFE0E6F0))
+      : (highContrast ? Colors.black : Colors.black87);
+
+  Color get textMuted => isDark
+      ? (highContrast ? const Color(0xFFD6DEEA) : const Color(0xFF9FB0C4))
+      : (highContrast ? Colors.black87 : Colors.black54);
+
+  Color get diagonal => isDark ? Colors.black : Colors.grey.shade800;
+
+  Color get subTabBg =>
+      isDark ? const Color(0xFF152238) : Colors.indigo.shade50;
+
+  Color get subTabLabel =>
+      isDark ? const Color(0xFFAEBCE8) : Colors.indigo;
+}
+
 class _StandingsDisplayState extends State<_StandingsDisplay>
     with SingleTickerProviderStateMixin {
+  late _StandingsPalette _p = _StandingsPalette(
+    isDark: widget.isDark,
+    highContrast: widget.highContrast,
+  );
+
+  /// Background colour for a coloured result cell (win/draw/loss, places).
+  Color _accentBg(MaterialColor accent) => widget.isDark
+      ? accent.shade900.withValues(alpha: 0.5)
+      : accent.shade50;
+
+  /// Foreground/text colour for a coloured result cell.
+  Color _accentFg(MaterialColor accent) => widget.isDark
+      ? accent.shade200
+      : (accent == Colors.amber ? accent.shade800 : accent.shade700);
+
   TabController? _tabController;
   Timer? _autoTabTimer;
   int _autoTabSeconds = 0; // 0 = disabled
@@ -222,6 +300,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
 
   @override
   Widget build(BuildContext context) {
+    _p = _StandingsPalette(
+      isDark: widget.isDark,
+      highContrast: widget.highContrast,
+    );
     if (widget.snapshot == null) {
       return const Scaffold(
         body: Center(
@@ -290,12 +372,13 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
           ),
           // Sub-tabs
           Container(
-            color: Colors.indigo.shade50,
+            color: _p.subTabBg,
             child: TabBar(
               controller: _tabController,
               isScrollable: true,
-              labelColor: Colors.indigo,
-              indicatorColor: Colors.indigo,
+              labelColor: _p.subTabLabel,
+              unselectedLabelColor: _p.textMuted,
+              indicatorColor: _p.subTabLabel,
               tabAlignment: TabAlignment.start,
               labelPadding: const EdgeInsets.symmetric(horizontal: 16),
               tabs: [
@@ -332,7 +415,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
       return Center(
         child: Text(
           'Немає даних',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+          style: TextStyle(color: _p.textMuted, fontSize: 16),
         ),
       );
     }
@@ -393,10 +476,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     final n = crossTable.length;
     if (n == 0) return const SizedBox.shrink();
 
-    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    final headerBg = Colors.grey.shade100;
-    final oddRowBg = Colors.grey.shade50;
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _p.textMuted);
+    final cellStyle = TextStyle(fontSize: 12, color: _p.text);
+    final headerBg = _p.headerBg;
+    final oddRowBg = _p.oddRowBg;
 
     // Column layout: №к | Команда | ПІБ | [n result cols] | Бали | Ігор | ПІБ | Команда | Бали | Місце
     // Indices:        0     1       2     3..n+2             n+3    n+4    n+5    n+6     n+7    n+8
@@ -408,13 +491,9 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     columnWidths[n + 6] = const FlexColumnWidth(1); // Команда (standings)
 
     return Table(
-      border: const TableBorder(
-        top: BorderSide(color: Color(0xFF000000), width: 1),
-        bottom: BorderSide(color: Color(0xFF000000), width: 1),
-        left: BorderSide(color: Color(0xFF000000), width: 1),
-        right: BorderSide(color: Color(0xFF000000), width: 1),
-        horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
-        verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
+      border: TableBorder.symmetric(
+        inside: BorderSide(color: _p.gridLine, width: 1),
+        outside: BorderSide(color: _p.gridLine, width: 1),
       ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: columnWidths,
@@ -443,7 +522,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
           TableRow(
             decoration: i.isEven ? null : BoxDecoration(color: oddRowBg),
             children: [
-              _tableCell('${crossTable[i].teamNumber ?? ''}', style: cellStyle.copyWith(color: Colors.grey.shade600, fontSize: 11)),
+              _tableCell('${crossTable[i].teamNumber ?? ''}', style: cellStyle.copyWith(color: _p.textMuted, fontSize: 11)),
               _tableCell(crossTable[i].teamName, style: cellStyle, minWidth: 70, leftAlign: true),
               _tableCell(crossTable[i].playerName, style: cellStyle, minWidth: 130, leftAlign: true),
               for (int j = 0; j < n; j++)
@@ -484,7 +563,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
       return Center(
         child: Text(
           'Немає даних',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+          style: TextStyle(color: _p.textMuted, fontSize: 16),
         ),
       );
     }
@@ -525,10 +604,10 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     final n = crossTable.length;
     if (n == 0) return const SizedBox.shrink();
 
-    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black54);
-    final cellStyle = TextStyle(fontSize: 12, color: Colors.black87);
-    final headerBg = Colors.grey.shade100;
-    final oddRowBg = Colors.grey.shade50;
+    final headerStyle = TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: _p.textMuted);
+    final cellStyle = TextStyle(fontSize: 12, color: _p.text);
+    final headerBg = _p.headerBg;
+    final oddRowBg = _p.oddRowBg;
 
     // Column layout: № | Команда | [n result cols] | Очки | Команда | Очки | Місце
     // Indices:       0     1      2..n+1              n+2    n+3      n+4    n+5
@@ -537,13 +616,9 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     teamColumnWidths[n + 3] = const FlexColumnWidth(2); // Команда (standings)
 
     return Table(
-      border: const TableBorder(
-        top: BorderSide(color: Color(0xFF000000), width: 1),
-        bottom: BorderSide(color: Color(0xFF000000), width: 1),
-        left: BorderSide(color: Color(0xFF000000), width: 1),
-        right: BorderSide(color: Color(0xFF000000), width: 1),
-        horizontalInside: BorderSide(color: Color(0xFF000000), width: 1),
-        verticalInside: BorderSide(color: Color(0xFF000000), width: 1),
+      border: TableBorder.symmetric(
+        inside: BorderSide(color: _p.gridLine, width: 1),
+        outside: BorderSide(color: _p.gridLine, width: 1),
       ),
       defaultColumnWidth: const IntrinsicColumnWidth(),
       columnWidths: teamColumnWidths,
@@ -629,9 +704,17 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     }
 
     Color? bgColor;
-    if (result == 1.0) bgColor = Colors.green.shade50;
-    else if (result == 0.0 && result != null) bgColor = Colors.red.shade50;
-    else if (result == 0.5) bgColor = Colors.amber.shade50;
+    Color textColor = _p.text;
+    if (result == 1.0) {
+      bgColor = _accentBg(Colors.green);
+      textColor = _accentFg(Colors.green);
+    } else if (result == 0.0) {
+      bgColor = _accentBg(Colors.red);
+      textColor = _accentFg(Colors.red);
+    } else if (result == 0.5) {
+      bgColor = _accentBg(Colors.amber);
+      textColor = _accentFg(Colors.amber);
+    }
 
     return Container(
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -646,13 +729,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: result == 1.0
-                    ? Colors.green.shade700
-                    : result == 0.0 && result != null
-                        ? Colors.red.shade700
-                        : result == 0.5
-                            ? Colors.amber.shade800
-                            : Colors.black87,
+                color: textColor,
               ),
             ),
     );
@@ -664,14 +741,22 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
         constraints: const BoxConstraints(minWidth: 40, minHeight: 28),
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
-        child: Text('—', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+        child: Text('—', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: _p.textMuted)),
       );
     }
 
     Color? bgColor;
-    if (pts == 2.0) bgColor = Colors.green.shade50;
-    else if (pts == 0.0) bgColor = Colors.red.shade50;
-    else if (pts == 1.0) bgColor = Colors.amber.shade50;
+    Color textColor = _p.text;
+    if (pts == 2.0) {
+      bgColor = _accentBg(Colors.green);
+      textColor = _accentFg(Colors.green);
+    } else if (pts == 0.0) {
+      bgColor = _accentBg(Colors.red);
+      textColor = _accentFg(Colors.red);
+    } else if (pts == 1.0) {
+      bgColor = _accentBg(Colors.amber);
+      textColor = _accentFg(Colors.amber);
+    }
 
     return Container(
       constraints: const BoxConstraints(minWidth: 40, minHeight: 28),
@@ -684,11 +769,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.bold,
-          color: pts == 2.0
-              ? Colors.green.shade700
-              : pts == 0.0
-                  ? Colors.red.shade700
-                  : Colors.amber.shade800,
+          color: textColor,
         ),
       ),
     );
@@ -699,14 +780,14 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
     Color? bgColor;
     Color? textColor;
     if (place == 1) {
-      bgColor = Colors.amber.shade50;
-      textColor = Colors.amber.shade800;
+      bgColor = _accentBg(Colors.amber);
+      textColor = _accentFg(Colors.amber);
     } else if (place == 2) {
-      bgColor = Colors.blueGrey.shade50;
-      textColor = Colors.blueGrey.shade700;
+      bgColor = _accentBg(Colors.blueGrey);
+      textColor = _accentFg(Colors.blueGrey);
     } else if (place == 3) {
-      bgColor = Colors.orange.shade50;
-      textColor = Colors.orange.shade700;
+      bgColor = _accentBg(Colors.orange);
+      textColor = _accentFg(Colors.orange);
     }
 
     return Container(
@@ -766,7 +847,7 @@ class _StandingsDisplayState extends State<_StandingsDisplay>
   Widget _diagonalCell() {
     return Container(
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      color: Colors.grey.shade800,
+      color: _p.diagonal,
     );
   }
 
