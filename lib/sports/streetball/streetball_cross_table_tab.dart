@@ -296,14 +296,14 @@ class _StreetballCrossTableTabState
     if (_finalsPlaces.isNotEmpty && numGroups > 0) {
       final endPlace = finalsTeamCount.clamp(1, totalTeamCount);
       final range = endPlace == 1 ? '1' : '1–$endPlace';
-      segments.add(ButtonSegment(value: 1, label: Text('Фінал ($range)')));
+      segments.add(ButtonSegment(value: 1, label: Text('Фінальні матчі ($range)')));
     }
 
     if (_crossGroupMatchPlaces.isNotEmpty && numGroups > 0) {
       final start = finalsTeamCount + 1;
       final end = (finalsTeamCount + crossGroupTeamCount).clamp(start, totalTeamCount);
       final range = start == end ? '$start' : '$start–$end';
-      segments.add(ButtonSegment(value: 2, label: Text('Стикові ($range)')));
+      segments.add(ButtonSegment(value: 2, label: Text('Стикові матчі ($range)')));
     }
 
     if (_cyclePlaces.isNotEmpty && numGroups > 0) {
@@ -313,7 +313,7 @@ class _StreetballCrossTableTabState
       final end =
           (finalsTeamCount + crossGroupTeamCount + cycleTeamCount).clamp(start, totalTeamCount);
       final range = start == end ? '$start' : '$start–$end';
-      segments.add(ButtonSegment(value: 3, label: Text('Колова ($range)')));
+      segments.add(ButtonSegment(value: 3, label: Text('Колові матчі ($range)')));
     }
 
     segments.add(const ButtonSegment(value: 4, label: Text('Підсумок')));
@@ -1039,6 +1039,27 @@ class _StreetballCrossTableTabState
     }
     final readOnly = isRemoved || (isCarryOver && readOnlyCarryOver);
 
+    Widget cellWidget = Container(
+      height: 36,
+      alignment: Alignment.center,
+      color: bg ?? (_hoveredRow == i || _hoveredCol == j ? _ct.hoverHighlight : null),
+      child: Text(
+        cellText,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
+          color: fg,
+        ),
+      ),
+    );
+
+    if (isCarryOver && readOnlyCarryOver) {
+      cellWidget = Tooltip(
+        message: 'Результат перенесено з групи',
+        child: cellWidget,
+      );
+    }
+
     return MouseRegion(
       onEnter: (_) => setState(() {
         _hoveredRow = i;
@@ -1050,19 +1071,7 @@ class _StreetballCrossTableTabState
       }),
       child: GestureDetector(
         onTap: readOnly ? null : () => _showDialog(tA, tB, game),
-        child: Container(
-          height: 36,
-          alignment: Alignment.center,
-          color: bg ?? (_hoveredRow == i || _hoveredCol == j ? _ct.hoverHighlight : null),
-          child: Text(
-            cellText,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
-              color: fg,
-            ),
-          ),
-        ),
+        child: cellWidget,
       ),
     );
   }

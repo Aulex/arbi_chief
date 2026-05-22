@@ -131,18 +131,37 @@ class VolleyballService {
       String? teamBDetail,
     })>[];
 
+    if (events.isEmpty) return result;
+
+    // Single entity_id → team_id lookup for the whole tournament, instead of
+    // two CMP_TEAM queries per event.
+    final entityToTeamId = <int, int>{};
+    for (final row in await db.query('CMP_TEAM', columns: ['entity_id', 'team_id'])) {
+      final entityId = row['entity_id'] as int?;
+      final teamId = row['team_id'] as int?;
+      if (entityId != null && teamId != null) entityToTeamId[entityId] = teamId;
+    }
+
+    // Fetch every subevent for these events in one query, grouped by ev_id,
+    // instead of one CMP_SUBEVENT query per event.
+    final eventIds = events.map((e) => e['event_id'] as int).toList();
+    final placeholders = List.filled(eventIds.length, '?').join(',');
+    final allSubevents = await db.rawQuery(
+      'SELECT * FROM CMP_SUBEVENT WHERE ev_id IN ($placeholders) ORDER BY ev_id, se_id',
+      eventIds,
+    );
+    final subeventsByEvent = <int, List<Map<String, Object?>>>{};
+    for (final s in allSubevents) {
+      (subeventsByEvent[s['ev_id'] as int] ??= []).add(s);
+    }
+
     for (final event in events) {
       final eventId = event['event_id'] as int;
       final eventResult = event['event_result'] as String?;
       final esId = event['es_id'] as int?;
 
-      // Get the two participating team entities
-      final subevents = await db.query(
-        'CMP_SUBEVENT',
-        where: 'ev_id = ?',
-        whereArgs: [eventId],
-        orderBy: 'se_id',
-      );
+      // The two participating team entities
+      final subevents = subeventsByEvent[eventId] ?? const <Map<String, Object?>>[];
 
       if (subevents.isEmpty) continue;
 
@@ -154,11 +173,8 @@ class VolleyballService {
       final bEntId = entityIds[1];
 
       // Look up team_ids from entity_ids
-      final aTeam = await db.query('CMP_TEAM', columns: ['team_id'], where: 'entity_id = ?', whereArgs: [aEntId]);
-      final bTeam = await db.query('CMP_TEAM', columns: ['team_id'], where: 'entity_id = ?', whereArgs: [bEntId]);
-
-      final aTeamId = aTeam.isNotEmpty ? aTeam.first['team_id'] as int? : null;
-      final bTeamId = bTeam.isNotEmpty ? bTeam.first['team_id'] as int? : null;
+      final aTeamId = entityToTeamId[aEntId];
+      final bTeamId = entityToTeamId[bEntId];
 
       // Build detail strings from subevents
       final aSubs = subevents.where((s) => s['entity_id'] == aEntId).toList();

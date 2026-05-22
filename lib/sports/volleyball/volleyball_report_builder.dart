@@ -66,7 +66,29 @@ class VolleyballReportBuilder {
       ));
     }
 
-    if (teams.isEmpty) return pdf;
+    // --- Fonts ---
+    pw.Font fontRegular;
+    pw.Font fontBold;
+    try {
+      final regData = await rootBundle.load('assets/fonts/times.ttf');
+      final boldData = await rootBundle.load('assets/fonts/timesbd.ttf');
+      fontRegular = pw.Font.ttf(regData);
+      fontBold = pw.Font.ttf(boldData);
+    } catch (e) {
+      print('Error loading local fonts: $e');
+      fontRegular = await PdfGoogleFonts.notoSansRegular();
+      fontBold = await PdfGoogleFonts.notoSansBold();
+    }
+    final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+
+    if (teams.isEmpty) {
+      // Add a fallback page so we don't return an empty (invalid) PDF
+      pdf.addPage(pw.Page(
+        theme: theme,
+        build: (pw.Context context) => pw.Center(child: pw.Text('Немає даних про команди')),
+      ));
+      return pdf;
+    }
 
     // Build games maps: one-direction (for standings) and two-direction (for cell lookups)
     final gamesMap = <(int, int), String>{}; // one direction only
@@ -84,21 +106,6 @@ class VolleyballReportBuilder {
         noShowPairs.add((g.teamAEntityId, g.teamBEntityId));
       }
     }
-
-    // --- Fonts ---
-    pw.Font fontRegular;
-    pw.Font fontBold;
-    try {
-      final regData = await rootBundle.load('assets/fonts/times.ttf');
-      final boldData = await rootBundle.load('assets/fonts/timesbd.ttf');
-      fontRegular = pw.Font.ttf(regData);
-      fontBold = pw.Font.ttf(boldData);
-    } catch (e) {
-      print('Error loading local fonts: $e');
-      fontRegular = await PdfGoogleFonts.notoSansRegular();
-      fontBold = await PdfGoogleFonts.notoSansBold();
-    }
-    final theme = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
 
     // --- Build context for phase helpers ---
     final ctx = _BuildContext(
@@ -207,6 +214,24 @@ class VolleyballReportBuilder {
       );
     }
 
+    // If no phase produced a page (e.g. group assignments exist but reference
+    // missing teams), fall back to a single round-robin cross-table over all
+    // teams — that's what the UI shows in simple mode, and an empty PDF would
+    // be invalid anyway.
+    if (ctx.pagesAdded == 0) {
+      _addCrossTablePage(
+        ctx: ctx,
+        subtitle: 'Крос-таблиця',
+        teams: teams,
+      );
+    }
+    if (ctx.pagesAdded == 0) {
+      pdf.addPage(pw.Page(
+        theme: theme,
+        build: (_) => pw.Center(child: pw.Text('Немає даних для звіту')),
+      ));
+    }
+
     return pdf;
   }
 
@@ -304,20 +329,23 @@ class VolleyballReportBuilder {
     final n = teams.length;
     if (n == 0) return;
 
-    // Sort teams by number
+    final standings = _calculateStandings(ctx, teams);
+    final rankMap = <int, int>{};
+    for (final s in standings) {
+      rankMap[s.teamId] = s.rank;
+    }
+
+    // Sort teams by final place (rank); fall back to team number, then name.
     final sorted = List.of(teams)
       ..sort((a, b) {
+        final aRank = rankMap[a.teamId] ?? 9999;
+        final bRank = rankMap[b.teamId] ?? 9999;
+        if (aRank != bRank) return aRank.compareTo(bRank);
         final aNum = a.teamNumber ?? 9999;
         final bNum = b.teamNumber ?? 9999;
         if (aNum != bNum) return aNum.compareTo(bNum);
         return a.teamName.compareTo(b.teamName);
       });
-
-    final standings = _calculateStandings(ctx, sorted);
-    final rankMap = <int, int>{};
-    for (final s in standings) {
-      rankMap[s.teamId] = s.rank;
-    }
 
     final useA3 = n > 8;
     final pageFormat = useA3 ? PdfPageFormat.a3.landscape : PdfPageFormat.a4.landscape;
@@ -341,11 +369,12 @@ class VolleyballReportBuilder {
         _cell('${sorted[i].teamNumber ?? (i + 1)}', hdrStyle),
       _cell('Очки', hdrStyle),
       _cell('П', hdrStyle),
-      _cell('Пр', hdrStyle),
+      _cell('Пор', hdrStyle),
       _cell('С+', hdrStyle),
       _cell('С-', hdrStyle),
       _cell('М+', hdrStyle),
       _cell('М-', hdrStyle),
+      _cell('РМ', hdrStyle),
       _cell('Місце', hdrStyle),
     ];
 
@@ -378,6 +407,7 @@ class VolleyballReportBuilder {
         _cell('${standing?.setsLost ?? 0}', cellSt),
         _cell('${standing?.pointsScored ?? 0}', cellSt),
         _cell('${standing?.pointsConceded ?? 0}', cellSt),
+        _cell(_signed((standing?.pointsScored ?? 0) - (standing?.pointsConceded ?? 0)), cellSt),
         _cell('${rankMap[team.teamId] ?? ''}', cellBold),
       ];
 
@@ -397,9 +427,11 @@ class VolleyballReportBuilder {
       2 + n + 4: const pw.FixedColumnWidth(24),
       2 + n + 5: const pw.FixedColumnWidth(26),
       2 + n + 6: const pw.FixedColumnWidth(26),
-      2 + n + 7: const pw.FixedColumnWidth(32),
+      2 + n + 7: const pw.FixedColumnWidth(28),
+      2 + n + 8: const pw.FixedColumnWidth(32),
     };
 
+    ctx.pagesAdded++;
     ctx.pdf.addPage(
       pw.MultiPage(
         pageFormat: pageFormat,
@@ -549,6 +581,7 @@ class VolleyballReportBuilder {
       2: const pw.FixedColumnWidth(100),
     };
 
+    ctx.pagesAdded++;
     ctx.pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -609,6 +642,8 @@ class VolleyballReportBuilder {
     );
   }
 
+  String _signed(int v) => v > 0 ? '+$v' : '$v';
+
   pw.Widget _cell(String text, pw.TextStyle style, {pw.Alignment align = pw.Alignment.center}) {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
@@ -648,8 +683,9 @@ class _BuildContext {
   final pw.ThemeData theme;
   final pw.Font fontRegular;
   final pw.Font fontBold;
+  int pagesAdded = 0;
 
-  const _BuildContext({
+  _BuildContext({
     required this.pdf,
     required this.tournamentName,
     required this.teams,

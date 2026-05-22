@@ -127,7 +127,7 @@ class _VolleyballGroupManagementTabState extends ConsumerState<VolleyballGroupMa
             Row(
               children: [
                 const Text(
-                  'Розподіл по групах',
+                  'Розподіл по групах (Волейбол)',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
@@ -199,7 +199,11 @@ class _VolleyballGroupManagementTabState extends ConsumerState<VolleyballGroupMa
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
-                children: unassigned.map((t) => Chip(label: Text(t.teamName))).toList(),
+                children: unassigned.map((t) => ActionChip(
+                  label: Text(t.teamName),
+                  tooltip: 'Призначити в групу',
+                  onPressed: () => _reassignTeam(t.teamId, ''),
+                )).toList(),
               ),
             ],
           ],
