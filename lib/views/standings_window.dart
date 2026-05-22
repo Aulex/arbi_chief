@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_themes.dart';
+import '../theme/display_customization.dart';
 import '../viewmodels/standings_window_provider.dart';
 
 /// Standalone app that runs in the sub-window.
@@ -26,6 +27,7 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
   StandingsSnapshot? _snapshot;
   bool _isDark = false;
   bool _highContrast = false;
+  DisplayCustomization _custom = DisplayCustomization.none;
 
   @override
   void initState() {
@@ -64,10 +66,21 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
       final prefs = await SharedPreferences.getInstance();
       final dark = prefs.getBool('dark_theme') ?? false;
       final highContrast = prefs.getBool('high_contrast') ?? false;
-      if (mounted && (dark != _isDark || highContrast != _highContrast)) {
+      Color? readColor(String key) {
+        final value = prefs.getInt(key);
+        return value == null ? null : Color(value);
+      }
+
+      final custom = DisplayCustomization(
+        backgroundColor: readColor('custom_background_color'),
+        surfaceColor: readColor('custom_surface_color'),
+        textColor: readColor('custom_text_color'),
+      );
+      if (mounted) {
         setState(() {
           _isDark = dark;
           _highContrast = highContrast;
+          _custom = custom;
         });
       }
     } catch (_) {}
@@ -78,8 +91,8 @@ class _StandingsWindowAppState extends State<StandingsWindowApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Турнірна таблиця',
-      theme: buildLightTheme(highContrast: _highContrast),
-      darkTheme: buildDarkTheme(highContrast: _highContrast),
+      theme: buildLightTheme(highContrast: _highContrast, custom: _custom),
+      darkTheme: buildDarkTheme(highContrast: _highContrast, custom: _custom),
       themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
       home: _StandingsDisplay(
         snapshot: _snapshot,

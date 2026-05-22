@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'theme/app_themes.dart';
+import 'viewmodels/display_customization_provider.dart';
 import 'viewmodels/font_scale_provider.dart';
 import 'viewmodels/high_contrast_provider.dart';
 import 'viewmodels/theme_provider.dart';
@@ -46,12 +47,13 @@ class MyApp extends ConsumerWidget {
     final isDark = ref.watch(themeProvider);
     final fontScale = ref.watch(fontScaleProvider);
     final highContrast = ref.watch(highContrastProvider);
+    final custom = ref.watch(displayCustomizationProvider);
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Tournament Manager',
-      theme: buildLightTheme(highContrast: highContrast),
-      darkTheme: buildDarkTheme(highContrast: highContrast),
+      theme: buildLightTheme(highContrast: highContrast, custom: custom),
+      darkTheme: buildDarkTheme(highContrast: highContrast, custom: custom),
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       locale: const Locale('uk'),
       supportedLocales: const [Locale('uk')],

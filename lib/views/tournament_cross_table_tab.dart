@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/player_model.dart';
 import '../models/sport_type_config.dart';
+import '../theme/app_colors.dart';
 import '../sports/table_tennis/table_tennis_providers.dart';
 import '../sports/table_tennis/table_tennis_scoring.dart' as tt_scoring;
 import '../sports/chess/chess_scoring.dart' as chess_scoring;
@@ -38,6 +39,9 @@ class CrossTableTab extends ConsumerStatefulWidget {
 
 class _CrossTableTabState extends ConsumerState<CrossTableTab>
     with SingleTickerProviderStateMixin {
+  /// Theme-aware semantic colours for the cross-table.
+  AppColors get _ct => context.appColors;
+
   late TabController _tabController;
   bool _loading = true;
   Map<int, List<({int teamId, String teamName, int? teamNumber, Player player})>> _boardPlayers = {};
@@ -2062,11 +2066,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     final isHighlighted = _hoveredTeamRow == rowIdx || _hoveredTeamCol == colIdx;
     Color? bgColor;
-    if (!hasPlayed) bgColor = isHighlighted ? Colors.indigo.shade50 : null;
-    else if (pts == 2.0) bgColor = Colors.green.shade50;
-    else if (pts == 0.0) bgColor = Colors.red.shade50;
-    else if (pts == 1.0) bgColor = Colors.amber.shade50;
-    else if (isHighlighted) bgColor = Colors.indigo.shade50;
+    if (!hasPlayed) bgColor = isHighlighted ? _ct.hoverHighlight : null;
+    else if (pts == 2.0) bgColor = _ct.resultWinBg;
+    else if (pts == 0.0) bgColor = _ct.resultLossBg;
+    else if (pts == 1.0) bgColor = _ct.resultDrawBg;
+    else if (isHighlighted) bgColor = _ct.hoverHighlight;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -2085,10 +2089,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: !hasPlayed ? Colors.grey.shade400
-                  : pts == 2.0 ? Colors.green.shade700
-                  : pts == 0.0 ? Colors.red.shade700
-                  : Colors.amber.shade800,
+              color: !hasPlayed ? _ct.mutedText
+                  : pts == 2.0 ? _ct.resultWinFg
+                  : pts == 0.0 ? _ct.resultLossFg
+                  : _ct.resultDrawFg,
             ),
           ),
         ),
@@ -2776,11 +2780,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
 
     Color? bgColor;
     if (result == 1.0) {
-      bgColor = Colors.green.shade50;
+      bgColor = _ct.resultWinBg;
     } else if (result == 0.0 && result != null) {
-      bgColor = Colors.red.shade50;
+      bgColor = _ct.resultLossBg;
     } else if (result == 0.5) {
-      bgColor = Colors.amber.shade50;
+      bgColor = _ct.resultDrawBg;
     }
 
     return Container(
@@ -2796,10 +2800,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: result == 1.0 ? Colors.green.shade700
-                    : result == 0.0 && result != null ? Colors.red.shade700
-                    : result == 0.5 ? Colors.amber.shade800
-                    : Colors.black87,
+                color: result == 1.0 ? _ct.resultWinFg
+                    : result == 0.0 && result != null ? _ct.resultLossFg
+                    : result == 0.5 ? _ct.resultDrawFg
+                    : null,
               ),
             ),
     );
@@ -2823,13 +2827,13 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     final isHighlighted = _hoveredRow == rowIdx || _hoveredCol == colIdx;
     Color? bgColor;
     if (result == 1.0) {
-      bgColor = Colors.green.shade50;
+      bgColor = _ct.resultWinBg;
     } else if (result == 0.0 && result != null) {
-      bgColor = Colors.red.shade50;
+      bgColor = _ct.resultLossBg;
     } else if (result == 0.5) {
-      bgColor = Colors.amber.shade50;
+      bgColor = _ct.resultDrawBg;
     } else if (isHighlighted) {
-      bgColor = Colors.indigo.shade50;
+      bgColor = _ct.hoverHighlight;
     }
 
     return MouseRegion(
@@ -2852,17 +2856,17 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
           child: text.isEmpty
-              ? Icon(Icons.edit_outlined, size: 12, color: Colors.grey.shade400)
+              ? Icon(Icons.edit_outlined, size: 12, color: _ct.mutedText)
               : Text(
                   text,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: result == 1.0 ? Colors.green.shade700
-                        : result == 0.0 && result != null ? Colors.red.shade700
-                        : result == 0.5 ? Colors.amber.shade800
-                        : Colors.black87,
+                    color: result == 1.0 ? _ct.resultWinFg
+                        : result == 0.0 && result != null ? _ct.resultLossFg
+                        : result == 0.5 ? _ct.resultDrawFg
+                        : null,
                   ),
                 ),
         ),

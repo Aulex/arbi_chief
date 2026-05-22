@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../theme/app_colors.dart';
 import '../../viewmodels/team_viewmodel.dart';
 import '../../viewmodels/tournament_viewmodel.dart';
 import 'streetball_providers.dart';
@@ -28,6 +29,9 @@ class StreetballCrossTableTab extends ConsumerStatefulWidget {
 
 class _StreetballCrossTableTabState
     extends ConsumerState<StreetballCrossTableTab> {
+  /// Theme-aware semantic colours for the cross-table.
+  AppColors get _ct => context.appColors;
+
   bool _loading = true;
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _teams =
       [];
@@ -797,7 +801,7 @@ class _StreetballCrossTableTabState
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        side: BorderSide(color: _ct.tableBorder, width: 1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -827,7 +831,7 @@ class _StreetballCrossTableTabState
                 const SizedBox(width: 8),
                 Text(
                   '$n команд',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: _ct.mutedText),
                 ),
               ],
             ),
@@ -837,8 +841,8 @@ class _StreetballCrossTableTabState
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.shade50,
-                  border: Border.all(color: Colors.indigo.shade100),
+                  color: _ct.bannerBg,
+                  border: Border.all(color: _ct.bannerBorder),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -846,17 +850,18 @@ class _StreetballCrossTableTabState
                   children: [
                     Text(
                       'Система проведення: $systemLabel',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, color: _ct.bannerText),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       systemDescription,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 12, color: _ct.bannerText),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Нюанси стрітболу: матч до 10 хв або 21 очка; за нічиєї після 10 хв — додатковий період до 2 очок.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      style: TextStyle(fontSize: 12, color: _ct.bannerText),
                     ),
                   ],
                 ),
@@ -889,10 +894,10 @@ class _StreetballCrossTableTabState
                           n + 7: const FixedColumnWidth(56),
                           n + 8: const FixedColumnWidth(48),
                         },
-                        border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
+                        border: TableBorder.all(color: _ct.tableBorder, width: 0.5),
                         children: [
                           TableRow(
-                            decoration: BoxDecoration(color: Colors.grey.shade100),
+                            decoration: BoxDecoration(color: _ct.tableHeaderBg),
                             children: [
                               _hc('#'),
                               _hc('Команда'),
@@ -904,8 +909,8 @@ class _StreetballCrossTableTabState
                               Container(
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade400,
-                                  border: Border.all(color: Colors.grey.shade400, width: 0.5),
+                                  color: _ct.separatorCell,
+                                  border: Border.all(color: _ct.separatorCell, width: 0.5),
                                 ),
                               ),
                               _hc('Команда'),
@@ -916,7 +921,7 @@ class _StreetballCrossTableTabState
                           for (int i = 0; i < n; i++)
                             TableRow(
                               decoration: BoxDecoration(
-                                color: _hoveredRow == i ? Colors.indigo.shade50 : null,
+                                color: _hoveredRow == i ? _ct.hoverHighlight : null,
                               ),
                               children: [
                                 _dc('${teams[i].teamNumber ?? i + 1}', bold: true),
@@ -984,11 +989,11 @@ class _StreetballCrossTableTabState
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
     {Map<(int, int), _GameData>? carryOverGames, bool readOnlyCarryOver = false,}
   ) {
-    if (i == j) return Container(height: 36, color: Colors.grey.shade300);
+    if (i == j) return Container(height: 36, color: _ct.diagonalCell);
     final tA = teams[i];
     final tB = teams[j];
     if (tA.teamId == tB.teamId) {
-      return Container(height: 36, color: Colors.grey.shade300);
+      return Container(height: 36, color: _ct.diagonalCell);
     }
     if (tA.entityId == null || tB.entityId == null) return const SizedBox(height: 36);
 
@@ -997,6 +1002,7 @@ class _StreetballCrossTableTabState
     final isRemoved = _removedTeamIds.contains(tA.teamId) || _removedTeamIds.contains(tB.teamId);
     String cellText = '';
     Color? bg;
+    Color? fg;
 
     if (game?.eventResult != null) {
       cellText = game!.eventResult!;
@@ -1004,20 +1010,33 @@ class _StreetballCrossTableTabState
       if (p.length == 2) {
         final a = int.tryParse(p[0]) ?? 0;
         final b = int.tryParse(p[1]) ?? 0;
-        bg = game?.esId == 4
-            ? Colors.orange.shade100
-            : (a > b
-                ? Colors.green.shade50
-                : a < b
-                    ? Colors.red.shade50
-                    : Colors.amber.shade50);
+        if (game?.esId == 4) {
+          bg = _ct.resultSpecialBg;
+          fg = _ct.resultSpecialFg;
+        } else if (a > b) {
+          bg = _ct.resultWinBg;
+          fg = _ct.resultWinFg;
+        } else if (a < b) {
+          bg = _ct.resultLossBg;
+          fg = _ct.resultLossFg;
+        } else {
+          bg = _ct.resultDrawBg;
+          fg = _ct.resultDrawFg;
+        }
       }
     } else if (game?.esId == 4) {
       cellText = '-';
-      bg = Colors.orange.shade100;
+      bg = _ct.resultSpecialBg;
+      fg = _ct.resultSpecialFg;
     }
-    if (isCarryOver && game == null) bg = Colors.amber.shade50;
-    if (isRemoved) bg = Colors.grey.shade200;
+    if (isCarryOver && game == null) {
+      bg = _ct.resultDrawBg;
+      fg = _ct.resultDrawFg;
+    }
+    if (isRemoved) {
+      bg = _ct.disabledCell;
+      fg = null;
+    }
     final readOnly = isRemoved || (isCarryOver && readOnlyCarryOver);
 
     return MouseRegion(
@@ -1034,12 +1053,13 @@ class _StreetballCrossTableTabState
         child: Container(
           height: 36,
           alignment: Alignment.center,
-          color: bg ?? (_hoveredRow == i || _hoveredCol == j ? Colors.indigo.shade50 : null),
+          color: bg ?? (_hoveredRow == i || _hoveredCol == j ? _ct.hoverHighlight : null),
           child: Text(
             cellText,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: cellText.isNotEmpty ? FontWeight.w500 : null,
+              fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
+              color: fg,
             ),
           ),
         ),
@@ -1204,7 +1224,7 @@ class _StreetballCrossTableTabState
   Widget _hc(String t) => Container(
         height: 36,
         alignment: Alignment.center,
-        color: Colors.grey.shade100,
+        color: _ct.tableHeaderBg,
         child: Text(
           t,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -1228,7 +1248,7 @@ class _StreetballCrossTableTabState
           n,
           style: TextStyle(
             fontSize: 12,
-            color: isRemoved ? Colors.grey : null,
+            color: isRemoved ? _ct.mutedText : null,
             decoration: isRemoved ? TextDecoration.lineThrough : null,
           ),
           overflow: TextOverflow.ellipsis,

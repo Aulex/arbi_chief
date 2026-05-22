@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/database_sync_service.dart';
+import '../theme/display_customization.dart';
+import '../viewmodels/display_customization_provider.dart';
 import '../viewmodels/font_scale_provider.dart';
 import '../viewmodels/high_contrast_provider.dart';
 import '../viewmodels/shared_providers.dart';
@@ -52,6 +54,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     final isDark = ref.watch(themeProvider);
     final fontScale = ref.watch(fontScaleProvider);
     final highContrast = ref.watch(highContrastProvider);
+    final custom = ref.watch(displayCustomizationProvider);
 
     return SingleChildScrollView(
       child: Column(
@@ -79,6 +82,29 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Готові схеми відображення',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final preset in displayPresets)
+                        ActionChip(
+                          avatar: Icon(preset.icon, size: 18),
+                          label: Text(preset.name),
+                          onPressed: () => _applyPreset(preset),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   const Divider(),
@@ -115,6 +141,52 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  _colorTile(
+                    icon: Icons.format_color_fill,
+                    iconColor: Colors.blue,
+                    title: 'Колір фону',
+                    subtitle: 'Тло вікна додатку',
+                    current: custom.backgroundColor,
+                    onPick: (c) => ref
+                        .read(displayCustomizationProvider.notifier)
+                        .setBackgroundColor(c),
+                  ),
+                  const SizedBox(height: 16),
+                  _colorTile(
+                    icon: Icons.dashboard_customize,
+                    iconColor: Colors.deepPurple,
+                    title: 'Колір форм і карток',
+                    subtitle: 'Тло панелей, таблиць та діалогів',
+                    current: custom.surfaceColor,
+                    onPick: (c) => ref
+                        .read(displayCustomizationProvider.notifier)
+                        .setSurfaceColor(c),
+                  ),
+                  const SizedBox(height: 16),
+                  _colorTile(
+                    icon: Icons.format_color_text,
+                    iconColor: Colors.redAccent,
+                    title: 'Колір тексту',
+                    subtitle: 'Основний колір шрифту',
+                    current: custom.textColor,
+                    onPick: (c) => ref
+                        .read(displayCustomizationProvider.notifier)
+                        .setTextColor(c),
+                  ),
+                  if (!custom.isEmpty) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.restart_alt, size: 18),
+                        label: const Text('Скинути кольори'),
+                        onPressed: () => ref
+                            .read(displayCustomizationProvider.notifier)
+                            .reset(),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   ListTile(
                     leading: const Icon(Icons.autorenew, color: Colors.teal),
@@ -310,6 +382,195 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   }
 
   // ────────────────────────────────────────────────────────────
+  //  Display customization
+  // ────────────────────────────────────────────────────────────
+
+  Future<void> _applyPreset(DisplayPreset preset) async {
+    if (ref.read(themeProvider) != preset.dark) {
+      await ref.read(themeProvider.notifier).toggle();
+    }
+    if (ref.read(highContrastProvider) != preset.highContrast) {
+      await ref.read(highContrastProvider.notifier).toggle();
+    }
+    await ref
+        .read(displayCustomizationProvider.notifier)
+        .apply(preset.customization);
+  }
+
+  Widget _colorTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required Color? current,
+    required Future<void> Function(Color?) onPick,
+  }) {
+    final divider = Theme.of(context).dividerColor;
+    return ListTile(
+      leading: Icon(icon, color: iconColor),
+      title: Text(title),
+      subtitle: Text(
+        current == null ? '$subtitle · за замовчуванням' : subtitle,
+      ),
+      trailing: Container(
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: current ?? Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: divider, width: 1.5),
+        ),
+        child: current == null
+            ? Icon(Icons.block,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)
+            : null,
+      ),
+      onTap: () async {
+        final choice = await _showColorPicker(current);
+        if (choice != null) {
+          await onPick(choice.color);
+        }
+      },
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: divider, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+    );
+  }
+
+  Future<_ColorChoice?> _showColorPicker(Color? current) {
+    var working = current ?? const Color(0xFFFFFFFF);
+    return showDialog<_ColorChoice>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            Widget channelSlider(String label, double value, Color tint,
+                ValueChanged<double> onChanged) {
+              return Row(
+                children: [
+                  SizedBox(width: 18, child: Text(label)),
+                  Expanded(
+                    child: Slider(
+                      value: value,
+                      activeColor: tint,
+                      onChanged: (v) => setLocal(() => onChanged(v)),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 34,
+                    child: Text('${(value * 255).round()}',
+                        textAlign: TextAlign.right),
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: const Text('Оберіть колір'),
+              content: SizedBox(
+                width: 340,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: working,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: Theme.of(ctx).dividerColor, width: 1),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    channelSlider(
+                        'R',
+                        working.r,
+                        Colors.red,
+                        (v) => working = Color.from(
+                            alpha: 1,
+                            red: v,
+                            green: working.g,
+                            blue: working.b)),
+                    channelSlider(
+                        'G',
+                        working.g,
+                        Colors.green,
+                        (v) => working = Color.from(
+                            alpha: 1,
+                            red: working.r,
+                            green: v,
+                            blue: working.b)),
+                    channelSlider(
+                        'B',
+                        working.b,
+                        Colors.blue,
+                        (v) => working = Color.from(
+                            alpha: 1,
+                            red: working.r,
+                            green: working.g,
+                            blue: v)),
+                    const SizedBox(height: 8),
+                    const Text('Швидкий вибір'),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final swatch in pickerSwatches)
+                          InkWell(
+                            onTap: () => setLocal(() => working = swatch),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: swatch,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color:
+                                      swatch.toARGB32() == working.toARGB32()
+                                          ? Theme.of(ctx).colorScheme.primary
+                                          : Theme.of(ctx).dividerColor,
+                                  width:
+                                      swatch.toARGB32() == working.toARGB32()
+                                          ? 3
+                                          : 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(const _ColorChoice(null)),
+                  child: const Text('За замовчуванням'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Скасувати'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(_ColorChoice(working)),
+                  child: const Text('Застосувати'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
   //  Action handlers
   // ────────────────────────────────────────────────────────────
 
@@ -498,4 +759,11 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       ),
     );
   }
+}
+
+/// Result of the colour picker dialog. A `null` [color] means "reset to the
+/// theme default"; a `null` choice (dialog dismissed) means "no change".
+class _ColorChoice {
+  final Color? color;
+  const _ColorChoice(this.color);
 }

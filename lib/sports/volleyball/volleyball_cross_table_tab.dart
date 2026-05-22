@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../theme/app_colors.dart';
 import '../../viewmodels/team_viewmodel.dart';
 import '../../viewmodels/tournament_viewmodel.dart';
 import 'volleyball_providers.dart';
@@ -26,6 +27,9 @@ class VolleyballCrossTableTab extends ConsumerStatefulWidget {
 }
 
 class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTab> {
+  /// Theme-aware semantic colours for the cross-table.
+  AppColors get _ct => context.appColors;
+
   bool _loading = true;
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _teams = [];
   Map<(int, int), _GameData> _games = {}; // (teamAEntityId, teamBEntityId) → data
@@ -252,7 +256,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        side: BorderSide(color: _ct.tableBorder, width: 1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -282,7 +286,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
                 const SizedBox(width: 8),
                 Text(
                   '${teams.length} команд',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: _ct.mutedText),
                 ),
               ],
             ),
@@ -347,11 +351,11 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         n + 9: const FixedColumnWidth(statsWidth),
         n + 10: const FixedColumnWidth(placeWidth),
       },
-      border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
+      border: TableBorder.all(color: _ct.tableBorder, width: 0.5),
       children: [
         // Header row
         TableRow(
-          decoration: BoxDecoration(color: Colors.grey.shade100),
+          decoration: BoxDecoration(color: _ct.tableHeaderBg),
           children: [
             _headerCell('#'),
             _headerCell('Команда'),
@@ -364,8 +368,8 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
             Container(
               height: 36,
               decoration: BoxDecoration(
-                color: Colors.grey.shade400,
-                border: Border.all(color: Colors.grey.shade400, width: 0.5),
+                color: _ct.separatorCell,
+                border: Border.all(color: _ct.separatorCell, width: 0.5),
               ),
             ),
             // Standings headers
@@ -400,12 +404,12 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     final isStandingRemoved = standingRow != null && _removedTeamIds.contains(standingRow.teamId);
 
     final defaultBg = _hoveredRow == i
-        ? Colors.indigo.shade50
+        ? _ct.hoverHighlight
         : i.isOdd
-            ? Colors.grey.shade50
+            ? _ct.disabledCell
             : null;
-    final leftBg = isRemoved ? Colors.grey.shade200 : defaultBg;
-    final rightBg = isStandingRemoved ? Colors.grey.shade200 : defaultBg;
+    final leftBg = isRemoved ? _ct.disabledCell : defaultBg;
+    final rightBg = isStandingRemoved ? _ct.disabledCell : defaultBg;
 
     return TableRow(
       children: [
@@ -466,7 +470,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     if (i == j) {
       return Container(
         height: 36,
-        color: Colors.grey.shade300,
+        color: _ct.diagonalCell,
       );
     }
 
@@ -484,24 +488,30 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
 
     String cellText = '';
     Color? bgColor;
+    Color? fgColor;
 
     if (game != null && game.detail != null) {
       cellText = scoring.formatVolleyballCell(game.detail!);
       if (scoring.isMatchWinner(game.detail!)) {
-        bgColor = Colors.green.shade50;
+        bgColor = _ct.resultWinBg;
+        fgColor = _ct.resultWinFg;
       } else {
-        bgColor = Colors.red.shade50;
+        bgColor = _ct.resultLossBg;
+        fgColor = _ct.resultLossFg;
       }
     } else if (game != null && game.esId == 4) {
       cellText = '-';
-      bgColor = Colors.orange.shade50;
+      bgColor = _ct.resultSpecialBg;
+      fgColor = _ct.resultSpecialFg;
     }
 
     if (isCarryOver && game == null) {
-      bgColor = Colors.amber.shade50;
+      bgColor = _ct.resultDrawBg;
+      fgColor = _ct.resultDrawFg;
     }
     if (isRemoved) {
-      bgColor = Colors.grey.shade200;
+      bgColor = _ct.disabledCell;
+      fgColor = null;
     }
 
     final isReadOnly = isRemoved || (isCarryOver && readOnlyCarryOver);
@@ -509,13 +519,13 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
     Widget cellWidget = Container(
       height: 36,
       alignment: Alignment.center,
-      color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? Colors.indigo.shade50 : null),
+      color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? _ct.hoverHighlight : null),
       child: Text(
         cellText,
         style: TextStyle(
           fontSize: 12,
-          fontWeight: cellText.isNotEmpty ? FontWeight.w500 : null,
-          color: isReadOnly ? Colors.grey.shade700 : null,
+          fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
+          color: isReadOnly ? _ct.mutedText : fgColor,
         ),
       ),
     );
@@ -1339,7 +1349,7 @@ class _VolleyballCrossTableTabState extends ConsumerState<VolleyballCrossTableTa
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: isRemoved ? Colors.grey : null,
+          color: isRemoved ? _ct.mutedText : null,
           decoration: isRemoved ? TextDecoration.lineThrough : null,
         ),
         overflow: TextOverflow.ellipsis,

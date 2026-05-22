@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../theme/app_colors.dart';
 import '../../viewmodels/team_viewmodel.dart';
 import 'futsal_providers.dart';
 import 'futsal_scoring.dart' as scoring;
@@ -23,6 +24,9 @@ class FutsalCrossTableTab extends ConsumerStatefulWidget {
 }
 
 class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
+  /// Theme-aware semantic colours for the cross-table.
+  AppColors get _ct => context.appColors;
+
   bool _loading = true;
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _teams = [];
   Map<(int, int), _GameData> _games = {};
@@ -135,7 +139,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
+        side: BorderSide(color: _ct.tableBorder, width: 1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -160,7 +164,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
                     onPressed: () => _confirmClearResults(),
                   ),
                 const SizedBox(width: 8),
-                Text('${teams.length} команд', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text('${teams.length} команд', style: TextStyle(fontSize: 12, color: _ct.mutedText)),
               ],
             ),
             const SizedBox(height: 12),
@@ -216,11 +220,11 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
         n + 7: const FixedColumnWidth(statsWidth),
         n + 8: const FixedColumnWidth(placeWidth),
       },
-      border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
+      border: TableBorder.all(color: _ct.tableBorder, width: 0.5),
       children: [
         // Header row
         TableRow(
-          decoration: BoxDecoration(color: Colors.grey.shade100),
+          decoration: BoxDecoration(color: _ct.tableHeaderBg),
           children: [
             _headerCell('#'),
             _headerCell('Команда'),
@@ -229,7 +233,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
             _headerCell('О'),
             _headerCell('М'),
             _headerCell('Р'),
-            Container(height: 36, decoration: BoxDecoration(color: Colors.black, border: Border.all(color: Colors.black, width: 0.5))),
+            Container(height: 36, decoration: BoxDecoration(color: _ct.separatorCell, border: Border.all(color: _ct.separatorCell, width: 0.5))),
             _headerCell('Команда'),
             _headerCell('Очки'),
             _headerCell('Місце'),
@@ -254,7 +258,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
 
     return TableRow(
       decoration: BoxDecoration(
-        color: _hoveredRow == i ? Colors.indigo.shade50 : null,
+        color: _hoveredRow == i ? _ct.hoverHighlight : null,
       ),
       children: [
         _dataCell('${team.teamNumber ?? i + 1}', bold: true),
@@ -283,7 +287,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
   ) {
     if (i == j) {
-      return Container(height: 36, color: Colors.grey.shade300);
+      return Container(height: 36, color: _ct.diagonalCell);
     }
 
     final teamA = teams[i];
@@ -296,6 +300,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
 
     String cellText = '';
     Color? bgColor;
+    Color? fgColor;
 
     if (game != null && game.eventResult != null) {
       cellText = game.eventResult!;
@@ -304,11 +309,14 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
         final a = int.tryParse(parts[0]) ?? 0;
         final b = int.tryParse(parts[1]) ?? 0;
         if (a > b) {
-          bgColor = Colors.green.shade50;
+          bgColor = _ct.resultWinBg;
+          fgColor = _ct.resultWinFg;
         } else if (a < b) {
-          bgColor = Colors.red.shade50;
+          bgColor = _ct.resultLossBg;
+          fgColor = _ct.resultLossFg;
         } else {
-          bgColor = Colors.amber.shade50;
+          bgColor = _ct.resultDrawBg;
+          fgColor = _ct.resultDrawFg;
         }
       }
     }
@@ -321,10 +329,10 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
         child: Container(
           height: 36,
           alignment: Alignment.center,
-          color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? Colors.indigo.shade50 : null),
+          color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? _ct.hoverHighlight : null),
           child: Text(
             cellText,
-            style: TextStyle(fontSize: 12, fontWeight: cellText.isNotEmpty ? FontWeight.w500 : null),
+            style: TextStyle(fontSize: 12, fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null, color: fgColor),
           ),
         ),
       ),
@@ -476,7 +484,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     return Container(
       height: 36,
       alignment: Alignment.center,
-      color: Colors.grey.shade100,
+      color: _ct.tableHeaderBg,
       child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
     );
   }
