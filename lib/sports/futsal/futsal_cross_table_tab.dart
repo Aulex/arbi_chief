@@ -8,7 +8,8 @@ import 'futsal_scoring.dart' as scoring;
 
 /// Futsal team-vs-team cross-table tab.
 ///
-/// Simple round-robin with goal-based result entry (score:score).
+/// Mode A (< 9 teams or no groups): single round-robin cross-table.
+/// Mode B (groups assigned): segmented view with per-group tables, finals, and consolation.
 class FutsalCrossTableTab extends ConsumerStatefulWidget {
   final int tId;
   final String tournamentName;
@@ -24,17 +25,27 @@ class FutsalCrossTableTab extends ConsumerStatefulWidget {
 }
 
 class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
-  /// Theme-aware semantic colours for the cross-table.
   AppColors get _ct => context.appColors;
 
   bool _loading = true;
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _teams = [];
   Map<(int, int), _GameData> _games = {};
+  Map<int, String> _groupAssignments = {};
+  int _selectedSegment = 0; // 0=Групи/Таблиця, 1=Фінал, 2=Місця 9+
+
   int? _hoveredRow;
   int? _hoveredCol;
 
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
+
+  final Map<String, ScrollController> _groupVertControllers = {};
+  final Map<String, ScrollController> _groupHorizControllers = {};
+
+  ScrollController _groupVert(String g) =>
+      _groupVertControllers.putIfAbsent(g, () => ScrollController());
+  ScrollController _groupHoriz(String g) =>
+      _groupHorizControllers.putIfAbsent(g, () => ScrollController());
 
   @override
   void initState() {
@@ -46,6 +57,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
   void dispose() {
     _verticalController.dispose();
     _horizontalController.dispose();
+    for (final c in _groupVertControllers.values) c.dispose();
+    for (final c in _groupHorizControllers.values) c.dispose();
     super.dispose();
   }
 
@@ -55,21 +68,24 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
 
     final teamList = await teamSvc.getTeamListForTournament(widget.tId);
     final games = await fSvc.getTeamGamesForTournament(widget.tId);
+    final groups = await fSvc.getGroupAssignments(widget.tId);
 
-    // Build teams with entity_ids
+    final allTeams = await teamSvc.getAllTeams();
     final teams = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
     for (final t in teamList) {
-      final allTeams = await teamSvc.getAllTeams();
       final team = allTeams.where((at) => at.team_id == t.teamId).firstOrNull;
+      var entityId = team?.entity_id;
+      if (entityId == null && team != null) {
+        entityId = await fSvc.ensureTeamEntity(t.teamId);
+      }
       teams.add((
         teamId: t.teamId,
         teamName: t.teamName,
         teamNumber: t.teamNumber,
-        entityId: team?.entity_id,
+        entityId: entityId,
       ));
     }
 
-    // Build games map (both directions for mirrored display)
     final gamesMap = <(int, int), _GameData>{};
     for (final g in games) {
       gamesMap[(g.teamAEntityId, g.teamBEntityId)] = _GameData(
@@ -85,6 +101,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     setState(() {
       _teams = teams;
       _games = gamesMap;
+      _groupAssignments = groups;
       _loading = false;
     });
   }
@@ -93,6 +110,35 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     final parts = result.split(':');
     if (parts.length != 2) return result;
     return '${parts[1]}:${parts[0]}';
+  }
+
+  bool get _useGroupMode => _groupAssignments.isNotEmpty;
+
+  List<({int teamId, String teamName, int? teamNumber, int? entityId})> _getGroupTeams(
+      String groupName) {
+    return _teams.where((t) => _groupAssignments[t.teamId] == groupName).toList();
+  }
+
+  /// Top [count] teams from a group by current standings.
+  List<({int teamId, String teamName, int? teamNumber, int? entityId})> _getTopTeamsFromGroup(
+      String groupName, int count) {
+    final groupTeams = _getGroupTeams(groupName);
+    final standings = _calculateStandings(groupTeams);
+    return standings
+        .take(count)
+        .map((s) => groupTeams.firstWhere((t) => t.teamId == s.teamId))
+        .toList();
+  }
+
+  /// Teams from position [startRank] (1-based) onward in a group.
+  List<({int teamId, String teamName, int? teamNumber, int? entityId})> _getRestTeamsFromGroup(
+      String groupName, int startRank) {
+    final groupTeams = _getGroupTeams(groupName);
+    final standings = _calculateStandings(groupTeams);
+    return standings
+        .skip(startRank - 1)
+        .map((s) => groupTeams.firstWhere((t) => t.teamId == s.teamId))
+        .toList();
   }
 
   List<scoring.FutsalStanding> _calculateStandings(
@@ -120,6 +166,26 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     );
   }
 
+  /// Build carry-over games map: only games between teams that were in the same group.
+  Map<(int, int), _GameData> _buildCarryOverGames(
+      List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams) {
+    final carryOver = <(int, int), _GameData>{};
+    for (int i = 0; i < teams.length; i++) {
+      for (int j = i + 1; j < teams.length; j++) {
+        final a = teams[i];
+        final b = teams[j];
+        if (a.entityId == null || b.entityId == null) continue;
+        final groupA = _groupAssignments[a.teamId];
+        final groupB = _groupAssignments[b.teamId];
+        if (groupA == groupB && groupA != null) {
+          final game = _games[(a.entityId!, b.entityId!)];
+          if (game != null) carryOver[(a.entityId!, b.entityId!)] = game;
+        }
+      }
+    }
+    return carryOver;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -128,12 +194,198 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       return const Center(child: Text('Додайте команди для відображення таблиці'));
     }
 
-    return _buildCrossTable(_teams);
+    if (_useGroupMode) return _buildGroupModeView();
+    return _buildRoundRobinTable(_teams, _verticalController, _horizontalController);
   }
 
-  Widget _buildCrossTable(
+  // ─── Group Mode ───────────────────────────────────────────────────────────
+
+  Widget _buildGroupModeView() {
+    final groupNames = _groupAssignments.values.toSet().toList()..sort();
+    final segments = <ButtonSegment<int>>[
+      const ButtonSegment(value: 0, label: Text('Підгрупи')),
+      const ButtonSegment(value: 1, label: Text('Фінал (місця 1–8)')),
+      const ButtonSegment(value: 2, label: Text('За місцями (9+)')),
+    ];
+
+    final validValues = segments.map((s) => s.value).toSet();
+    if (!validValues.contains(_selectedSegment)) _selectedSegment = 0;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<int>(
+              segments: segments,
+              selected: {_selectedSegment},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) => setState(() => _selectedSegment = v.first),
+            ),
+          ),
+        ),
+        Expanded(child: _buildSegmentContent(groupNames)),
+      ],
+    );
+  }
+
+  Widget _buildSegmentContent(List<String> groupNames) {
+    switch (_selectedSegment) {
+      case 0:
+        return _buildGroupsView(groupNames);
+      case 1:
+        return _buildFinalsView(groupNames);
+      case 2:
+        return _buildConsolationView(groupNames);
+      default:
+        return _buildGroupsView(groupNames);
+    }
+  }
+
+  Widget _buildGroupsView(List<String> groupNames) {
+    if (groupNames.isEmpty) {
+      return Center(
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Colors.grey.shade300, width: 1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text(
+              'Призначте команди до груп у вкладці "Групи", щоб відкрити фінальний та розрахунковий етапи.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (groupNames.length == 1) {
+      final g = groupNames.first;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('Група $g', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+          Expanded(
+            child: _buildRoundRobinTable(
+              _getGroupTeams(g),
+              _groupVert(g),
+              _groupHoriz(g),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return ListView(
+      children: [
+        for (final g in groupNames) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8, top: 8),
+            child: Text('Група $g', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+          SizedBox(
+            height: _getGroupTeams(g).length * 40.0 + 120,
+            child: _buildRoundRobinTable(
+              _getGroupTeams(g),
+              _groupVert(g),
+              _groupHoriz(g),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFinalsView(List<String> groupNames) {
+    if (groupNames.isEmpty) {
+      return const Center(child: Text('Спочатку призначте команди до груп'));
+    }
+    final finalists = groupNames.expand((g) => _getTopTeamsFromGroup(g, 2)).toList();
+    if (finalists.isEmpty) {
+      return const Center(child: Text('Спочатку проведіть груповий етап'));
+    }
+    final carryOver = _buildCarryOverGames(finalists);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Фінал — місця 1–${finalists.length} (враховуються результати підгрупового етапу)',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Expanded(
+          child: _buildRoundRobinTable(
+            finalists,
+            _verticalController,
+            _horizontalController,
+            carryOverGames: carryOver,
+            readOnlyCarryOver: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConsolationView(List<String> groupNames) {
+    if (groupNames.isEmpty) {
+      return const Center(child: Text('Спочатку призначте команди до груп'));
+    }
+
+    // Teams from position 3+ in each group
+    final consolationTeams = groupNames.expand((g) => _getRestTeamsFromGroup(g, 3)).toList();
+
+    if (consolationTeams.isEmpty) {
+      return const Center(
+        child: Text('Немає команд для розіграшу місць (потрібно по ≥ 3 команди в підгрупі)'),
+      );
+    }
+
+    // Group consolation teams into pools of ~4 for places 9-16, 17-24, etc.
+    // For simplicity, show them all in one round-robin with carry-over results.
+    final carryOver = _buildCarryOverGames(consolationTeams);
+    final startPlace = groupNames.length * 2 + 1;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Місця $startPlace+ (враховуються результати підгрупового етапу)',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Expanded(
+          child: _buildRoundRobinTable(
+            consolationTeams,
+            _verticalController,
+            _horizontalController,
+            carryOverGames: carryOver,
+            readOnlyCarryOver: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Round-Robin Cross-Table ──────────────────────────────────────────────
+
+  Widget _buildRoundRobinTable(
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
-  ) {
+    ScrollController vertCtrl,
+    ScrollController horizCtrl, {
+    Map<(int, int), _GameData>? carryOverGames,
+    bool readOnlyCarryOver = false,
+  }) {
     final standings = _calculateStandings(teams);
 
     return Card(
@@ -149,9 +401,10 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
           children: [
             Row(
               children: [
-                const Text('Турнірна таблиця', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text('Турнірна таблиця',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                if (_games.isNotEmpty)
+                if (_games.isNotEmpty && !_useGroupMode)
                   TextButton.icon(
                     icon: const Icon(Icons.delete_sweep_outlined, size: 14),
                     label: const Text('Очистити', style: TextStyle(fontSize: 11)),
@@ -161,27 +414,30 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    onPressed: () => _confirmClearResults(),
+                    onPressed: _confirmClearResults,
                   ),
                 const SizedBox(width: 8),
-                Text('${teams.length} команд', style: TextStyle(fontSize: 12, color: _ct.mutedText)),
+                Text('${teams.length} команд',
+                    style: TextStyle(fontSize: 12, color: _ct.mutedText)),
               ],
             ),
             const SizedBox(height: 12),
             Expanded(
               child: Scrollbar(
-                controller: _verticalController,
+                controller: vertCtrl,
                 thumbVisibility: true,
                 child: SingleChildScrollView(
-                  controller: _verticalController,
+                  controller: vertCtrl,
                   child: Scrollbar(
-                    controller: _horizontalController,
+                    controller: horizCtrl,
                     thumbVisibility: true,
                     notificationPredicate: (n) => n.depth == 1,
                     child: SingleChildScrollView(
-                      controller: _horizontalController,
+                      controller: horizCtrl,
                       scrollDirection: Axis.horizontal,
-                      child: _buildGrid(teams, standings),
+                      child: _buildGrid(teams, standings,
+                          carryOverGames: carryOverGames,
+                          readOnlyCarryOver: readOnlyCarryOver),
                     ),
                   ),
                 ),
@@ -195,8 +451,10 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
 
   Widget _buildGrid(
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
-    List<scoring.FutsalStanding> standings,
-  ) {
+    List<scoring.FutsalStanding> standings, {
+    Map<(int, int), _GameData>? carryOverGames,
+    bool readOnlyCarryOver = false,
+  }) {
     const cellWidth = 56.0;
     const nameWidth = 180.0;
     const rankWidth = 36.0;
@@ -212,9 +470,9 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       columnWidths: {
         0: const FixedColumnWidth(rankWidth),
         1: const FixedColumnWidth(nameWidth),
-        n + 2: const FixedColumnWidth(statsWidth), // О (Очки)
-        n + 3: const FixedColumnWidth(statsWidth), // В (Виграші)
-        n + 4: const FixedColumnWidth(statsWidth), // Р (Різниця)
+        n + 2: const FixedColumnWidth(statsWidth),
+        n + 3: const FixedColumnWidth(statsWidth),
+        n + 4: const FixedColumnWidth(statsWidth),
         n + 5: const FixedColumnWidth(separatorWidth),
         n + 6: const FixedColumnWidth(nameWidth),
         n + 7: const FixedColumnWidth(statsWidth),
@@ -222,26 +480,28 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       },
       border: TableBorder.all(color: _ct.tableBorder, width: 0.5),
       children: [
-        // Header row
         TableRow(
           decoration: BoxDecoration(color: _ct.tableHeaderBg),
           children: [
             _headerCell('#'),
             _headerCell('Команда'),
-            for (int j = 0; j < n; j++)
-              _headerCell('${teams[j].teamNumber ?? j + 1}'),
+            for (int j = 0; j < n; j++) _headerCell('${teams[j].teamNumber ?? j + 1}'),
             _headerCell('О'),
             _headerCell('М'),
             _headerCell('Р'),
-            Container(height: 36, decoration: BoxDecoration(color: _ct.separatorCell, border: Border.all(color: _ct.separatorCell, width: 0.5))),
+            Container(
+                height: 36,
+                decoration: BoxDecoration(
+                    color: _ct.separatorCell,
+                    border: Border.all(color: _ct.separatorCell, width: 0.5))),
             _headerCell('Команда'),
             _headerCell('Очки'),
             _headerCell('Місце'),
           ],
         ),
-        // Data rows
         for (int i = 0; i < n; i++)
-          _buildTeamRow(i, teams, standingsByTeam, standings),
+          _buildTeamRow(i, teams, standingsByTeam, standings,
+              carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
       ],
     );
   }
@@ -250,8 +510,10 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     int i,
     List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
     Map<int, scoring.FutsalStanding> standingsByTeam,
-    List<scoring.FutsalStanding> sortedStandings,
-  ) {
+    List<scoring.FutsalStanding> sortedStandings, {
+    Map<(int, int), _GameData>? carryOverGames,
+    bool readOnlyCarryOver = false,
+  }) {
     final team = teams[i];
     final standing = standingsByTeam[team.teamId];
     final standingRow = i < sortedStandings.length ? sortedStandings[i] : null;
@@ -264,16 +526,17 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
         _dataCell('${team.teamNumber ?? i + 1}', bold: true),
         _teamNameCell(team.teamName),
         for (int j = 0; j < teams.length; j++)
-          _buildGameCell(i, j, teams),
-        // Match points
+          _buildGameCell(i, j, teams,
+              carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
         _dataCell('${standing?.matchPoints ?? 0}', bold: true),
-        // Goals scored:conceded
         _dataCell('${standing?.goalsScored ?? 0}:${standing?.goalsConceded ?? 0}'),
-        // Goal difference
-        _dataCell('${(standing?.goalDifference ?? 0) >= 0 ? '+' : ''}${standing?.goalDifference ?? 0}'),
-        // Black separator
-        Container(height: 36, decoration: BoxDecoration(color: Colors.black, border: Border.all(color: Colors.black, width: 0.5))),
-        // Standings
+        _dataCell(
+            '${(standing?.goalDifference ?? 0) >= 0 ? '+' : ''}${standing?.goalDifference ?? 0}'),
+        Container(
+            height: 36,
+            decoration: BoxDecoration(
+                color: Colors.black,
+                border: Border.all(color: Colors.black, width: 0.5))),
         _teamNameCell(standingRow?.teamName ?? ''),
         _dataCell('${standingRow?.matchPoints ?? 0}', bold: true),
         _dataCell('${standingRow?.rank ?? i + 1}', bold: true),
@@ -284,11 +547,11 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
   Widget _buildGameCell(
     int i,
     int j,
-    List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams,
-  ) {
-    if (i == j) {
-      return Container(height: 36, color: _ct.diagonalCell);
-    }
+    List<({int teamId, String teamName, int? teamNumber, int? entityId})> teams, {
+    Map<(int, int), _GameData>? carryOverGames,
+    bool readOnlyCarryOver = false,
+  }) {
+    if (i == j) return Container(height: 36, color: _ct.diagonalCell);
 
     final teamA = teams[i];
     final teamB = teams[j];
@@ -297,6 +560,9 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     }
 
     final game = _games[(teamA.entityId!, teamB.entityId!)];
+    final isCarryOver = carryOverGames != null &&
+        (carryOverGames.containsKey((teamA.entityId!, teamB.entityId!)) ||
+            carryOverGames.containsKey((teamB.entityId!, teamA.entityId!)));
 
     String cellText = '';
     Color? bgColor;
@@ -321,18 +587,46 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       }
     }
 
+    if (isCarryOver && readOnlyCarryOver) {
+      return Container(
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bgColor ?? Colors.grey.shade200,
+          border: Border.all(color: Colors.grey.shade400, width: 0.5),
+        ),
+        child: Text(
+          cellText,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
+              color: fgColor ?? Colors.grey.shade600),
+        ),
+      );
+    }
+
     return MouseRegion(
-      onEnter: (_) => setState(() { _hoveredRow = i; _hoveredCol = j; }),
-      onExit: (_) => setState(() { _hoveredRow = null; _hoveredCol = null; }),
+      onEnter: (_) => setState(() {
+        _hoveredRow = i;
+        _hoveredCol = j;
+      }),
+      onExit: (_) => setState(() {
+        _hoveredRow = null;
+        _hoveredCol = null;
+      }),
       child: GestureDetector(
         onTap: () => _showScoreDialog(teamA, teamB, game),
         child: Container(
           height: 36,
           alignment: Alignment.center,
-          color: bgColor ?? (_hoveredCol == j && _hoveredRow == i ? _ct.hoverHighlight : null),
+          color: bgColor ??
+              (_hoveredCol == j && _hoveredRow == i ? _ct.hoverHighlight : null),
           child: Text(
             cellText,
-            style: TextStyle(fontSize: 12, fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null, color: fgColor),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
+                color: fgColor),
           ),
         ),
       ),
@@ -344,7 +638,6 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     ({int teamId, String teamName, int? teamNumber, int? entityId}) teamB,
     _GameData? existingGame,
   ) async {
-    // Parse existing score
     int existingGoalsA = 0;
     int existingGoalsB = 0;
     if (existingGame?.eventResult != null) {
@@ -355,13 +648,16 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       }
     }
 
-    final goalsAController = TextEditingController(text: existingGoalsA > 0 ? '$existingGoalsA' : '');
-    final goalsBController = TextEditingController(text: existingGoalsB > 0 ? '$existingGoalsB' : '');
+    final goalsAController =
+        TextEditingController(text: existingGoalsA > 0 ? '$existingGoalsA' : '');
+    final goalsBController =
+        TextEditingController(text: existingGoalsB > 0 ? '$existingGoalsB' : '');
 
     final result = await showDialog<({int goalsA, int goalsB})?>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('${teamA.teamName}  vs  ${teamB.teamName}', style: const TextStyle(fontSize: 16)),
+        title: Text('${teamA.teamName}  vs  ${teamB.teamName}',
+            style: const TextStyle(fontSize: 16)),
         content: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -373,7 +669,9 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 textAlign: TextAlign.center,
                 decoration: InputDecoration(
-                  labelText: teamA.teamName.length > 10 ? teamA.teamName.substring(0, 10) : teamA.teamName,
+                  labelText: teamA.teamName.length > 10
+                      ? teamA.teamName.substring(0, 10)
+                      : teamA.teamName,
                   border: const OutlineInputBorder(),
                 ),
                 autofocus: true,
@@ -391,7 +689,9 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 textAlign: TextAlign.center,
                 decoration: InputDecoration(
-                  labelText: teamB.teamName.length > 10 ? teamB.teamName.substring(0, 10) : teamB.teamName,
+                  labelText: teamB.teamName.length > 10
+                      ? teamB.teamName.substring(0, 10)
+                      : teamB.teamName,
                   border: const OutlineInputBorder(),
                 ),
               ),
@@ -493,7 +793,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     return Container(
       height: 36,
       alignment: Alignment.center,
-      child: Text(text, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : null)),
+      child:
+          Text(text, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.bold : null)),
     );
   }
 
@@ -502,7 +803,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       height: 36,
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Text(name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+      child: Text(name,
+          style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
     );
   }
 }

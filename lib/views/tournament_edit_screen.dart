@@ -12,6 +12,7 @@ import '../sports/volleyball/volleyball_cross_table_tab.dart';
 import '../sports/volleyball/volleyball_group_management_tab.dart';
 import '../sports/arm_wrestling/arm_wrestling_team_standings_tab.dart';
 import '../sports/futsal/futsal_cross_table_tab.dart';
+import '../sports/futsal/futsal_group_management_tab.dart';
 import '../sports/basketball/basketball_cross_table_tab.dart';
 import '../sports/basketball/basketball_group_management_tab.dart';
 import '../sports/streetball/streetball_cross_table_tab.dart';
@@ -49,10 +50,12 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
   bool get _isVolleyball => isVolleyball(widget.tournament.t_type);
   bool get _isStreetball => widget.tournament.t_type == 5;
   bool get _isBasketball => widget.tournament.t_type == 4;
+  bool get _isFutsal => widget.tournament.t_type == 2;
   bool get _isArmWrestling => isArmWrestling(widget.tournament.t_type);
   int _volleyballTeamCount = 0;
   int _basketballTeamCount = 0;
   int _streetballTeamCount = 0;
+  int _futsalTeamCount = 0;
   TabController? _tabController;
 
   @override
@@ -71,6 +74,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (_isVolleyball) return _volleyballTeamCount >= 9 ? 5 : 4;
     if (_isBasketball) return _basketballTeamCount >= 9 ? 5 : 4;
     if (_isStreetball) return _streetballTeamCount >= 9 ? 5 : 4;
+    if (_isFutsal) return _futsalTeamCount >= 9 ? 5 : 4;
     return 4;
   }
 
@@ -80,7 +84,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
       int newIndex = _tabController?.index ?? 0;
       
       // If tab count changes for Volleyball (Groups tab added/removed), adjust index
-      if (_tabController != null && (_isVolleyball || _isBasketball || _isStreetball)) {
+      if (_tabController != null && (_isVolleyball || _isBasketball || _isStreetball || _isFutsal)) {
         if (_tabController!.length == 4 && neededLength == 5) {
           // Groups tab added at index 1
           if (newIndex >= 1) newIndex++;
@@ -113,6 +117,9 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (_isStreetball) {
       _loadStreetballTeamCount();
     }
+    if (_isFutsal) {
+      _loadFutsalTeamCount();
+    }
   }
 
   Future<void> _loadBasketballTeamCount() async {
@@ -143,6 +150,17 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (mounted) {
       setState(() {
         _streetballTeamCount = teams.length;
+        _ensureTabController();
+      });
+    }
+  }
+
+  Future<void> _loadFutsalTeamCount() async {
+    final teamSvc = ref.read(teamServiceProvider);
+    final teams = await teamSvc.getTeamListForTournament(widget.tournament.t_id!);
+    if (mounted) {
+      setState(() {
+        _futsalTeamCount = teams.length;
         _ensureTabController();
       });
     }
@@ -306,18 +324,23 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig, onTeamsChanged: _loadVolleyballTeamCount),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
-    } else if (widget.tournament.t_type == 2) { // Futsal
-      tabCount = 4;
-      tabs = const [
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
+    } else if (_isFutsal) { // Futsal
+      final showGroups = _futsalTeamCount >= 9;
+      tabCount = showGroups ? 5 : 4;
+      tabs = [
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
+        if (showGroups)
+          const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.group_work_outlined, size: 18), SizedBox(width: 6), Text('Групи')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
+        const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.settings_outlined, size: 18), SizedBox(width: 6), Text('Налаштування')])),
       ];
       tabViews = [
         FutsalCrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name),
+        if (showGroups)
+          FutsalGroupManagementTab(tId: widget.tournament.t_id!),
         TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
-        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
+        TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig, onTeamsChanged: _loadFutsalTeamCount),
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (_isBasketball) { // Basketball

@@ -1,8 +1,10 @@
+import 'dart:math';
 import '../../services/database_service.dart';
 
 /// Futsal-specific database operations.
 ///
-/// Handles team-vs-team game CRUD with goal results.
+/// Handles team-vs-team game CRUD with goal results, group assignments,
+/// and no-show/removal tracking.
 class FutsalService {
   final DatabaseService _dbService;
   FutsalService(this._dbService);
@@ -172,5 +174,137 @@ class FutsalService {
       await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
       await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
     });
+  }
+
+  // --- Group Management (attr_id = 11) ---
+
+  Future<Map<int, String>> getGroupAssignments(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 11',
+      whereArgs: [tId],
+    );
+    final result = <int, String>{};
+    for (final row in rows) {
+      final teamId = row['team_id'] as int;
+      final group = row['attr_value'] as String? ?? '';
+      if (group.isNotEmpty) result[teamId] = group;
+    }
+    return result;
+  }
+
+  Future<void> setGroupAssignment(int tId, int teamId, String group) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 11',
+      whereArgs: [tId, teamId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'CMP_TEAM_ATTR',
+        {'attr_value': group},
+        where: 'ta_id = ?',
+        whereArgs: [existing.first['ta_id']],
+      );
+    } else {
+      await db.insert('CMP_TEAM_ATTR', {
+        'team_id': teamId,
+        't_id': tId,
+        'attr_id': 11,
+        'attr_value': group,
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_fgrp_$teamId',
+      });
+    }
+  }
+
+  Future<void> clearGroupAssignments(int tId) async {
+    final db = await _dbService.database;
+    await db.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 11', whereArgs: [tId]);
+  }
+
+  /// Distribute teams randomly into groups of 3–5.
+  Future<void> autoAssignGroups(int tId, List<int> teamIds) async {
+    if (teamIds.isEmpty) return;
+    final db = await _dbService.database;
+
+    final n = teamIds.length;
+    // Aim for groups of 3-5; start with groups of 4
+    int groupCount = (n / 4).ceil().clamp(2, n);
+    // Ensure no group is smaller than 3 if possible
+    while (groupCount > 1 && (n / groupCount).floor() < 3) {
+      groupCount--;
+    }
+
+    final shuffled = List<int>.from(teamIds)..shuffle(Random());
+    final groupNames = List.generate(groupCount, (i) => String.fromCharCode(65 + i));
+
+    await db.transaction((txn) async {
+      await txn.delete('CMP_TEAM_ATTR', where: 't_id = ? AND attr_id = 11', whereArgs: [tId]);
+      for (int i = 0; i < shuffled.length; i++) {
+        await txn.insert('CMP_TEAM_ATTR', {
+          'team_id': shuffled[i],
+          't_id': tId,
+          'attr_id': 11,
+          'attr_value': groupNames[i % groupCount],
+          'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_fgrp_${shuffled[i]}',
+        });
+      }
+    });
+  }
+
+  // --- No-Show / Removal (attr_id = 10) ---
+
+  Future<Set<int>> getRemovedTeamIds(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 10 AND attr_value = ?',
+      whereArgs: [tId, 'removed'],
+    );
+    return rows.map((r) => r['team_id'] as int).toSet();
+  }
+
+  Future<void> markTeamRemoved(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 10',
+      whereArgs: [tId, teamId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'CMP_TEAM_ATTR',
+        {'attr_value': 'removed'},
+        where: 'ta_id = ?',
+        whereArgs: [existing.first['ta_id']],
+      );
+    } else {
+      await db.insert('CMP_TEAM_ATTR', {
+        'team_id': teamId,
+        't_id': tId,
+        'attr_id': 10,
+        'attr_value': 'removed',
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_frem_$teamId',
+      });
+    }
+  }
+
+  Future<void> unmarkTeamRemoved(int tId, int teamId) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 10 AND attr_value = ?',
+      whereArgs: [tId, teamId, 'removed'],
+    );
+  }
+
+  /// Public helper: ensure a team entity exists.
+  Future<int> ensureTeamEntity(int teamId) async {
+    final db = await _dbService.database;
+    return _dbService.ensureTeamEntity(db, teamId);
   }
 }
