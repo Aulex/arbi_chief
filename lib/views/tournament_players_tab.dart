@@ -21,6 +21,8 @@ class TournamentPlayersTab extends ConsumerStatefulWidget {
   ConsumerState<TournamentPlayersTab> createState() => TournamentPlayersTabState();
 }
 
+enum _PlayerSortKey { number, name, age }
+
 class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   List<Player> _participants = [];
   List<Player> _available = [];
@@ -30,6 +32,70 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   bool _loading = true;
   String _search = '';
   final FocusNode _focusNode = FocusNode();
+  late _PlayerSortKey _sortKey = _usesAgeCategories
+      ? _PlayerSortKey.number
+      : _PlayerSortKey.name;
+  bool _sortAsc = true;
+  int? _hoveredRow;
+
+  int _ageFor(Player p) {
+    if (_usesAgeCategories && p.player_id != null) {
+      final yob = _playerYearsOfBirth[p.player_id!];
+      final ref = _referenceYear;
+      if (yob != null && ref != null) return ref - yob;
+    }
+    return p.player_age ?? 0;
+  }
+
+  int _compareForSort(Player a, Player b) {
+    int cmp;
+    switch (_sortKey) {
+      case _PlayerSortKey.number:
+        final na = a.player_id == null ? null : _playerNumbers[a.player_id!];
+        final nb = b.player_id == null ? null : _playerNumbers[b.player_id!];
+        if (na == null && nb == null) {
+          cmp = 0;
+        } else if (na == null) {
+          cmp = 1;
+        } else if (nb == null) {
+          cmp = -1;
+        } else {
+          cmp = na.compareTo(nb);
+        }
+        break;
+      case _PlayerSortKey.name:
+        cmp = a.player_surname.toLowerCase().compareTo(b.player_surname.toLowerCase());
+        break;
+      case _PlayerSortKey.age:
+        final aa = _ageFor(a);
+        final ab = _ageFor(b);
+        if (aa == 0 && ab == 0) {
+          cmp = 0;
+        } else if (aa == 0) {
+          cmp = 1;
+        } else if (ab == 0) {
+          cmp = -1;
+        } else {
+          cmp = aa.compareTo(ab);
+        }
+        break;
+    }
+    if (cmp == 0) {
+      cmp = a.player_surname.toLowerCase().compareTo(b.player_surname.toLowerCase());
+    }
+    return _sortAsc ? cmp : -cmp;
+  }
+
+  void _setSort(_PlayerSortKey key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = true;
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -1374,9 +1440,12 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
-    final filtered = _search.isEmpty
-        ? _participants
-        : _participants.where((p) => p.fullName.toLowerCase().contains(_search.toLowerCase())).toList();
+    final filtered = (_search.isEmpty
+            ? List<Player>.from(_participants)
+            : _participants
+                .where((p) => p.fullName.toLowerCase().contains(_search.toLowerCase()))
+                .toList())
+      ..sort(_compareForSort);
 
     return Focus(
       focusNode: _focusNode,
@@ -1475,6 +1544,18 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
               ),
               onChanged: (v) => setState(() => _search = v),
             ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('Сортувати:', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                if (_usesAgeCategories) _buildSortChip(_PlayerSortKey.number, '№'),
+                _buildSortChip(_PlayerSortKey.name, 'ПІБ'),
+                _buildSortChip(_PlayerSortKey.age, 'Вік'),
+              ],
+            ),
             const Divider(height: 24),
             Expanded(
               child: filtered.isEmpty
@@ -1488,7 +1569,15 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         final number = player.player_id == null
                             ? null
                             : _playerNumbers[player.player_id!];
-                        return ListTile(
+                        final isHovered = _hoveredRow == index;
+                        return MouseRegion(
+                        onEnter: (_) => setState(() => _hoveredRow = index),
+                        onExit: (_) {
+                          if (_hoveredRow == index) setState(() => _hoveredRow = null);
+                        },
+                        child: Container(
+                        color: isHovered ? Colors.indigo.shade50 : null,
+                        child: ListTile(
                           leading: isAthletics
                               ? Container(
                                   width: 44,
@@ -1559,6 +1648,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                             ],
                           ),
                           contentPadding: EdgeInsets.zero,
+                        ),
+                        ),
                         );
                       },
                     ),
@@ -1566,6 +1657,45 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  Widget _buildSortChip(_PlayerSortKey key, String label) {
+    final isActive = _sortKey == key;
+    return InkWell(
+      onTap: () => _setSort(key),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.indigo.shade50 : Colors.transparent,
+          border: Border.all(
+            color: isActive ? Colors.indigo.shade300 : Colors.grey.shade400,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                color: isActive ? Colors.indigo.shade700 : Colors.black87,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(width: 2),
+              Icon(
+                _sortAsc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                size: 16,
+                color: Colors.indigo.shade700,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

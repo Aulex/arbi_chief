@@ -144,6 +144,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     with AutomaticKeepAliveClientMixin {
   List<RankedCyclingResult> _standings = [];
   bool _loading = true;
+  int? _hoveredRow;
 
   @override
   bool get wantKeepAlive => true;
@@ -493,37 +494,45 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
 
         return Column(
           children: [
-            // Header with add button
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            // Header: category name (max left) | buttons (max right)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  widget.category.fullName,
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                FilledButton.icon(
-                  onPressed: _showBulkImportDialog,
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Імпорт'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade400,
+                Expanded(
+                  child: Text(
+                    '${widget.category.fullName} (${_standings.length})',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-                FilledButton.icon(
-                  onPressed: _addResult,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Додати'),
-                ),
-                FilledButton.icon(
-                  onPressed: _clearResults,
-                  icon: const Icon(Icons.clear_all, size: 18),
-                  label: const Text('Очистити'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red.shade400,
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _showBulkImportDialog,
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text('Імпорт'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.indigo.shade400,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _addResult,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Додати'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _clearResults,
+                      icon: const Icon(Icons.clear_all, size: 18),
+                      label: const Text('Очистити'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red.shade400,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -559,44 +568,161 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
   }
 
   Widget _buildResultsTable(double availableWidth, bool isNarrow) {
+    // Determine the № column width from the widest player number text.
+    final tp = TextPainter(textDirection: TextDirection.ltr);
+    double maxNumW = 0;
+    final numStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      color: Colors.indigo.shade700,
+      fontSize: 13,
+    );
+    for (final r in _standings) {
+      final t = r.playerNumber != null ? '${r.playerNumber}' : '—';
+      tp.text = TextSpan(text: t, style: numStyle);
+      tp.layout();
+      if (tp.width > maxNumW) maxNumW = tp.width;
+    }
+    // Header label '№' too.
+    final headerStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w800,
+      color: Colors.grey.shade900,
+    );
+    tp.text = TextSpan(text: '№', style: headerStyle);
+    tp.layout();
+    if (tp.width > maxNumW) maxNumW = tp.width;
+    final numColW = maxNumW + 16; // padding
+
+    final actionsW = isNarrow ? 48.0 : 96.0;
+    final placeW = 56.0;
+    final timeW = 110.0;
+    final ageW = 56.0;
+    final hPad = isNarrow ? 8.0 : 16.0;
+
+    Widget headerCell(String text, {double? width, int? flex, TextAlign align = TextAlign.left}) {
+      final child = Text(text, style: headerStyle, textAlign: align);
+      final wrapped = Padding(
+        padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 12),
+        child: Align(
+          alignment: align == TextAlign.center
+              ? Alignment.center
+              : align == TextAlign.right
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+          child: child,
+        ),
+      );
+      if (flex != null) return Expanded(flex: flex, child: wrapped);
+      return SizedBox(width: width, child: wrapped);
+    }
+
     return SizedBox(
       width: availableWidth,
-      child: DataTable(
-        columnSpacing: isNarrow ? 12 : 24,
-        horizontalMargin: isNarrow ? 8 : 24,
-        headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
-        columns: const [
-          DataColumn(label: Text('№', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-          DataColumn(label: Text('ПІБ', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Вік', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Час', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('М', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-          DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade400, width: 1.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                headerCell('№', width: numColW, align: TextAlign.left),
+                headerCell('ПІБ', flex: 3),
+                headerCell('Команда', flex: 2),
+                headerCell('Вік', width: ageW, align: TextAlign.center),
+                headerCell('Час', width: timeW, align: TextAlign.center),
+                headerCell('М', width: placeW, align: TextAlign.center),
+                SizedBox(width: actionsW),
+              ],
+            ),
+          ),
+          for (int i = 0; i < _standings.length; i++)
+            _buildResultRow(i, _standings[i], numColW, ageW, timeW, placeW, actionsW, hPad, isNarrow),
         ],
-        rows: _standings.map((r) {
-          return DataRow(
-            cells: [
-              DataCell(Text(
+      ),
+    );
+  }
+
+  Widget _buildResultRow(
+    int index,
+    RankedCyclingResult r,
+    double numColW,
+    double ageW,
+    double timeW,
+    double placeW,
+    double actionsW,
+    double hPad,
+    bool isNarrow,
+  ) {
+    final isHovered = _hoveredRow == index;
+    final cellStyle = const TextStyle(fontSize: 13);
+    final numStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      color: r.playerNumber != null
+          ? Colors.indigo.shade700
+          : Colors.grey.shade500,
+      fontSize: 13,
+    );
+
+    Widget cell({double? width, int? flex, required Widget child, AlignmentGeometry align = Alignment.centerLeft}) {
+      final wrapped = Padding(
+        padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 10),
+        child: Align(alignment: align, child: child),
+      );
+      if (flex != null) return Expanded(flex: flex, child: wrapped);
+      return SizedBox(width: width, child: wrapped);
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRow = index),
+      onExit: (_) {
+        if (_hoveredRow == index) setState(() => _hoveredRow = null);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isHovered ? Colors.indigo.shade50 : null,
+          border: Border(
+            bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+          ),
+        ),
+        child: Row(
+          children: [
+            cell(
+              width: numColW,
+              align: Alignment.centerLeft,
+              child: Text(
                 r.playerNumber != null ? '${r.playerNumber}' : '—',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: r.playerNumber != null
-                      ? Colors.indigo.shade700
-                      : Colors.grey.shade500,
-                ),
-              )),
-              DataCell(Text(r.playerName ?? '')),
-              DataCell(Text(r.teamName ?? '')),
-              DataCell(Text('${r.age > 0 ? r.age : '-'}')),
-              DataCell(Text(
+                style: numStyle,
+              ),
+            ),
+            cell(flex: 3, child: Text(r.playerName ?? '', style: cellStyle, overflow: TextOverflow.ellipsis)),
+            cell(flex: 2, child: Text(r.teamName ?? '', style: cellStyle, overflow: TextOverflow.ellipsis)),
+            cell(
+              width: ageW,
+              align: Alignment.center,
+              child: Text('${r.age > 0 ? r.age : '-'}', style: cellStyle),
+            ),
+            cell(
+              width: timeW,
+              align: Alignment.center,
+              child: Text(
                 r.result != null ? r.result!.timeFormatted : '—',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-              )),
-              DataCell(Text(
+              ),
+            ),
+            cell(
+              width: placeW,
+              align: Alignment.center,
+              child: Text(
                 r.place > 0 ? '${r.place}' : '—',
                 style: TextStyle(
-                  fontWeight: r.place > 0 && r.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                  fontWeight: r.place > 0 && r.place <= 3
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                   color: r.place == 1
                       ? Colors.amber.shade800
                       : r.place == 2
@@ -605,12 +731,17 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                               ? Colors.brown
                               : null,
                 ),
-              )),
-              DataCell(Row(
+              ),
+            ),
+            SizedBox(
+              width: actionsW,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: Icon(r.result == null ? Icons.add_circle_outline : Icons.edit_outlined, size: 18),
+                    icon: Icon(
+                        r.result == null ? Icons.add_circle_outline : Icons.edit_outlined,
+                        size: 18),
                     onPressed: () => _editResult(r),
                     tooltip: r.result == null ? 'Додати результат' : 'Редагувати',
                   ),
@@ -622,10 +753,10 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                       tooltip: 'Видалити',
                     ),
                 ],
-              )),
-            ],
-          );
-        }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1064,6 +1195,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
   bool _wasVisible = true; // starts visible on this tab
   _ParticipantSortKey _sortKey = _ParticipantSortKey.number;
   bool _sortAsc = true;
+  int? _hoveredRow;
 
   @override
   bool get wantKeepAlive => true;
@@ -1349,7 +1481,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       children: [
         Text(
           'Всі учасники (${_rows.length})',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
@@ -1373,7 +1505,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
                     itemCount: _rows.length,
                     separatorBuilder: (_, __) => Divider(
                       height: 1, color: Colors.grey.shade200),
-                    itemBuilder: (context, i) => _buildRow(_rows[i]),
+                    itemBuilder: (context, i) => _buildRow(_rows[i], i),
                   ),
                 ),
               ],
@@ -1392,15 +1524,15 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
 
   Widget _buildHeader() {
     final st = TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.bold,
-      color: Colors.grey.shade700,
+      fontSize: 14,
+      fontWeight: FontWeight.w800,
+      color: Colors.grey.shade900,
     );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+        color: Colors.grey.shade200,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade400, width: 1.5)),
       ),
       child: Row(
         children: [
@@ -1510,20 +1642,27 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     return SizedBox(width: width, child: content);
   }
 
-  Widget _buildRow(_ParticipantRowState row) {
+  Widget _buildRow(_ParticipantRowState row, int index) {
     final allowed = CyclingCategory.allowedCategoriesFor(row.entry.autoCategory);
     // Defensive: if a stored override is no longer allowed (e.g. rules changed),
     // include it in the items so the dropdown can still display the value.
     final items = {...allowed, row.selectedCategory}.toList();
     final overridden = row.selectedCategory != row.entry.autoCategory;
+    final isHovered = _hoveredRow == index;
 
     return Focus(
       canRequestFocus: false,
       onFocusChange: (hasFocus) {
         if (!hasFocus) _saveRow(row);
       },
-      child: Container(
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hoveredRow = index),
+        onExit: (_) {
+          if (_hoveredRow == index) setState(() => _hoveredRow = null);
+        },
+        child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        color: isHovered ? Colors.indigo.shade50 : null,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -1638,6 +1777,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
             ),
           ],
         ),
+      ),
       ),
     );
   }
