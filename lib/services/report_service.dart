@@ -14,6 +14,8 @@ import '../sports/volleyball/volleyball_report_builder.dart';
 import '../sports/volleyball/volleyball_service.dart';
 import '../sports/streetball/streetball_report_builder.dart';
 import '../sports/streetball/streetball_service.dart';
+import '../sports/futsal/futsal_report_builder.dart';
+import '../sports/futsal/futsal_service.dart';
 import '../sports/athletics/athletics_report_builder.dart';
 import '../sports/athletics/athletics_service.dart';
 import '../sports/cycling/cycling_report_builder.dart';
@@ -28,6 +30,7 @@ class ReportService {
   final StreetballService _streetballService;
   final AthleticsService _athleticsService;
   final CyclingService _cyclingService;
+  final FutsalService _futsalService;
 
   ReportService(
     this._teamService,
@@ -36,6 +39,7 @@ class ReportService {
     this._streetballService,
     this._athleticsService,
     this._cyclingService,
+    this._futsalService,
   );
 
   /// Load all data needed for a tournament report.
@@ -359,6 +363,9 @@ class ReportService {
     }
     if (isStreetball(sportType)) {
       return StreetballReportBuilder(_streetballService, _teamService, _tournamentService).hasData(tId);
+    }
+    if (sportType == 2) {
+      return FutsalReportBuilder(_futsalService, _teamService, _tournamentService).hasData(tId);
     }
     // Other team sports: not yet implemented — return false
     return false;
@@ -739,6 +746,10 @@ class ReportService {
     }
     if (isStreetball(tournament.t_type)) {
       return StreetballReportBuilder(_streetballService, _teamService, _tournamentService)
+          .buildPdf(tournament, config);
+    }
+    if (tournament.t_type == 2) {
+      return FutsalReportBuilder(_futsalService, _teamService, _tournamentService)
           .buildPdf(tournament, config);
     }
     // Fallback: return empty document for unimplemented team sports
