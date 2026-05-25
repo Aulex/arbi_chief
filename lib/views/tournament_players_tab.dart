@@ -5,6 +5,8 @@ import '../models/player_model.dart';
 import '../models/team_model.dart';
 import '../sports/athletics/athletics_model.dart';
 import '../sports/athletics/athletics_providers.dart';
+import '../sports/arm_wrestling/arm_wrestling_providers.dart';
+import '../sports/arm_wrestling/arm_wrestling_scoring.dart';
 import '../sports/cycling/cycling_model.dart';
 import '../sports/cycling/cycling_providers.dart';
 import '../viewmodels/player_viewmodel.dart';
@@ -521,7 +523,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   void _showBulkImportTeamsDialog() {
     _focusNode.unfocus();
     final textC = TextEditingController();
-    int format = 0; // 0: ПІБ + Команда, 1: ПІ + Команда
+    final isArm = widget.tType == 9;
+    // 0: ПІБ + Команда, 1: ПІ + Команда, 2: Армрестлінг (ПІБ + Команда + Вага)
+    int format = isArm ? 2 : 0;
     bool importing = false;
     String? error;
 
@@ -533,12 +537,50 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     // year/category and the trailing number).
     List<_ParsedTeamPlayer> parseText(String text, int fmt) {
       final usesAgeCats = _usesAgeCategories;
-      final nameWords = fmt == 0 ? 3 : 2;
+      final isArmFmt = fmt == 2;
+      final nameWords = fmt == 1 ? 2 : 3;
       text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedTeamPlayer>[];
 
       for (final line in lines) {
+        if (isArmFmt) {
+          // Arm wrestling: \u041F\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0406\u043C'\u044F \u041F\u043E \u0431\u0430\u0442\u044C\u043A\u043E\u0432\u0456 [TAB/;] \u041A\u043E\u043C\u0430\u043D\u0434\u0430 [TAB/;] \u0412\u0430\u0433\u0430
+          final fields = line
+              .split(RegExp(r'\t|;'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          String nameBlock;
+          String teamName;
+          String? weightStr;
+          if (fields.length >= 3) {
+            nameBlock = fields[0];
+            weightStr = fields.last;
+            teamName = fields.sublist(1, fields.length - 1).join(' ');
+          } else {
+            final w = line.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+            if (w.length < 5) continue; // need surname+name+lastname+team+weight
+            nameBlock = w.sublist(0, 3).join(' ');
+            weightStr = w.last;
+            teamName = w.sublist(3, w.length - 1).join(' ');
+          }
+          final nameParts = nameBlock.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+          if (nameParts.length < 2 || teamName.isEmpty) continue;
+          final surname = nameParts[0];
+          final name = nameParts[1];
+          final lastname = nameParts.length > 2 ? nameParts.sublist(2).join(' ') : '';
+          final weight = double.tryParse(weightStr.replaceAll(',', '.'));
+          if (weight == null || weight <= 0) continue;
+          result.add(_ParsedTeamPlayer(
+            teamName: teamName,
+            surname: surname,
+            name: name,
+            lastname: lastname,
+            weight: weight,
+          ));
+          continue;
+        }
         final fields = line
             .split(RegExp(r'\t|;'))
             .map((s) => s.trim())
@@ -660,11 +702,23 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           selected: format == 1,
                           onSelected: (v) => setST(() => format = 1),
                         ),
+                        if (isArm) ...[
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Армрестлінг (ПІБ + Команда + Вага)'),
+                            selected: format == 2,
+                            onSelected: (v) => setST(() => format = 2),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       () {
+                        if (format == 2) {
+                          return 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вага (кг) — через TAB/;. '
+                              'Вагова категорія визначається автоматично (≤70, ≤80, ≤90, ≤100, >100).';
+                        }
                         final namePart = format == 0
                             ? 'Прізвище  Ім\'я  По батькові'
                             : 'Прізвище  Ім\'я';
@@ -735,6 +789,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                               if (p.yob != null) '${p.yob}',
                                               if (p.category != null) p.category!,
                                               if (p.playerNumber != null) '№${p.playerNumber}',
+                                              if (p.weight != null)
+                                                '${p.weight!.toStringAsFixed(1)} кг → '
+                                                '${WeightCategory.fromId(armCategoryFromWeight(p.weight!))?.label ?? ''}',
                                             ].join(', ');
                                             return '${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($extra)';
                                           }(),
@@ -897,6 +954,24 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                       }
 
                                       totalPlayers += playerIdsInGroup.length;
+                                    }
+
+                                    // Arm wrestling: save weight + assign weight category per player.
+                                    if (format == 2) {
+                                      final armSvc = ref.read(armWrestlingServiceProvider);
+                                      for (final p in allValidPlayers) {
+                                        if (p.weight == null || p.tempId == null) continue;
+                                        await armSvc.savePlayerWeight(
+                                          playerId: p.tempId!,
+                                          tId: widget.tId,
+                                          weight: p.weight!,
+                                        );
+                                        await armSvc.setWeightCategory(
+                                          widget.tId,
+                                          p.tempId!,
+                                          armCategoryFromWeight(p.weight!),
+                                        );
+                                      }
                                     }
 
                                     if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1717,6 +1792,7 @@ class _ParsedTeamPlayer {
   final int? yob;
   final String? category;
   final int? playerNumber;
+  final double? weight;
   int? tempId;
 
   _ParsedTeamPlayer({
@@ -1727,5 +1803,15 @@ class _ParsedTeamPlayer {
     this.yob,
     this.category,
     this.playerNumber,
+    this.weight,
   });
+}
+
+/// Map a body weight in kg to arm wrestling category id (1..5).
+int armCategoryFromWeight(double w) {
+  if (w <= 70) return WeightCategory.under70.id;
+  if (w <= 80) return WeightCategory.under80.id;
+  if (w <= 90) return WeightCategory.under90.id;
+  if (w <= 100) return WeightCategory.under100.id;
+  return WeightCategory.over100.id;
 }
