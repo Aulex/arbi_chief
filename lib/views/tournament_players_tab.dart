@@ -545,7 +545,9 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
 
       for (final line in lines) {
         if (isArmFmt) {
-          // Arm wrestling: \u041F\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0406\u043C'\u044F \u041F\u043E \u0431\u0430\u0442\u044C\u043A\u043E\u0432\u0456 [TAB/;] \u041A\u043E\u043C\u0430\u043D\u0434\u0430 [TAB/;] \u0412\u0430\u0433\u0430
+          // Arm wrestling: \u041F\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0406\u043C'\u044F \u041F\u043E \u0431\u0430\u0442\u044C\u043A\u043E\u0432\u0456 [TAB/;] \u041A\u043E\u043C\u0430\u043D\u0434\u0430 [TAB/;] \u0412\u0430\u0433\u0430 [TAB/;] \u041D\u043E\u043C\u0435\u0440
+          // \u041D\u043E\u043C\u0435\u0440 \u0454 \u043E\u043F\u0446\u0456\u043E\u043D\u0430\u043B\u044C\u043D\u0438\u043C \u2014 \u044F\u043A\u0449\u043E \u0447\u0438\u0441\u043B\u043E \u0432 \u043A\u0456\u043D\u0446\u0456 \u0432\u0438\u0433\u043B\u044F\u0434\u0430\u0454 \u044F\u043A \u0432\u0430\u0433\u0430 (\u043C\u0430\u0454 \u043A\u0440\u0430\u043F\u043A\u0443
+          // \u0430\u0431\u043E \u0431\u0456\u043B\u044C\u0448\u0435 ~30), \u0432\u0432\u0430\u0436\u0430\u0454\u043C\u043E \u0449\u043E \u043D\u043E\u043C\u0435\u0440\u0430 \u043D\u0435\u043C\u0430\u0454.
           final fields = line
               .split(RegExp(r'\t|;'))
               .map((s) => s.trim())
@@ -554,16 +556,32 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           String nameBlock;
           String teamName;
           String? weightStr;
-          if (fields.length >= 3) {
+          String? numStr;
+          if (fields.length >= 4) {
+            nameBlock = fields[0];
+            numStr = fields.last;
+            weightStr = fields[fields.length - 2];
+            teamName = fields.sublist(1, fields.length - 2).join(' ');
+          } else if (fields.length == 3) {
             nameBlock = fields[0];
             weightStr = fields.last;
-            teamName = fields.sublist(1, fields.length - 1).join(' ');
+            teamName = fields[1];
           } else {
             final w = line.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-            if (w.length < 5) continue; // need surname+name+lastname+team+weight
+            if (w.length < 5) continue;
             nameBlock = w.sublist(0, 3).join(' ');
-            weightStr = w.last;
-            teamName = w.sublist(3, w.length - 1).join(' ');
+            // Detect whether last token is a player number or part of weight.
+            final tail = w.last;
+            final tailIsInt = !tail.contains('.') && !tail.contains(',') && int.tryParse(tail) != null;
+            final tailVal = int.tryParse(tail);
+            if (w.length >= 6 && tailIsInt && tailVal != null && tailVal < 30) {
+              numStr = tail;
+              weightStr = w[w.length - 2];
+              teamName = w.sublist(3, w.length - 2).join(' ');
+            } else {
+              weightStr = tail;
+              teamName = w.sublist(3, w.length - 1).join(' ');
+            }
           }
           final nameParts = nameBlock.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
           if (nameParts.length < 2 || teamName.isEmpty) continue;
@@ -572,12 +590,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           final lastname = nameParts.length > 2 ? nameParts.sublist(2).join(' ') : '';
           final weight = double.tryParse(weightStr.replaceAll(',', '.'));
           if (weight == null || weight <= 0) continue;
+          final number = numStr != null ? int.tryParse(numStr) : null;
           result.add(_ParsedTeamPlayer(
             teamName: teamName,
             surname: surname,
             name: name,
             lastname: lastname,
             weight: weight,
+            playerNumber: number,
           ));
           continue;
         }
@@ -716,8 +736,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                     Text(
                       () {
                         if (format == 2) {
-                          return 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вага (кг) — через TAB/;. '
-                              'Вагова категорія визначається автоматично (≤70, ≤80, ≤90, ≤100, >100).';
+                          return 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вага (кг)  Номер — через TAB/;. '
+                              'Номер опціональний. Вагова категорія визначається автоматично (≤70, ≤80, ≤90, ≤100, >100).';
                         }
                         final namePart = format == 0
                             ? 'Прізвище  Ім\'я  По батькові'
