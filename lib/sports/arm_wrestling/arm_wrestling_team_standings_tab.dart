@@ -1,452 +1,150 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../viewmodels/tournament_viewmodel.dart';
 import 'arm_wrestling_providers.dart';
 import 'arm_wrestling_scoring.dart';
 
-/// Tab showing arm wrestling team standings based on individual placements.
-class ArmWrestlingTeamStandingsTab extends ConsumerStatefulWidget {
+/// Team standings tab: sum of 3 best placements across 3 different weight
+/// categories (lower is better). Per-category individual standings live in
+/// the "Усі гравці" tab.
+class ArmWrestlingTeamStandingsTab extends ConsumerWidget {
   final int tId;
   const ArmWrestlingTeamStandingsTab({super.key, required this.tId});
 
   @override
-  ConsumerState<ArmWrestlingTeamStandingsTab> createState() =>
-      _ArmWrestlingTeamStandingsTabState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(armWrestlingStandingsProvider(tId));
+    return async.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, st) => Center(child: Text('Помилка: $e')),
+      data: (bundle) => _Body(bundle: bundle),
+    );
+  }
 }
 
-class _ArmWrestlingTeamStandingsTabState
-    extends ConsumerState<ArmWrestlingTeamStandingsTab> {
-  bool _loading = true;
-  List<ArmWrestlingTeamStanding> _teamStandings = [];
-  Map<int, List<ArmWrestlingStanding>> _categoryStandings = {};
-  Map<int, ({bool isValid, int count, String label})> _categoryValidation = {};
-  Map<int, double> _playerWeights = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final armSvc = ref.read(armWrestlingServiceProvider);
-    final tournamentSvc = ref.read(tournamentServiceProvider);
-
-    // Load players by category, weights, and games
-    final playersByCategory = await armSvc.getPlayersByCategory(widget.tId);
-    final teamNames = await armSvc.getTeamNames(widget.tId);
-    final categoryValidation = await armSvc.validateCategories(widget.tId);
-    final playerWeights = await armSvc.getPlayerWeights(widget.tId);
-    final games = await tournamentSvc.getGamesGroupedByBoard(widget.tId);
-
-    // Build results per category (boardNum = categoryId)
-    final categoryResults = <int, Map<int, Map<int, double>>>{};
-    for (final entry in games.entries) {
-      final catId = entry.key;
-      categoryResults.putIfAbsent(catId, () => {});
-      for (final game in entry.value) {
-        final wId = game.white.player_id!;
-        final bId = game.black.player_id!;
-        if (game.whiteResult != null) {
-          categoryResults[catId]!.putIfAbsent(wId, () => {})[bId] = game.whiteResult!;
-        }
-        if (game.blackResult != null) {
-          categoryResults[catId]!.putIfAbsent(bId, () => {})[wId] = game.blackResult!;
-        }
-      }
-    }
-
-    // Calculate individual standings per category
-    final catStandings = <int, List<ArmWrestlingStanding>>{};
-    for (final catEntry in playersByCategory.entries) {
-      final catId = catEntry.key;
-      final players = catEntry.value;
-      final results = categoryResults[catId] ?? {};
-
-      catStandings[catId] = calculateCategoryStandings(
-        players: players,
-        results: results,
-      );
-    }
-
-    // Get all team IDs
-    final allTeamIds = <int>{};
-    for (final standings in catStandings.values) {
-      for (final s in standings) {
-        allTeamIds.add(s.teamId);
-      }
-    }
-
-    // Only valid categories (≥5 participants) count for team standings
-    final validCatStandings = <int, List<ArmWrestlingStanding>>{};
-    for (final entry in catStandings.entries) {
-      final validation = categoryValidation[entry.key];
-      if (validation != null && validation.isValid) {
-        validCatStandings[entry.key] = entry.value;
-      }
-    }
-
-    // Calculate team standings
-    final teamStandings = calculateTeamStandings(
-      categoryStandings: validCatStandings,
-      teamIds: allTeamIds,
-      teamNames: teamNames,
-      playerWeights: playerWeights,
-    );
-
-    if (mounted) {
-      setState(() {
-        _categoryStandings = catStandings;
-        _teamStandings = teamStandings;
-        _categoryValidation = categoryValidation;
-        _playerWeights = playerWeights;
-        _loading = false;
-      });
-    }
-  }
+class _Body extends StatelessWidget {
+  final ArmWrestlingStandingsBundle bundle;
+  const _Body({required this.bundle});
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (bundle.teamStandings.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.groups_outlined, size: 48, color: Colors.grey.shade400),
+              const SizedBox(height: 12),
+              Text(
+                'Командний залік з\'явиться, коли в категоріях буде ≥ '
+                '$minParticipantsForCategory учасників і будуть зіграні матчі.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Category validation warnings
-          ..._buildCategoryWarnings(),
-          const SizedBox(height: 16),
-          // Individual standings per category
-          ..._buildCategoryStandings(),
-          const SizedBox(height: 24),
-          // Team standings
-          _buildTeamStandings(),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildCategoryWarnings() {
-    final warnings = <Widget>[];
-    for (final entry in _categoryValidation.entries) {
-      final cat = entry.value;
-      if (!cat.isValid && cat.count > 0) {
-        warnings.add(
-          Card(
-            color: Colors.orange.shade50,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              side: BorderSide(color: Colors.orange.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.indigo.shade200),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 20),
+                  Icon(Icons.groups_outlined, color: Colors.indigo.shade700, size: 22),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${cat.label}: ${cat.count} учасник(ів) — менше $minParticipantsForCategory. '
-                      'Учасники мають перейти у важчу категорію.',
-                      style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
+                  Text(
+                    'Командний залік',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo.shade900,
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final svc = ref.read(armWrestlingServiceProvider);
-                      await svc.redistributeCategories(widget.tId);
-                      _loadData();
-                    },
-                    child: const Text('Перемістити'),
                   ),
                 ],
               ),
-            ),
-          ),
-        );
-        warnings.add(const SizedBox(height: 8));
-      }
-    }
-    return warnings;
-  }
-
-  List<Widget> _buildCategoryStandings() {
-    final widgets = <Widget>[];
-
-    for (final cat in WeightCategory.values) {
-      final standings = _categoryStandings[cat.id];
-      if (standings == null || standings.isEmpty) continue;
-
-      final validation = _categoryValidation[cat.id];
-      final isValid = validation?.isValid ?? false;
-
-      widgets.add(
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(
-              color: isValid ? Colors.grey.shade300 : Colors.red.shade200,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: isValid ? Colors.indigo : Colors.red.shade300,
-                      child: Text(
-                        '${cat.id}',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      cat.label,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '(${standings.length} учасн.)',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                    ),
-                    if (!isValid) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'Не проводиться',
-                          style: TextStyle(fontSize: 11, color: Colors.red.shade700),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildStandingsTable(standings),
-              ],
-            ),
-          ),
-        ),
-      );
-      widgets.add(const SizedBox(height: 12));
-    }
-
-    return widgets;
-  }
-
-  Future<void> _editWeight(int playerId, String playerName, double? currentWeight) async {
-    final ctrl = TextEditingController(text: currentWeight?.toStringAsFixed(1) ?? '');
-    final result = await showDialog<double?>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Вага\n$playerName', style: const TextStyle(fontSize: 16)),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-          decoration: const InputDecoration(labelText: 'Вага (кг)', border: OutlineInputBorder()),
-          autofocus: true,
-          onSubmitted: (_) {
-            final w = double.tryParse(ctrl.text);
-            if (w != null && w > 0) Navigator.pop(ctx, w);
-          },
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
-          ElevatedButton(onPressed: () {
-            final w = double.tryParse(ctrl.text);
-            if (w != null && w > 0) Navigator.pop(ctx, w);
-          }, child: const Text('Зберегти')),
-        ],
-      ),
-    );
-    ctrl.dispose();
-    if (result != null) {
-      final svc = ref.read(armWrestlingServiceProvider);
-      await svc.savePlayerWeight(playerId: playerId, tId: widget.tId, weight: result);
-      await _loadData();
-    }
-  }
-
-  Widget _buildStandingsTable(List<ArmWrestlingStanding> standings) {
-    return Table(
-      columnWidths: const {
-        0: FixedColumnWidth(40),  // Place
-        1: FlexColumnWidth(3),    // Player
-        2: FlexColumnWidth(2),    // Team
-        3: FixedColumnWidth(70),  // Weight
-        4: FixedColumnWidth(60),  // Wins
-        5: FixedColumnWidth(60),  // Losses
-        6: FixedColumnWidth(60),  // Games
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      children: [
-        TableRow(
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-          ),
-          children: [
-            _headerCell('М'),
-            _headerCell('Учасник'),
-            _headerCell('Команда'),
-            _headerCell('Вага', align: TextAlign.center),
-            _headerCell('П', align: TextAlign.center),
-            _headerCell('Пор', align: TextAlign.center),
-            _headerCell('Ігри', align: TextAlign.center),
-          ],
-        ),
-        for (final s in standings)
-          TableRow(
-            decoration: BoxDecoration(
-              color: s.place <= 3 ? Colors.amber.withOpacity(0.05 * (4 - s.place)) : null,
-            ),
-            children: [
-              _dataCell('${s.place}', fontWeight: FontWeight.bold),
-              _dataCell(s.playerName),
-              _dataCell(s.teamName),
-              GestureDetector(
-                onTap: () => _editWeight(s.playerId, s.playerName, _playerWeights[s.playerId]),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _playerWeights[s.playerId] != null
-                            ? '${_playerWeights[s.playerId]!.toStringAsFixed(1)}'
-                            : '-',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: _playerWeights[s.playerId] != null ? null : Colors.grey.shade400,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(Icons.edit, size: 12, color: Colors.indigo.shade300),
-                    ],
-                  ),
-                ),
+              const SizedBox(height: 4),
+              Text(
+                'Сума очок 3-х кращих учасників з 3-х різних вагових категорій '
+                '(менше — краще). Відсутні учасники штрафуються за правилами.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
-              _dataCell('${s.wins}', align: TextAlign.center,
-                  color: s.wins > 0 ? Colors.green.shade700 : null),
-              _dataCell('${s.losses}', align: TextAlign.center,
-                  color: s.losses > 0 ? Colors.red.shade700 : null),
-              _dataCell('${s.gamesPlayed}', align: TextAlign.center),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _buildTeamStandings() {
-    if (_teamStandings.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.indigo.shade200),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.groups_outlined, color: Colors.indigo.shade700, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'Командний залік',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.indigo.shade900,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Сума очок 3-х кращих учасників з 3-х різних вагових категорій (менше — краще)',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-            const SizedBox(height: 16),
-            Table(
-              columnWidths: const {
-                0: FixedColumnWidth(40),  // Place
-                1: FlexColumnWidth(2),    // Team
-                2: FixedColumnWidth(70),  // Total
-                3: FlexColumnWidth(3),    // Details
-              },
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              children: [
-                TableRow(
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-                  ),
-                  children: [
-                    _headerCell('М'),
-                    _headerCell('Команда'),
-                    _headerCell('Очки', align: TextAlign.center),
-                    _headerCell('Деталі'),
-                  ],
-                ),
-                for (final ts in _teamStandings)
+              const SizedBox(height: 16),
+              Table(
+                columnWidths: const {
+                  0: FixedColumnWidth(40),
+                  1: FlexColumnWidth(2),
+                  2: FixedColumnWidth(70),
+                  3: FlexColumnWidth(3),
+                },
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
                   TableRow(
                     decoration: BoxDecoration(
-                      color: ts.place <= 3
-                          ? Colors.amber.withOpacity(0.05 * (4 - ts.place))
-                          : null,
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
                     ),
                     children: [
-                      _dataCell('${ts.place}', fontWeight: FontWeight.bold),
-                      _dataCell(ts.teamName),
-                      _dataCell(
-                        '${ts.totalPoints}',
-                        align: TextAlign.center,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: ts.contributors.map((c) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.indigo.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${c.categoryLabel}: ${c.place}-е м.',
-                                style: TextStyle(fontSize: 11, color: Colors.indigo.shade800),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                      _headerCell('М'),
+                      _headerCell('Команда'),
+                      _headerCell('Очки', align: TextAlign.center),
+                      _headerCell('Деталі'),
                     ],
                   ),
-              ],
-            ),
-          ],
+                  for (final ts in bundle.teamStandings)
+                    TableRow(
+                      decoration: BoxDecoration(
+                        color: ts.place <= 3
+                            ? Colors.amber.withOpacity(0.05 * (4 - ts.place))
+                            : null,
+                      ),
+                      children: [
+                        _dataCell('${ts.place}', fontWeight: FontWeight.bold),
+                        _dataCell(ts.teamName),
+                        _dataCell(
+                          '${ts.totalPoints}',
+                          align: TextAlign.center,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: ts.contributors.map((c) {
+                              return Container(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.indigo.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${c.categoryLabel}: ${c.place}-е м.',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.indigo.shade800),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -478,11 +176,7 @@ class _ArmWrestlingTeamStandingsTabState
       child: Text(
         text,
         textAlign: align,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: fontWeight,
-          color: color,
-        ),
+        style: TextStyle(fontSize: 13, fontWeight: fontWeight, color: color),
       ),
     );
   }

@@ -122,6 +122,11 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
   bool get _usesAgeCategories =>
       widget.tType == 10 || widget.tType == 12;
 
+  /// True for sports that expose a per-tournament participant (bib) number:
+  /// arm wrestling (9), athletics (10), cycling (12).
+  bool get _showsPlayerNumber =>
+      widget.tType == 9 || widget.tType == 10 || widget.tType == 12;
+
   Future<Map<int, int>> _fetchYearsOfBirth() => widget.tType == 12
       ? ref.read(cyclingServiceProvider).getPlayerYearsOfBirth(widget.tId)
       : ref.read(athleticsServiceProvider).getPlayerYearsOfBirth(widget.tId);
@@ -192,7 +197,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     if (!mounted) return;
 
     final usesAgeCats = _usesAgeCategories;
-    final numbers = usesAgeCats
+    final numbers = _showsPlayerNumber
         ? await svc.getPlayerNumbers(widget.tId)
         : const <int, int>{};
     if (!mounted) return;
@@ -244,13 +249,16 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       });
     }
 
-    // Load existing participant number and year of birth
-    if (isAthletics && player.player_id != null) {
+    // Load existing participant number (any sport that exposes it).
+    if (_showsPlayerNumber && player.player_id != null) {
       ref.read(tournamentServiceProvider).getPlayerNumber(
         playerId: player.player_id!, tId: widget.tId,
       ).then((n) {
         if (n != null) numberC.text = n.toString();
       });
+    }
+    // Year of birth is age-category-only (athletics, cycling).
+    if (isAthletics && player.player_id != null) {
       _fetchYearOfBirth(player.player_id!).then((y) {
         if (y != null) yobC.text = y.toString();
       });
@@ -290,7 +298,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
         await ref.read(tournamentServiceProvider).savePlayerWeight(
           playerId: player.player_id!, tId: widget.tId, weight: weightVal);
       }
-      if (isAthletics && player.player_id != null) {
+      if (_showsPlayerNumber && player.player_id != null) {
         final numText = numberC.text.trim();
         final numVal = int.tryParse(numText);
         if (numVal != null && numVal > 0) {
@@ -300,6 +308,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           await ref.read(tournamentServiceProvider).clearPlayerNumber(
             playerId: player.player_id!, tId: widget.tId);
         }
+      }
+      if (isAthletics && player.player_id != null) {
         final yobText = yobC.text.trim();
         final yobVal = int.tryParse(yobText);
         final maxYob = _referenceYear ?? DateTime.now().year;
@@ -447,7 +457,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         ),
                       ),
                     ],
-                    if (isAthletics) ...[
+                    if (_showsPlayerNumber) ...[
                       const SizedBox(height: 16),
                       Row(
                         children: [
@@ -462,21 +472,23 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: yobC,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(4),
-                              ],
-                              decoration: InputDecoration(
-                                labelText: 'Рік народження',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          if (isAthletics) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: yobC,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(4),
+                                ],
+                                decoration: InputDecoration(
+                                  labelText: 'Рік народження',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],
@@ -1187,8 +1199,8 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
       allPlayers = players;
     });
 
-    // Pre-fill the participant number with max(existing) + 1 for athletics.
-    if (isAthletics) {
+    // Pre-fill the participant number with max(existing) + 1.
+    if (_showsPlayerNumber) {
       ref.read(tournamentServiceProvider)
           .getPlayerNumbers(widget.tId)
           .then((map) {
@@ -1263,13 +1275,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
           playerId: resolvedPlayerId, tId: widget.tId, weight: weightVal);
       }
 
-      // Save participant number if entered (athletics only)
-      if (isAthletics && resolvedPlayerId != null) {
+      if (_showsPlayerNumber && resolvedPlayerId != null) {
         final numVal = int.tryParse(numberC.text.trim());
         if (numVal != null && numVal > 0) {
           await ref.read(tournamentServiceProvider).savePlayerNumber(
             playerId: resolvedPlayerId, tId: widget.tId, number: numVal);
         }
+      }
+      if (isAthletics && resolvedPlayerId != null) {
         final yobVal = int.tryParse(yobC.text.trim());
         final maxYob = _referenceYear ?? DateTime.now().year;
         if (yobVal != null && yobVal >= 1900 && yobVal <= maxYob) {
@@ -1462,7 +1475,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           ),
                         ),
                       ],
-                      if (isAthletics) ...[
+                      if (_showsPlayerNumber) ...[
                         const SizedBox(height: 16),
                         Row(
                           children: [
@@ -1477,21 +1490,23 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: TextField(
-                                controller: yobC,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                ],
-                                decoration: InputDecoration(
-                                  labelText: 'Рік народження',
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            if (isAthletics) ...[
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: TextField(
+                                  controller: yobC,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(4),
+                                  ],
+                                  decoration: InputDecoration(
+                                    labelText: 'Рік народження',
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ],
@@ -1646,7 +1661,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 const Text('Сортувати:', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                if (_usesAgeCategories) _buildSortChip(_PlayerSortKey.number, '№'),
+                if (_showsPlayerNumber) _buildSortChip(_PlayerSortKey.number, '№'),
                 _buildSortChip(_PlayerSortKey.name, 'ПІБ'),
                 _buildSortChip(_PlayerSortKey.age, 'Вік'),
               ],
@@ -1661,6 +1676,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       itemBuilder: (context, index) {
                         final player = filtered[index];
                         final isAthletics = _usesAgeCategories;
+                        final showsNumber = _showsPlayerNumber;
                         final number = player.player_id == null
                             ? null
                             : _playerNumbers[player.player_id!];
@@ -1673,7 +1689,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         child: Container(
                         color: isHovered ? Colors.indigo.shade100 : null,
                         child: ListTile(
-                          leading: isAthletics
+                          leading: showsNumber
                               ? Container(
                                   width: 44,
                                   alignment: Alignment.center,

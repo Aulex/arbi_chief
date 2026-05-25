@@ -143,7 +143,11 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
     // noShowIds already loaded in parallel above
 
     // Add phantom "absent" entries for teams missing from each board.
+    // Skipped for arm wrestling: not every team needs a representative in
+    // every weight category — missing entries are scored via the team
+    // penalty rule, not by spawning a row in the cross-table.
     final absentIds = <int>{...noShowIds};
+    if (!_isArmWrestling)
     for (final boardNum in boards.keys) {
       final presentTeamIds = boards[boardNum]!.map((p) => p.teamId).toSet();
       for (final team in allTeams) {

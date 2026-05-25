@@ -3,140 +3,172 @@ import 'arm_wrestling_scoring.dart';
 
 /// Arm wrestling-specific database operations.
 ///
-/// Handles weight category assignment, participant redistribution,
-/// and category validation per competition rules.
+/// A player's weight category (1..5) is stored as the player's board number
+/// in `CMP_PLAYER_TEAM_ATTR_VALUE` (attr_id = 9). The player must also be in
+/// `player_state = 0` so the generic board queries pick them up.
+///
+/// `CMP_PLAYER_TEAM.team_number` is the team's running number — NOT the
+/// weight category. (Earlier versions overloaded that column; everything
+/// here now goes through attr_id = 9.)
 class ArmWrestlingService {
   final DatabaseService _dbService;
   ArmWrestlingService(this._dbService);
 
-  // --- Weight Category Management ---
+  static const int _attrBoardNumber = 9;
 
   /// Get weight category assignments for players in a tournament.
-  /// Returns Map<playerId, weightCategoryId> where categoryId matches WeightCategory.id (1-5).
-  /// Uses team_number in CMP_PLAYER_TEAM for storage.
+  /// Returns Map<playerId, categoryId> where categoryId is 1..5.
   Future<Map<int, int>> getWeightCategoryAssignments(int tId) async {
     final db = await _dbService.database;
-    final rows = await db.query(
-      'CMP_PLAYER_TEAM',
-      columns: ['player_id', 'team_number'],
-      where: 't_id = ? AND team_number IS NOT NULL AND team_number > 0',
-      whereArgs: [tId],
-    );
+    final rows = await db.rawQuery('''
+      SELECT pt.player_id, CAST(v.attr_value AS INTEGER) AS cat
+      FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
+        ON v.pte_id = pt.pte_id AND v.attr_id = ?
+      WHERE pt.t_id = ? AND pt.player_id IS NOT NULL
+    ''', [_attrBoardNumber, tId]);
     final result = <int, int>{};
     for (final row in rows) {
       final playerId = row['player_id'] as int;
-      final category = row['team_number'] as int;
-      if (category >= 1 && category <= 5) {
-        result[playerId] = category;
+      final cat = row['cat'] as int?;
+      if (cat != null && cat >= 1 && cat <= 5) {
+        result[playerId] = cat;
       }
     }
     return result;
   }
 
-  /// Set weight category for a player in a tournament.
-  /// [categoryId] is 1-5 matching WeightCategory enum.
+  /// Set weight category for a player. Promotes the player to board-member
+  /// state (player_state = 0) and writes attr_id = 9 = categoryId.
   Future<void> setWeightCategory(int tId, int playerId, int categoryId) async {
     final db = await _dbService.database;
-    final existing = await db.query(
+    final rows = await db.query(
       'CMP_PLAYER_TEAM',
+      columns: ['pte_id'],
       where: 't_id = ? AND player_id = ?',
       whereArgs: [tId, playerId],
-      limit: 1,
     );
-    if (existing.isNotEmpty) {
+    for (final row in rows) {
+      final pteId = row['pte_id'] as int;
       await db.update(
         'CMP_PLAYER_TEAM',
-        {'team_number': categoryId},
+        {'player_state': 0},
         where: 'pte_id = ?',
-        whereArgs: [existing.first['pte_id']],
+        whereArgs: [pteId],
+      );
+      await db.delete(
+        'CMP_PLAYER_TEAM_ATTR_VALUE',
+        where: 'pte_id = ? AND attr_id = ?',
+        whereArgs: [pteId, _attrBoardNumber],
+      );
+      await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+        'pte_id': pteId,
+        'attr_id': _attrBoardNumber,
+        'attr_value': categoryId.toString(),
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_awc_$playerId',
+      });
+    }
+  }
+
+  /// Remove a player's weight category assignment.
+  Future<void> clearWeightCategory(int tId, int playerId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_PLAYER_TEAM',
+      columns: ['pte_id'],
+      where: 't_id = ? AND player_id = ?',
+      whereArgs: [tId, playerId],
+    );
+    for (final row in rows) {
+      final pteId = row['pte_id'] as int;
+      await db.delete(
+        'CMP_PLAYER_TEAM_ATTR_VALUE',
+        where: 'pte_id = ? AND attr_id = ?',
+        whereArgs: [pteId, _attrBoardNumber],
+      );
+      await db.update(
+        'CMP_PLAYER_TEAM',
+        {'player_state': 1},
+        where: 'pte_id = ?',
+        whereArgs: [pteId],
       );
     }
   }
 
-  /// Get participant counts per weight category.
+  /// Participant count per weight category.
   Future<Map<int, int>> getCategoryCounts(int tId) async {
-    final db = await _dbService.database;
-    final rows = await db.rawQuery('''
-      SELECT team_number, COUNT(*) as cnt
-      FROM CMP_PLAYER_TEAM
-      WHERE t_id = ? AND team_number IS NOT NULL AND team_number > 0
-      GROUP BY team_number
-    ''', [tId]);
+    final assignments = await getWeightCategoryAssignments(tId);
     final result = <int, int>{};
-    for (final row in rows) {
-      result[row['team_number'] as int] = row['cnt'] as int;
+    for (final cat in assignments.values) {
+      result[cat] = (result[cat] ?? 0) + 1;
     }
     return result;
   }
 
-  /// Check which categories are valid (have enough participants).
-  /// Returns set of valid category IDs.
-  ///
-  /// Rules:
-  /// - If a category (except 100kg+) has <5 participants, they should move to heavier
-  /// - If any category (including 100kg+) has 1-4 participants after redistribution, it's cancelled
+  /// Snapshot of which categories meet the 5-participant minimum.
   Future<Map<int, ({bool isValid, int count, String label})>> validateCategories(int tId) async {
     final counts = await getCategoryCounts(tId);
     final result = <int, ({bool isValid, int count, String label})>{};
-
     for (final cat in WeightCategory.values) {
       final count = counts[cat.id] ?? 0;
       final isValid = count >= minParticipantsForCategory;
       result[cat.id] = (isValid: isValid, count: count, label: cat.label);
     }
-
     return result;
   }
 
-  /// Auto-redistribute players from underfilled categories to heavier ones.
-  /// Categories with <5 participants (except 100kg+) get merged into the next heavier.
+  /// Auto-promote players from underfilled categories (1..4) to the next heavier.
+  /// "Понад 100 кг" cannot accept overflow and is left alone.
   /// Returns number of players moved.
   Future<int> redistributeCategories(int tId) async {
-    final db = await _dbService.database;
+    final assignments = await getWeightCategoryAssignments(tId);
     int moved = 0;
-
-    // Process categories from lightest to heaviest (1→4, skip 5=over100)
     for (int catId = 1; catId <= 4; catId++) {
-      final players = await db.query(
-        'CMP_PLAYER_TEAM',
-        where: 't_id = ? AND team_number = ?',
-        whereArgs: [tId, catId],
-      );
-
-      if (players.length < minParticipantsForCategory && players.isNotEmpty) {
-        // Move all players to next heavier category
+      final inCat = assignments.entries
+          .where((e) => e.value == catId)
+          .map((e) => e.key)
+          .toList();
+      if (inCat.length < minParticipantsForCategory && inCat.isNotEmpty) {
         final nextCatId = catId + 1;
-        await db.update(
-          'CMP_PLAYER_TEAM',
-          {'team_number': nextCatId},
-          where: 't_id = ? AND team_number = ?',
-          whereArgs: [tId, catId],
-        );
-        moved += players.length;
+        for (final pid in inCat) {
+          await setWeightCategory(tId, pid, nextCatId);
+          assignments[pid] = nextCatId;
+        }
+        moved += inCat.length;
       }
     }
-
     return moved;
   }
 
-  /// Get players grouped by weight category for a tournament.
-  Future<Map<int, List<({int playerId, String playerName, int teamId, String teamName})>>>
+  /// Players grouped by weight category for a tournament.
+  Future<Map<int, List<({int playerId, String playerName, int teamId, String teamName, int? playerNumber, double? weight})>>>
       getPlayersByCategory(int tId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
-      SELECT pt.player_id, pt.team_number, pt.team_id,
+      SELECT pt.player_id,
+             pt.team_id,
+             CAST(v.attr_value AS INTEGER) AS cat,
              p.player_surname, p.player_name, p.player_lastname,
-             t.team_name
+             t.team_name,
+             CAST(vn.attr_value AS INTEGER) AS player_number,
+             vw.attr_value AS weight_value
       FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
+        ON v.pte_id = pt.pte_id AND v.attr_id = ?
       JOIN CMP_PLAYER p ON p.player_id = pt.player_id
       LEFT JOIN CMP_TEAM t ON t.team_id = pt.team_id
-      WHERE pt.t_id = ? AND pt.team_number IS NOT NULL AND pt.team_number > 0
-      ORDER BY pt.team_number, p.player_surname
-    ''', [tId]);
+      LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE vn
+        ON vn.pte_id = pt.pte_id AND vn.attr_id = 19
+      LEFT JOIN CMP_PLAYER_TEAM_ATTR_VALUE vw
+        ON vw.pte_id = pt.pte_id AND vw.attr_id = 17
+      WHERE pt.t_id = ? AND pt.player_id IS NOT NULL
+      ORDER BY cat, p.player_surname
+    ''', [_attrBoardNumber, tId]);
 
-    final result = <int, List<({int playerId, String playerName, int teamId, String teamName})>>{};
+    final result = <int, List<({int playerId, String playerName, int teamId, String teamName, int? playerNumber, double? weight})>>{};
     for (final row in rows) {
-      final catId = row['team_number'] as int;
+      final catId = row['cat'] as int?;
+      if (catId == null) continue;
       final surname = row['player_surname'] as String? ?? '';
       final name = row['player_name'] as String? ?? '';
       final lastname = row['player_lastname'] as String? ?? '';
@@ -146,12 +178,14 @@ class ArmWrestlingService {
         playerName: fullName,
         teamId: row['team_id'] as int? ?? 0,
         teamName: row['team_name'] as String? ?? '',
+        playerNumber: row['player_number'] as int?,
+        weight: double.tryParse(row['weight_value'] as String? ?? ''),
       ));
     }
     return result;
   }
 
-  /// Get all team names for a tournament.
+  /// Team names for a tournament.
   Future<Map<int, String>> getTeamNames(int tId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
@@ -166,9 +200,8 @@ class ArmWrestlingService {
     };
   }
 
-  // --- Player Body Weight (attr_id=17) ---
+  // --- Player Body Weight (attr_id = 17) ---
 
-  /// Save player body weight (kg) via attr_id=17.
   Future<void> savePlayerWeight({required int playerId, required int tId, required double weight}) async {
     final db = await _dbService.database;
     final pteRows = await db.query('CMP_PLAYER_TEAM', columns: ['pte_id'],
@@ -182,7 +215,6 @@ class ArmWrestlingService {
     });
   }
 
-  /// Get player weights for a tournament. Returns Map<playerId, weightKg>.
   Future<Map<int, double>> getPlayerWeights(int tId) async {
     final db = await _dbService.database;
     final rows = await db.rawQuery('''
@@ -197,5 +229,51 @@ class ArmWrestlingService {
       if (w != null) map[r['player_id'] as int] = w;
     }
     return map;
+  }
+
+  /// One-time migration: move category data that used to live in
+  /// `CMP_PLAYER_TEAM.team_number` into `attr_id = 9` and clear team_number.
+  /// Only runs if the tournament has zero `attr_id = 9` rows (i.e. truly
+  /// pre-fix data) and at least one player_state = 1 row with team_number in
+  /// 1..5 — the legacy signature. Without this guard, a regular team number
+  /// like 2 could be misread as the "≤80 kg" weight category.
+  Future<int> migrateLegacyTeamNumberStorage(int tId) async {
+    final db = await _dbService.database;
+    final existing = await db.rawQuery('''
+      SELECT 1 FROM CMP_PLAYER_TEAM pt
+      JOIN CMP_PLAYER_TEAM_ATTR_VALUE v
+        ON v.pte_id = pt.pte_id AND v.attr_id = ?
+      WHERE pt.t_id = ? LIMIT 1
+    ''', [_attrBoardNumber, tId]);
+    if (existing.isNotEmpty) return 0;
+
+    final rows = await db.rawQuery('''
+      SELECT pt.pte_id, pt.player_id, pt.team_number
+      FROM CMP_PLAYER_TEAM pt
+      WHERE pt.t_id = ? AND pt.player_id IS NOT NULL
+        AND pt.team_number BETWEEN 1 AND 5
+        AND pt.player_state = 1
+    ''', [tId]);
+    if (rows.isEmpty) return 0;
+
+    int migrated = 0;
+    for (final row in rows) {
+      final pteId = row['pte_id'] as int;
+      final cat = row['team_number'] as int;
+      await db.insert('CMP_PLAYER_TEAM_ATTR_VALUE', {
+        'pte_id': pteId,
+        'attr_id': _attrBoardNumber,
+        'attr_value': cat.toString(),
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_awm_${row['player_id']}',
+      });
+      await db.update(
+        'CMP_PLAYER_TEAM',
+        {'player_state': 0, 'team_number': null},
+        where: 'pte_id = ?',
+        whereArgs: [pteId],
+      );
+      migrated++;
+    }
+    return migrated;
   }
 }

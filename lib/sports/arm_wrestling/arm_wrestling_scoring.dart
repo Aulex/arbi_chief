@@ -27,9 +27,6 @@ enum WeightCategory {
 /// Minimum participants for a weight category to be valid.
 const int minParticipantsForCategory = 5;
 
-/// Points multiplier (1 win = 1 point).
-const int armWrestlingPointMultiplier = 1;
-
 /// Format result: + for win, − for loss.
 String formatArmWrestlingResult(double? result) {
   if (result == null) return '';
@@ -44,6 +41,8 @@ class ArmWrestlingStanding {
   final String playerName;
   final String teamName;
   final int teamId;
+  final int? playerNumber;
+  final double? weight;
   final int wins;
   final int losses;
   final int gamesPlayed;
@@ -57,14 +56,34 @@ class ArmWrestlingStanding {
     required this.wins,
     required this.losses,
     required this.gamesPlayed,
+    this.playerNumber,
+    this.weight,
     this.place = 0,
+  });
+}
+
+/// Minimal player descriptor needed by [calculateCategoryStandings].
+class ArmWrestlingPlayer {
+  final int playerId;
+  final String playerName;
+  final String teamName;
+  final int teamId;
+  final int? playerNumber;
+  final double? weight;
+  const ArmWrestlingPlayer({
+    required this.playerId,
+    required this.playerName,
+    required this.teamName,
+    required this.teamId,
+    this.playerNumber,
+    this.weight,
   });
 }
 
 /// Calculate individual standings for a weight category.
 /// [results] maps playerId → opponentId → result (1.0=win, 0.0=loss).
 List<ArmWrestlingStanding> calculateCategoryStandings({
-  required List<({int playerId, String playerName, String teamName, int teamId})> players,
+  required List<ArmWrestlingPlayer> players,
   required Map<int, Map<int, double>> results,
 }) {
   final standings = <ArmWrestlingStanding>[];
@@ -82,30 +101,64 @@ List<ArmWrestlingStanding> calculateCategoryStandings({
       playerName: p.playerName,
       teamName: p.teamName,
       teamId: p.teamId,
+      playerNumber: p.playerNumber,
+      weight: p.weight,
       wins: wins,
       losses: losses,
       gamesPlayed: playerResults.length,
     ));
   }
 
-  // Sort: most wins first, then head-to-head
-  standings.sort((a, b) {
-    if (a.wins != b.wins) return b.wins.compareTo(a.wins);
-    // Head-to-head: if a beat b, a ranks higher
-    final h2h = results[a.playerId]?[b.playerId];
-    if (h2h == 1.0) return -1;
-    if (h2h == 0.0) return 1;
-    // Fewer losses
-    if (a.losses != b.losses) return a.losses.compareTo(b.losses);
-    return 0;
-  });
+  // Sort by wins, then iteratively resolve ties by mini-league head-to-head.
+  standings.sort((a, b) => b.wins.compareTo(a.wins));
+  _resolveTiesByMiniLeague(standings, results);
 
-  // Assign places
   for (int i = 0; i < standings.length; i++) {
     standings[i].place = i + 1;
   }
 
   return standings;
+}
+
+/// Resolves groups of standings tied on `wins` by replaying the games among
+/// just those players (mini-league): more wins inside the tied group ranks
+/// higher; remaining ties recurse, falling back to fewer losses overall.
+void _resolveTiesByMiniLeague(
+  List<ArmWrestlingStanding> standings,
+  Map<int, Map<int, double>> results,
+) {
+  int i = 0;
+  while (i < standings.length) {
+    int j = i + 1;
+    while (j < standings.length && standings[j].wins == standings[i].wins) {
+      j++;
+    }
+    if (j - i > 1) {
+      final group = standings.sublist(i, j);
+      final groupIds = group.map((s) => s.playerId).toSet();
+      // Mini-league wins inside the group.
+      final miniWins = <int, int>{
+        for (final s in group) s.playerId: 0,
+      };
+      for (final s in group) {
+        final opponents = results[s.playerId] ?? const <int, double>{};
+        for (final entry in opponents.entries) {
+          if (groupIds.contains(entry.key) && entry.value == 1.0) {
+            miniWins[s.playerId] = (miniWins[s.playerId] ?? 0) + 1;
+          }
+        }
+      }
+      group.sort((a, b) {
+        final mw = (miniWins[b.playerId] ?? 0).compareTo(miniWins[a.playerId] ?? 0);
+        if (mw != 0) return mw;
+        return a.losses.compareTo(b.losses);
+      });
+      for (int k = 0; k < group.length; k++) {
+        standings[i + k] = group[k];
+      }
+    }
+    i = j;
+  }
 }
 
 /// Team standing in arm wrestling.
@@ -233,11 +286,13 @@ List<ArmWrestlingTeamStanding> calculateTeamStandings({
       return a.totalPoints.compareTo(b.totalPoints);
     }
 
-    // Tiebreaker 1: more 1st, 2nd, 3rd places etc. (all individual placements)
-    final maxPlace = _maxPlace(a.allIndividualPlacements, b.allIndividualPlacements);
+    // Tiebreaker 1: more 1st, 2nd, 3rd ... places among the 3 contributors.
+    final aContribPlaces = a.contributors.map((c) => c.place).toList();
+    final bContribPlaces = b.contributors.map((c) => c.place).toList();
+    final maxPlace = _maxPlace(aContribPlaces, bContribPlaces);
     for (int p = 1; p <= maxPlace; p++) {
-      final aCount = a.allIndividualPlacements.where((x) => x == p).length;
-      final bCount = b.allIndividualPlacements.where((x) => x == p).length;
+      final aCount = aContribPlaces.where((x) => x == p).length;
+      final bCount = bContribPlaces.where((x) => x == p).length;
       if (aCount != bCount) return bCount.compareTo(aCount); // more is better
     }
 

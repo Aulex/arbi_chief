@@ -180,9 +180,11 @@ const powerliftingConfig = SportTypeConfig(
 );
 
 /// Config for arm wrestling (9).
+/// 5 weight categories: ≤70, ≤80, ≤90, ≤100, >100 kg. Each category is stored
+/// as a board number (attr_id = 9) so the generic cross-table machinery works.
 const armWrestlingConfig = SportTypeConfig(
   boardLabel: 'Категорія',
-  boardCount: 0,
+  boardCount: 5,
   lastBoardWomenOnly: false,
   hasTeamCrossTable: false,
   hasBoardCrossTables: false,
