@@ -128,6 +128,9 @@ class _CyclingResultsTabState extends ConsumerState<CyclingResultsTab>
   }
 }
 
+/// Sortable columns in the per-category results view.
+enum _CategorySortKey { number, name, team, age, time, place }
+
 /// Shows the results list for a single cycling category with add/edit/delete.
 class _CategoryResultsView extends ConsumerStatefulWidget {
   final int tId;
@@ -145,6 +148,8 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
   List<RankedCyclingResult> _standings = [];
   bool _loading = true;
   int? _hoveredRow;
+  _CategorySortKey _sortKey = _CategorySortKey.place;
+  bool _sortAsc = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -567,7 +572,73 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     );
   }
 
+  void _toggleSort(_CategorySortKey key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        // Place defaults to ascending (1, 2, 3…); others default to ascending too.
+        _sortAsc = true;
+      }
+    });
+  }
+
+  List<RankedCyclingResult> _sortedStandings() {
+    int cmpInt(int? a, int? b) {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a.compareTo(b);
+    }
+    int cmpStr(String? a, String? b) {
+      final ae = a == null || a.trim().isEmpty;
+      final be = b == null || b.trim().isEmpty;
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      return a!.toLowerCase().compareTo(b!.toLowerCase());
+    }
+    final sorted = List<RankedCyclingResult>.from(_standings);
+    sorted.sort((a, b) {
+      int r;
+      switch (_sortKey) {
+        case _CategorySortKey.number:
+          r = cmpInt(a.playerNumber, b.playerNumber);
+          break;
+        case _CategorySortKey.name:
+          r = cmpStr(a.playerName, b.playerName);
+          break;
+        case _CategorySortKey.team:
+          r = cmpStr(a.teamName, b.teamName);
+          break;
+        case _CategorySortKey.age:
+          r = cmpInt(
+            a.age > 0 ? a.age : null,
+            b.age > 0 ? b.age : null,
+          );
+          break;
+        case _CategorySortKey.time:
+          r = cmpInt(
+            a.result?.totalSec,
+            b.result?.totalSec,
+          );
+          break;
+        case _CategorySortKey.place:
+          r = cmpInt(
+            a.place > 0 ? a.place : null,
+            b.place > 0 ? b.place : null,
+          );
+          break;
+      }
+      if (r != 0) return _sortAsc ? r : -r;
+      return cmpStr(a.playerName, b.playerName);
+    });
+    return sorted;
+  }
+
   Widget _buildResultsTable(double availableWidth, bool isNarrow) {
+    final sorted = _sortedStandings();
     // Determine the № column width from the widest player number text.
     final tp = TextPainter(textDirection: TextDirection.ltr);
     double maxNumW = 0;
@@ -576,13 +647,13 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
       color: Colors.indigo.shade700,
       fontSize: 13,
     );
-    for (final r in _standings) {
+    for (final r in sorted) {
       final t = r.playerNumber != null ? '${r.playerNumber}' : '—';
       tp.text = TextSpan(text: t, style: numStyle);
       tp.layout();
       if (tp.width > maxNumW) maxNumW = tp.width;
     }
-    // Header label '№' too.
+    // Header label '№' too (with room for the sort arrow).
     final headerStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.w800,
@@ -591,7 +662,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     tp.text = TextSpan(text: '№', style: headerStyle);
     tp.layout();
     if (tp.width > maxNumW) maxNumW = tp.width;
-    final numColW = maxNumW + 16; // padding
+    final numColW = maxNumW + 32; // padding + arrow space
 
     final actionsW = isNarrow ? 48.0 : 96.0;
     final placeW = 56.0;
@@ -599,17 +670,47 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     final ageW = 56.0;
     final hPad = isNarrow ? 8.0 : 16.0;
 
-    Widget headerCell(String text, {double? width, int? flex, TextAlign align = TextAlign.left}) {
-      final child = Text(text, style: headerStyle, textAlign: align);
-      final wrapped = Padding(
-        padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 12),
-        child: Align(
-          alignment: align == TextAlign.center
-              ? Alignment.center
-              : align == TextAlign.right
-                  ? Alignment.centerRight
-                  : Alignment.centerLeft,
-          child: child,
+    Widget headerCell(
+      String text, {
+      double? width,
+      int? flex,
+      TextAlign align = TextAlign.left,
+      required _CategorySortKey sortBy,
+    }) {
+      final isActive = _sortKey == sortBy;
+      final activeStyle = isActive
+          ? headerStyle.copyWith(color: Colors.indigo.shade700)
+          : headerStyle;
+      final mainAxis = align == TextAlign.center
+          ? MainAxisAlignment.center
+          : align == TextAlign.right
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start;
+      final wrapped = InkWell(
+        onTap: () => _toggleSort(sortBy),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 12),
+          child: Row(
+            mainAxisAlignment: mainAxis,
+            children: [
+              Flexible(
+                child: Text(
+                  text,
+                  style: activeStyle,
+                  textAlign: align,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  _sortAsc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                  size: 18,
+                  color: Colors.indigo.shade700,
+                ),
+              ],
+            ],
+          ),
         ),
       );
       if (flex != null) return Expanded(flex: flex, child: wrapped);
@@ -629,18 +730,18 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
             ),
             child: Row(
               children: [
-                headerCell('№', width: numColW, align: TextAlign.left),
-                headerCell('ПІБ', flex: 3),
-                headerCell('Команда', flex: 2),
-                headerCell('Вік', width: ageW, align: TextAlign.center),
-                headerCell('Час', width: timeW, align: TextAlign.center),
-                headerCell('М', width: placeW, align: TextAlign.center),
+                headerCell('№', width: numColW, align: TextAlign.left, sortBy: _CategorySortKey.number),
+                headerCell('ПІБ', flex: 3, sortBy: _CategorySortKey.name),
+                headerCell('Команда', flex: 2, sortBy: _CategorySortKey.team),
+                headerCell('Вік', width: ageW, align: TextAlign.center, sortBy: _CategorySortKey.age),
+                headerCell('Час', width: timeW, align: TextAlign.center, sortBy: _CategorySortKey.time),
+                headerCell('М', width: placeW, align: TextAlign.center, sortBy: _CategorySortKey.place),
                 SizedBox(width: actionsW),
               ],
             ),
           ),
-          for (int i = 0; i < _standings.length; i++)
-            _buildResultRow(i, _standings[i], numColW, ageW, timeW, placeW, actionsW, hPad, isNarrow),
+          for (int i = 0; i < sorted.length; i++)
+            _buildResultRow(i, sorted[i], numColW, ageW, timeW, placeW, actionsW, hPad, isNarrow),
         ],
       ),
     );
