@@ -148,7 +148,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
   List<RankedCyclingResult> _standings = [];
   bool _loading = true;
   int? _hoveredRow;
-  _CategorySortKey _sortKey = _CategorySortKey.place;
+  _CategorySortKey _sortKey = _CategorySortKey.number;
   bool _sortAsc = true;
 
   @override
