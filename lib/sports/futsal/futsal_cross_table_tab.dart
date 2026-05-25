@@ -31,6 +31,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _teams = [];
   Map<(int, int), _GameData> _games = {};
   Map<int, String> _groupAssignments = {};
+  Set<int> _removedTeamIds = {};
+  Set<(int, int)> _noShowGamePairs = {};
   int _selectedSegment = 0; // 0=Групи/Таблиця, 1=Фінал, 2=Місця 9+
 
   int? _hoveredRow;
@@ -69,6 +71,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     final teamList = await teamSvc.getTeamListForTournament(widget.tId);
     final games = await fSvc.getTeamGamesForTournament(widget.tId);
     final groups = await fSvc.getGroupAssignments(widget.tId);
+    final removed = await fSvc.getRemovedTeamIds(widget.tId);
 
     final allTeams = await teamSvc.getAllTeams();
     final teams = <({int teamId, String teamName, int? teamNumber, int? entityId})>[];
@@ -87,21 +90,29 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     }
 
     final gamesMap = <(int, int), _GameData>{};
+    final noShowPairs = <(int, int)>{};
     for (final g in games) {
       gamesMap[(g.teamAEntityId, g.teamBEntityId)] = _GameData(
         eventId: g.eventId,
         eventResult: g.eventResult,
+        esId: g.esId,
       );
       gamesMap[(g.teamBEntityId, g.teamAEntityId)] = _GameData(
         eventId: g.eventId,
         eventResult: g.eventResult != null ? _mirrorResult(g.eventResult!) : null,
+        esId: g.esId,
       );
+      if (g.esId == 4) {
+        noShowPairs.add((g.teamAEntityId, g.teamBEntityId));
+      }
     }
 
     setState(() {
       _teams = teams;
       _games = gamesMap;
       _groupAssignments = groups;
+      _removedTeamIds = removed;
+      _noShowGamePairs = noShowPairs;
       _loading = false;
     });
   }
@@ -112,7 +123,11 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     return '${parts[1]}:${parts[0]}';
   }
 
-  bool get _useGroupMode => _groupAssignments.isNotEmpty;
+  /// Group mode is active only when there are enough teams (≥ 9) AND
+  /// at least one team is actually assigned to a group. This prevents
+  /// stale group assignments from triggering the group view after teams
+  /// have been removed from the tournament.
+  bool get _useGroupMode => _teams.length >= 9 && _groupAssignments.isNotEmpty;
 
   List<({int teamId, String teamName, int? teamNumber, int? entityId})> _getGroupTeams(
       String groupName) {
@@ -163,6 +178,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     return scoring.calculateStandings(
       teams: teams.map((t) => (teamId: t.teamId, teamName: t.teamName, entityId: t.entityId)).toList(),
       games: filteredGames,
+      removedTeamIds: _removedTeamIds,
+      noShowGamePairs: _noShowGamePairs,
     );
   }
 
@@ -518,13 +535,22 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     final standing = standingsByTeam[team.teamId];
     final standingRow = i < sortedStandings.length ? sortedStandings[i] : null;
 
+    final isRemoved = _removedTeamIds.contains(team.teamId);
+    final standingIsRemoved =
+        standingRow != null && _removedTeamIds.contains(standingRow.teamId);
+
     return TableRow(
       decoration: BoxDecoration(
         color: _hoveredRow == i ? _ct.hoverHighlight : null,
       ),
       children: [
         _dataCell('${team.teamNumber ?? i + 1}', bold: true),
-        _teamNameCell(team.teamName),
+        isRemoved
+            ? GestureDetector(
+                onTap: () => _confirmUndoRemoval(team.teamId, team.teamName),
+                child: _teamNameCell(team.teamName, isRemoved: true),
+              )
+            : _teamNameCell(team.teamName),
         for (int j = 0; j < teams.length; j++)
           _buildGameCell(i, j, teams,
               carryOverGames: carryOverGames, readOnlyCarryOver: readOnlyCarryOver),
@@ -537,9 +563,10 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
             decoration: BoxDecoration(
                 color: Colors.black,
                 border: Border.all(color: Colors.black, width: 0.5))),
-        _teamNameCell(standingRow?.teamName ?? ''),
+        _teamNameCell(standingRow?.teamName ?? '', isRemoved: standingIsRemoved),
         _dataCell('${standingRow?.matchPoints ?? 0}', bold: true),
-        _dataCell('${standingRow?.rank ?? i + 1}', bold: true),
+        _dataCell(standingIsRemoved ? '—' : '${standingRow?.rank ?? i + 1}',
+            bold: true),
       ],
     );
   }
@@ -563,6 +590,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     final isCarryOver = carryOverGames != null &&
         (carryOverGames.containsKey((teamA.entityId!, teamB.entityId!)) ||
             carryOverGames.containsKey((teamB.entityId!, teamA.entityId!)));
+    final isRemoved =
+        _removedTeamIds.contains(teamA.teamId) || _removedTeamIds.contains(teamB.teamId);
 
     String cellText = '';
     Color? bgColor;
@@ -574,7 +603,10 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       if (parts.length == 2) {
         final a = int.tryParse(parts[0]) ?? 0;
         final b = int.tryParse(parts[1]) ?? 0;
-        if (a > b) {
+        if (game.esId == 4) {
+          bgColor = _ct.resultSpecialBg;
+          fgColor = _ct.resultSpecialFg;
+        } else if (a > b) {
           bgColor = _ct.resultWinBg;
           fgColor = _ct.resultWinFg;
         } else if (a < b) {
@@ -587,21 +619,31 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       }
     }
 
+    if (isRemoved) {
+      bgColor = _ct.disabledCell;
+      fgColor = null;
+    }
+
+    final readOnly = isRemoved || (isCarryOver && readOnlyCarryOver);
+
+    Widget cellWidget = Container(
+      height: 36,
+      alignment: Alignment.center,
+      color: bgColor ??
+          (_hoveredCol == j && _hoveredRow == i ? _ct.hoverHighlight : null),
+      child: Text(
+        cellText,
+        style: TextStyle(
+            fontSize: 12,
+            fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
+            color: fgColor),
+      ),
+    );
+
     if (isCarryOver && readOnlyCarryOver) {
-      return Container(
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: bgColor ?? Colors.grey.shade200,
-          border: Border.all(color: Colors.grey.shade400, width: 0.5),
-        ),
-        child: Text(
-          cellText,
-          style: TextStyle(
-              fontSize: 12,
-              fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
-              color: fgColor ?? Colors.grey.shade600),
-        ),
+      cellWidget = Tooltip(
+        message: 'Результат перенесено з групи',
+        child: cellWidget,
       );
     }
 
@@ -615,20 +657,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
         _hoveredCol = null;
       }),
       child: GestureDetector(
-        onTap: () => _showScoreDialog(teamA, teamB, game),
-        child: Container(
-          height: 36,
-          alignment: Alignment.center,
-          color: bgColor ??
-              (_hoveredCol == j && _hoveredRow == i ? _ct.hoverHighlight : null),
-          child: Text(
-            cellText,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: cellText.isNotEmpty ? FontWeight.w600 : null,
-                color: fgColor),
-          ),
-        ),
+        onTap: readOnly ? null : () => _showScoreDialog(teamA, teamB, game),
+        child: cellWidget,
       ),
     );
   }
@@ -640,92 +670,71 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
   ) async {
     int existingGoalsA = 0;
     int existingGoalsB = 0;
-    if (existingGame?.eventResult != null) {
-      final parts = existingGame!.eventResult!.split(':');
+    // Don't pre-fill scores from a no-show game (those are forfeit 10:0).
+    if (existingGame?.eventResult != null && existingGame!.esId != 4) {
+      final parts = existingGame.eventResult!.split(':');
       if (parts.length == 2) {
         existingGoalsA = int.tryParse(parts[0]) ?? 0;
         existingGoalsB = int.tryParse(parts[1]) ?? 0;
       }
     }
 
-    final goalsAController =
-        TextEditingController(text: existingGoalsA > 0 ? '$existingGoalsA' : '');
-    final goalsBController =
-        TextEditingController(text: existingGoalsB > 0 ? '$existingGoalsB' : '');
-
-    final result = await showDialog<({int goalsA, int goalsB})?>(
+    final result = await showDialog<_ScoreDialogResult?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${teamA.teamName}  vs  ${teamB.teamName}',
-            style: const TextStyle(fontSize: 16)),
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: goalsAController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  labelText: teamA.teamName.length > 10
-                      ? teamA.teamName.substring(0, 10)
-                      : teamA.teamName,
-                  border: const OutlineInputBorder(),
-                ),
-                autofocus: true,
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(':', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            ),
-            SizedBox(
-              width: 80,
-              child: TextField(
-                controller: goalsBController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  labelText: teamB.teamName.length > 10
-                      ? teamB.teamName.substring(0, 10)
-                      : teamB.teamName,
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (existingGame != null)
-            TextButton(
-              onPressed: () {
+      builder: (ctx) => _FutsalScoreDialog(
+        teamAName: teamA.teamName,
+        teamBName: teamB.teamName,
+        initialScoreA: existingGoalsA,
+        initialScoreB: existingGoalsB,
+        hasExisting: existingGame != null,
+        onDelete: existingGame != null
+            ? () {
                 Navigator.pop(ctx);
                 _deleteGame(existingGame.eventId);
-              },
-              child: const Text('Видалити', style: TextStyle(color: Colors.red)),
-            ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
-          ElevatedButton(
-            onPressed: () {
-              final goalsA = int.tryParse(goalsAController.text) ?? 0;
-              final goalsB = int.tryParse(goalsBController.text) ?? 0;
-              Navigator.pop(ctx, (goalsA: goalsA, goalsB: goalsB));
-            },
-            child: const Text('Зберегти'),
-          ),
-        ],
+              }
+            : null,
       ),
     );
-
-    goalsAController.dispose();
-    goalsBController.dispose();
 
     if (result == null) return;
 
     final fSvc = ref.read(futsalServiceProvider);
+
+    // No-show: 10:0 forfeit per futsal rules.
+    if (result.noShowTeam != null) {
+      final eventId = existingGame?.eventId ??
+          await fSvc.findOrCreateTeamGame(
+            tId: widget.tId,
+            teamAId: teamA.teamId,
+            teamBId: teamB.teamId,
+          );
+      final noShowIsA = result.noShowTeam == 'A';
+      await fSvc.saveGoalResult(
+        eventId: eventId,
+        teamAEntityId: teamA.entityId!,
+        teamBEntityId: teamB.entityId!,
+        goalsA: noShowIsA ? 0 : 10,
+        goalsB: noShowIsA ? 10 : 0,
+        esId: 4,
+      );
+
+      await _checkNoShows(teamA.teamId);
+      await _checkNoShows(teamB.teamId);
+      await _loadData();
+      return;
+    }
+
+    final goalsA = result.goalsA!;
+    final goalsB = result.goalsB!;
+
+    if (goalsA == 0 && goalsB == 0) {
+      if (existingGame != null) {
+        await fSvc.deleteTeamGame(existingGame.eventId);
+      }
+      await _loadData();
+      return;
+    }
+
     final eventId = existingGame?.eventId ??
         await fSvc.findOrCreateTeamGame(
           tId: widget.tId,
@@ -737,8 +746,8 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
       eventId: eventId,
       teamAEntityId: teamA.entityId!,
       teamBEntityId: teamB.entityId!,
-      goalsA: result.goalsA,
-      goalsB: result.goalsB,
+      goalsA: goalsA,
+      goalsB: goalsB,
     );
 
     await _loadData();
@@ -747,6 +756,39 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
   Future<void> _deleteGame(int eventId) async {
     final fSvc = ref.read(futsalServiceProvider);
     await fSvc.deleteTeamGame(eventId);
+    await _loadData();
+  }
+
+  /// After saving a no-show, check if [teamId] has 2+ no-shows total.
+  /// If so, per the rules, the team is removed from the tournament and
+  /// all of their results are annulled.
+  Future<void> _checkNoShows(int teamId) async {
+    final fSvc = ref.read(futsalServiceProvider);
+    final count = await fSvc.countNoShows(widget.tId, teamId);
+    if (count >= 2) {
+      await fSvc.deleteAllTeamGames(widget.tId, teamId);
+      await fSvc.markTeamRemoved(widget.tId, teamId);
+    } else {
+      await fSvc.unmarkTeamRemoved(widget.tId, teamId);
+    }
+  }
+
+  Future<void> _confirmUndoRemoval(int teamId, String teamName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Повернути команду?'),
+        content: Text('Зняти статус неявки для "$teamName"?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Скасувати')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true), child: const Text('Повернути')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(futsalServiceProvider).unmarkTeamRemoved(widget.tId, teamId);
     await _loadData();
   }
 
@@ -777,6 +819,7 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     for (final id in eventIds) {
       await fSvc.deleteTeamGame(id);
     }
+    await fSvc.clearAllRemovedState(widget.tId);
     await _loadData();
   }
 
@@ -798,13 +841,20 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
     );
   }
 
-  Widget _teamNameCell(String name) {
+  Widget _teamNameCell(String name, {bool isRemoved = false}) {
     return Container(
       height: 36,
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Text(name,
-          style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+      child: Text(
+        name,
+        style: TextStyle(
+          fontSize: 12,
+          color: isRemoved ? _ct.mutedText : null,
+          decoration: isRemoved ? TextDecoration.lineThrough : null,
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }
@@ -812,5 +862,203 @@ class _FutsalCrossTableTabState extends ConsumerState<FutsalCrossTableTab> {
 class _GameData {
   final int eventId;
   final String? eventResult;
-  _GameData({required this.eventId, this.eventResult});
+  final int? esId;
+  _GameData({required this.eventId, this.eventResult, this.esId});
+}
+
+/// Result from the score dialog.
+/// Either a pair of goal scores, or a no-show indicator for one team.
+class _ScoreDialogResult {
+  final int? goalsA;
+  final int? goalsB;
+  /// Which team didn't show: 'A' or 'B', or null for normal result.
+  final String? noShowTeam;
+
+  _ScoreDialogResult.goals(this.goalsA, this.goalsB) : noShowTeam = null;
+  _ScoreDialogResult.noShow(this.noShowTeam) : goalsA = null, goalsB = null;
+}
+
+class _FutsalScoreDialog extends StatefulWidget {
+  final String teamAName;
+  final String teamBName;
+  final int initialScoreA;
+  final int initialScoreB;
+  final bool hasExisting;
+  final VoidCallback? onDelete;
+
+  const _FutsalScoreDialog({
+    required this.teamAName,
+    required this.teamBName,
+    required this.initialScoreA,
+    required this.initialScoreB,
+    required this.hasExisting,
+    this.onDelete,
+  });
+
+  @override
+  State<_FutsalScoreDialog> createState() => _FutsalScoreDialogState();
+}
+
+class _FutsalScoreDialogState extends State<_FutsalScoreDialog> {
+  late final TextEditingController _controllerA;
+  late final TextEditingController _controllerB;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllerA = TextEditingController(
+        text: widget.initialScoreA > 0 ? '${widget.initialScoreA}' : '');
+    _controllerB = TextEditingController(
+        text: widget.initialScoreB > 0 ? '${widget.initialScoreB}' : '');
+  }
+
+  @override
+  void dispose() {
+    _controllerA.dispose();
+    _controllerB.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        '${widget.teamAName} — ${widget.teamBName}',
+        style: const TextStyle(fontSize: 16),
+      ),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const SizedBox(width: 60),
+                Expanded(
+                  child: Text(
+                    widget.teamAName,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.teamBName,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 60,
+                  child: Text(
+                    'Рахунок',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: _controllerA,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textAlign: TextAlign.center,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(':',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: _controllerB,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      textAlign: TextAlign.center,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: 'Неявка команди',
+          offset: const Offset(0, -100),
+          onSelected: (team) {
+            Navigator.pop(context, _ScoreDialogResult.noShow(team));
+          },
+          itemBuilder: (ctx) => [
+            PopupMenuItem(value: 'A', child: Text('Неявка: ${widget.teamAName}')),
+            PopupMenuItem(value: 'B', child: Text('Неявка: ${widget.teamBName}')),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.orange.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.person_off, size: 16, color: Colors.orange.shade700),
+                const SizedBox(width: 4),
+                Text('Неявка', style: TextStyle(color: Colors.orange.shade700)),
+              ],
+            ),
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.hasExisting && widget.onDelete != null)
+              TextButton(
+                onPressed: widget.onDelete,
+                child: const Text('Видалити', style: TextStyle(color: Colors.red)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Скасувати'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final a = int.tryParse(_controllerA.text) ?? 0;
+                final b = int.tryParse(_controllerB.text) ?? 0;
+                Navigator.pop(context, _ScoreDialogResult.goals(a, b));
+              },
+              child: const Text('Зберегти'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }

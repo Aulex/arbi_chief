@@ -38,6 +38,7 @@ List<FutsalStanding> calculateStandings({
   required List<({int teamId, String teamName, int? entityId})> teams,
   required Map<(int, int), String> games,
   Set<int> removedTeamIds = const {},
+  Set<(int, int)> noShowGamePairs = const {},
 }) {
   final standings = <int, FutsalStanding>{};
 
@@ -97,11 +98,12 @@ List<FutsalStanding> calculateStandings({
     if (ptsCmp != 0) return ptsCmp;
 
     // Tie-breaker 1: Head-to-head points
-    final h2hPoints = _getH2HPoints(a, b, games);
+    // (Per rules: games vs no-show teams are excluded from tie resolution.)
+    final h2hPoints = _getH2HPoints(a, b, games, noShowGamePairs);
     if (h2hPoints != 0) return -h2hPoints;
 
     // Tie-breaker 2: H2H goal difference
-    final h2hGoalDiff = _getH2HGoalDiff(a, b, games);
+    final h2hGoalDiff = _getH2HGoalDiff(a, b, games, noShowGamePairs);
     if (h2hGoalDiff != 0) return -h2hGoalDiff;
 
     // Tie-breaker 3: Total goal difference
@@ -119,8 +121,20 @@ List<FutsalStanding> calculateStandings({
   return result;
 }
 
-int _getH2HPoints(FutsalStanding a, FutsalStanding b, Map<(int, int), String> games) {
+bool _isNoShow(int aEntId, int bEntId, Set<(int, int)> noShowGamePairs) {
+  return noShowGamePairs.contains((aEntId, bEntId)) ||
+      noShowGamePairs.contains((bEntId, aEntId));
+}
+
+int _getH2HPoints(
+  FutsalStanding a,
+  FutsalStanding b,
+  Map<(int, int), String> games,
+  Set<(int, int)> noShowGamePairs,
+) {
   if (a.entityId == null || b.entityId == null) return 0;
+  if (_isNoShow(a.entityId!, b.entityId!, noShowGamePairs)) return 0;
+
   final ab = games[(a.entityId!, b.entityId!)];
   final ba = games[(b.entityId!, a.entityId!)];
 
@@ -148,8 +162,15 @@ int _getH2HPoints(FutsalStanding a, FutsalStanding b, Map<(int, int), String> ga
   return aPts - bPts;
 }
 
-int _getH2HGoalDiff(FutsalStanding a, FutsalStanding b, Map<(int, int), String> games) {
+int _getH2HGoalDiff(
+  FutsalStanding a,
+  FutsalStanding b,
+  Map<(int, int), String> games,
+  Set<(int, int)> noShowGamePairs,
+) {
   if (a.entityId == null || b.entityId == null) return 0;
+  if (_isNoShow(a.entityId!, b.entityId!, noShowGamePairs)) return 0;
+
   final ab = games[(a.entityId!, b.entityId!)];
   final ba = games[(b.entityId!, a.entityId!)];
 

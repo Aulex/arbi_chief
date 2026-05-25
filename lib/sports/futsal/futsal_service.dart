@@ -45,12 +45,14 @@ class FutsalService {
 
   /// Save goal results for a match.
   /// [detail] is "goalsA:goalsB" e.g. "3:1".
+  /// [esId]=4 marks the game as a no-show (forfeit).
   Future<void> saveGoalResult({
     required int eventId,
     required int teamAEntityId,
     required int teamBEntityId,
     required int goalsA,
     required int goalsB,
+    int? esId,
   }) async {
     final db = await _dbService.database;
 
@@ -72,9 +74,10 @@ class FutsalService {
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_fb_r',
       });
 
-      // Build event_result string
+      // Build event_result string and es_id (no-show marker)
       await txn.update('CMP_EVENT', {
         'event_result': '$goalsA:$goalsB',
+        'es_id': esId,
       }, where: 'event_id = ?', whereArgs: [eventId]);
     });
   }
@@ -87,6 +90,7 @@ class FutsalService {
     int? teamAId,
     int? teamBId,
     String? eventResult,
+    int? esId,
   })>> getTeamGamesForTournament(int tId) async {
     final db = await _dbService.database;
 
@@ -104,11 +108,13 @@ class FutsalService {
       int? teamAId,
       int? teamBId,
       String? eventResult,
+      int? esId,
     })>[];
 
     for (final event in events) {
       final eventId = event['event_id'] as int;
       final eventResult = event['event_result'] as String?;
+      final esId = event['es_id'] as int?;
 
       final subevents = await db.query(
         'CMP_SUBEVENT',
@@ -135,6 +141,7 @@ class FutsalService {
         teamAId: aTeam.isNotEmpty ? aTeam.first['team_id'] as int? : null,
         teamBId: bTeam.isNotEmpty ? bTeam.first['team_id'] as int? : null,
         eventResult: eventResult,
+        esId: esId,
       ));
     }
 
@@ -299,6 +306,73 @@ class FutsalService {
       'CMP_TEAM_ATTR',
       where: 't_id = ? AND team_id = ? AND attr_id = 10 AND attr_value = ?',
       whereArgs: [tId, teamId, 'removed'],
+    );
+  }
+
+  /// Count the number of no-show events for this team (where the team
+  /// scored 0 in a game flagged with es_id = 4).
+  Future<int> countNoShows(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final teamRows = await db.query(
+      'CMP_TEAM',
+      columns: ['entity_id'],
+      where: 'team_id = ?',
+      whereArgs: [teamId],
+    );
+    if (teamRows.isEmpty) return 0;
+    final entityId = teamRows.first['entity_id'] as int?;
+    if (entityId == null) return 0;
+
+    final rows = await db.rawQuery('''
+      SELECT COUNT(DISTINCT e.event_id) as cnt FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id AND se.entity_id = ?
+      WHERE e.t_id = ? AND e.es_id = 4 AND e.et_id = 2
+      AND NOT EXISTS (
+        SELECT 1 FROM CMP_SUBEVENT se2
+        WHERE se2.ev_id = e.event_id AND se2.entity_id = ?
+        AND se2.se_result > 0
+      )
+    ''', [entityId, tId, entityId]);
+    return (rows.first['cnt'] as int?) ?? 0;
+  }
+
+  /// Delete every team-vs-team game in this tournament involving [teamId].
+  /// Used when a team is removed after a 2nd no-show — per futsal rules,
+  /// all of their game results are annulled.
+  Future<void> deleteAllTeamGames(int tId, int teamId) async {
+    final db = await _dbService.database;
+    final teamRows = await db.query(
+      'CMP_TEAM',
+      columns: ['entity_id'],
+      where: 'team_id = ?',
+      whereArgs: [teamId],
+    );
+    if (teamRows.isEmpty) return;
+    final entityId = teamRows.first['entity_id'] as int?;
+    if (entityId == null) return;
+
+    final events = await db.rawQuery('''
+      SELECT DISTINCT e.event_id FROM CMP_EVENT e
+      JOIN CMP_SUBEVENT se ON se.ev_id = e.event_id
+      WHERE e.t_id = ? AND e.et_id = 2 AND se.entity_id = ?
+    ''', [tId, entityId]);
+
+    await db.transaction((txn) async {
+      for (final row in events) {
+        final eventId = row['event_id'] as int;
+        await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+        await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+      }
+    });
+  }
+
+  /// Clear the "removed" flag for every team in this tournament.
+  Future<void> clearAllRemovedState(int tId) async {
+    final db = await _dbService.database;
+    await db.delete(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 10',
+      whereArgs: [tId],
     );
   }
 
