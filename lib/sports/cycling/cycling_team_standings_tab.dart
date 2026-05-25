@@ -216,7 +216,7 @@ class _CyclingTeamStandingsTabState
       },
       child: Container(
         decoration: BoxDecoration(
-          color: isHovered ? Colors.indigo.shade50 : baseBg,
+          color: isHovered ? Colors.indigo.shade100 : baseBg,
           border: Border(
             bottom: BorderSide(color: Colors.grey.shade200, width: 1),
           ),

@@ -1576,7 +1576,7 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                           if (_hoveredRow == index) setState(() => _hoveredRow = null);
                         },
                         child: Container(
-                        color: isHovered ? Colors.indigo.shade50 : null,
+                        color: isHovered ? Colors.indigo.shade100 : null,
                         child: ListTile(
                           leading: isAthletics
                               ? Container(

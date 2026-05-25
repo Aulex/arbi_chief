@@ -784,7 +784,7 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
       },
       child: Container(
         decoration: BoxDecoration(
-          color: isHovered ? Colors.indigo.shade50 : null,
+          color: isHovered ? Colors.indigo.shade100 : null,
           border: Border(
             bottom: BorderSide(color: Colors.grey.shade200, width: 1),
           ),
@@ -1763,7 +1763,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
         },
         child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        color: isHovered ? Colors.indigo.shade50 : null,
+        color: isHovered ? Colors.indigo.shade100 : null,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
