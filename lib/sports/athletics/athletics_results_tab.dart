@@ -129,6 +129,9 @@ class _AthleticsResultsTabState extends ConsumerState<AthleticsResultsTab>
   }
 }
 
+/// Sortable columns in the per-category athletics results view.
+enum _CategorySortKey { number, name, team, age, time, coefficient, adjustedTime, place }
+
 /// Shows the results list for a single athletics category with add/edit/delete.
 class _CategoryResultsView extends ConsumerStatefulWidget {
   final int tId;
@@ -146,6 +149,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
   List<RankedAthleticsResult> _standings = [];
   bool _loading = true;
   Map<int, ({double men3000, double women1500})>? _customCoefficients;
+  int? _hoveredRow;
+  _CategorySortKey _sortKey = _CategorySortKey.number;
+  bool _sortAsc = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -502,36 +508,44 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
         return Column(
           children: [
             // Header with add button
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  '${widget.category.fullName} — ${widget.category.distanceLabel}',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                FilledButton.icon(
-                  onPressed: _showBulkImportDialog,
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Імпорт'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade400,
+                Expanded(
+                  child: Text(
+                    '${widget.category.fullName} — ${widget.category.distanceLabel} (${_standings.length})',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-                FilledButton.icon(
-                  onPressed: _addResult,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Додати'),
-                ),
-                FilledButton.icon(
-                  onPressed: _clearResults,
-                  icon: const Icon(Icons.clear_all, size: 18),
-                  label: const Text('Очистити'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red.shade400,
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _showBulkImportDialog,
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text('Імпорт'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.indigo.shade400,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _addResult,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Додати'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _clearResults,
+                      icon: const Icon(Icons.clear_all, size: 18),
+                      label: const Text('Очистити'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red.shade400,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -566,54 +580,283 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     );
   }
 
+  void _toggleSort(_CategorySortKey key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = true;
+      }
+    });
+  }
+
+  List<RankedAthleticsResult> _sortedStandings() {
+    int cmpInt(int? a, int? b) {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a.compareTo(b);
+    }
+    int cmpDbl(double? a, double? b) {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a.compareTo(b);
+    }
+    int cmpStr(String? a, String? b) {
+      final ae = a == null || a.trim().isEmpty;
+      final be = b == null || b.trim().isEmpty;
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      return a!.toLowerCase().compareTo(b!.toLowerCase());
+    }
+    final sorted = List<RankedAthleticsResult>.from(_standings);
+    sorted.sort((a, b) {
+      int r;
+      switch (_sortKey) {
+        case _CategorySortKey.number:
+          r = cmpInt(a.playerNumber, b.playerNumber);
+          break;
+        case _CategorySortKey.name:
+          r = cmpStr(a.playerName, b.playerName);
+          break;
+        case _CategorySortKey.team:
+          r = cmpStr(a.teamName, b.teamName);
+          break;
+        case _CategorySortKey.age:
+          r = cmpInt(
+            a.age > 0 ? a.age : null,
+            b.age > 0 ? b.age : null,
+          );
+          break;
+        case _CategorySortKey.time:
+          r = cmpInt(
+            a.result?.totalDsec,
+            b.result?.totalDsec,
+          );
+          break;
+        case _CategorySortKey.coefficient:
+          r = cmpDbl(a.coefficient, b.coefficient);
+          break;
+        case _CategorySortKey.adjustedTime:
+          r = cmpDbl(
+            a.result == null ? null : a.result!.adjustedDsec(a.coefficient),
+            b.result == null ? null : b.result!.adjustedDsec(b.coefficient),
+          );
+          break;
+        case _CategorySortKey.place:
+          r = cmpInt(
+            a.place > 0 ? a.place : null,
+            b.place > 0 ? b.place : null,
+          );
+          break;
+      }
+      if (r != 0) return _sortAsc ? r : -r;
+      return cmpStr(a.playerName, b.playerName);
+    });
+    return sorted;
+  }
+
   Widget _buildResultsTable(double availableWidth, bool isNarrow) {
+    final sorted = _sortedStandings();
+    final headerStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w800,
+      color: Colors.grey.shade900,
+    );
+    final cellStyle = const TextStyle(fontSize: 13);
+
+    // Determine the № column width from the widest player number text.
+    final tp = TextPainter(textDirection: TextDirection.ltr);
+    final numStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      color: Colors.indigo.shade700,
+      fontSize: 13,
+    );
+    double maxNumW = 0;
+    for (final r in sorted) {
+      final t = r.playerNumber != null ? '${r.playerNumber}' : '—';
+      tp.text = TextSpan(text: t, style: numStyle);
+      tp.layout();
+      if (tp.width > maxNumW) maxNumW = tp.width;
+    }
+    tp.text = TextSpan(text: '№', style: headerStyle);
+    tp.layout();
+    if (tp.width > maxNumW) maxNumW = tp.width;
+    final numColW = maxNumW + 32;
+
+    final actionsW = isNarrow ? 48.0 : 96.0;
+    final placeW = 56.0;
+    final timeW = 96.0;
+    final coefW = 72.0;
+    final adjW = 96.0;
+    final ageW = 48.0;
+    final hPad = isNarrow ? 8.0 : 12.0;
+
+    Widget headerCell(
+      String text, {
+      double? width,
+      int? flex,
+      TextAlign align = TextAlign.left,
+      required _CategorySortKey sortBy,
+    }) {
+      final isActive = _sortKey == sortBy;
+      final activeStyle = isActive
+          ? headerStyle.copyWith(color: Colors.indigo.shade700)
+          : headerStyle;
+      final mainAxis = align == TextAlign.center
+          ? MainAxisAlignment.center
+          : align == TextAlign.right
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start;
+      final wrapped = InkWell(
+        onTap: () => _toggleSort(sortBy),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 12),
+          child: Row(
+            mainAxisAlignment: mainAxis,
+            children: [
+              Flexible(
+                child: Text(text,
+                    style: activeStyle,
+                    textAlign: align,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  _sortAsc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                  size: 18,
+                  color: Colors.indigo.shade700,
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+      if (flex != null) return Expanded(flex: flex, child: wrapped);
+      return SizedBox(width: width, child: wrapped);
+    }
+
     return SizedBox(
       width: availableWidth,
-      child: DataTable(
-        columnSpacing: isNarrow ? 12 : 24,
-        horizontalMargin: isNarrow ? 8 : 24,
-        headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
-        columns: const [
-          DataColumn(label: Text('№', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-          DataColumn(label: Text('ПІБ', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Вік', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Час', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('Коеф', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-          DataColumn(label: Text('Зал. час', style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text('М', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-          DataColumn(label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade400, width: 1.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                headerCell('№', width: numColW, sortBy: _CategorySortKey.number),
+                headerCell('ПІБ', flex: 3, sortBy: _CategorySortKey.name),
+                headerCell('Команда', flex: 2, sortBy: _CategorySortKey.team),
+                headerCell('Вік', width: ageW, align: TextAlign.center, sortBy: _CategorySortKey.age),
+                headerCell('Час', width: timeW, align: TextAlign.center, sortBy: _CategorySortKey.time),
+                headerCell('Коеф', width: coefW, align: TextAlign.center, sortBy: _CategorySortKey.coefficient),
+                headerCell('Зал. час', width: adjW, align: TextAlign.center, sortBy: _CategorySortKey.adjustedTime),
+                headerCell('М', width: placeW, align: TextAlign.center, sortBy: _CategorySortKey.place),
+                SizedBox(width: actionsW),
+              ],
+            ),
+          ),
+          for (int i = 0; i < sorted.length; i++)
+            _buildResultRow(i, sorted[i], numColW, ageW, timeW, coefW, adjW, placeW, actionsW, hPad, isNarrow, cellStyle, numStyle),
         ],
-        rows: _standings.map((r) {
-          return DataRow(
-            cells: [
-              DataCell(Text(
+      ),
+    );
+  }
+
+  Widget _buildResultRow(
+    int index,
+    RankedAthleticsResult r,
+    double numColW,
+    double ageW,
+    double timeW,
+    double coefW,
+    double adjW,
+    double placeW,
+    double actionsW,
+    double hPad,
+    bool isNarrow,
+    TextStyle cellStyle,
+    TextStyle numStyle,
+  ) {
+    final isHovered = _hoveredRow == index;
+
+    Widget cell({double? width, int? flex, required Widget child, AlignmentGeometry align = Alignment.centerLeft}) {
+      final wrapped = Padding(
+        padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 10),
+        child: Align(alignment: align, child: child),
+      );
+      if (flex != null) return Expanded(flex: flex, child: wrapped);
+      return SizedBox(width: width, child: wrapped);
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRow = index),
+      onExit: (_) {
+        if (_hoveredRow == index) setState(() => _hoveredRow = null);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isHovered ? Colors.indigo.shade100 : null,
+          border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
+        ),
+        child: Row(
+          children: [
+            cell(
+              width: numColW,
+              child: Text(
                 r.playerNumber != null ? '${r.playerNumber}' : '—',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: r.playerNumber != null
-                      ? Colors.indigo.shade700
-                      : Colors.grey.shade500,
+                style: numStyle.copyWith(
+                  color: r.playerNumber != null ? Colors.indigo.shade700 : Colors.grey.shade500,
                 ),
-              )),
-              DataCell(Text(r.playerName ?? '')),
-              DataCell(Text(r.teamName ?? '')),
-              DataCell(Text('${r.age > 0 ? r.age : '-'}')),
-              DataCell(Text(
+              ),
+            ),
+            cell(flex: 3, child: Text(r.playerName ?? '', style: cellStyle, overflow: TextOverflow.ellipsis)),
+            cell(flex: 2, child: Text(r.teamName ?? '', style: cellStyle, overflow: TextOverflow.ellipsis)),
+            cell(
+              width: ageW,
+              align: Alignment.center,
+              child: Text('${r.age > 0 ? r.age : '-'}', style: cellStyle),
+            ),
+            cell(
+              width: timeW,
+              align: Alignment.center,
+              child: Text(
                 r.result != null ? r.result!.timeFormatted : '—',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-              )),
-              DataCell(Text(
+              ),
+            ),
+            cell(
+              width: coefW,
+              align: Alignment.center,
+              child: Text(
                 r.coefficient.toStringAsFixed(4),
                 style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.grey.shade600),
-              )),
-              DataCell(Text(
+              ),
+            ),
+            cell(
+              width: adjW,
+              align: Alignment.center,
+              child: Text(
                 r.result != null ? r.result!.adjustedTimeFormatted(r.coefficient) : '—',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 14, color: Colors.indigo),
-              )),
-              DataCell(Text(
+              ),
+            ),
+            cell(
+              width: placeW,
+              align: Alignment.center,
+              child: Text(
                 r.place > 0 ? '${r.place}' : '—',
                 style: TextStyle(
+                  fontSize: 13,
                   fontWeight: r.place > 0 && r.place <= 3 ? FontWeight.bold : FontWeight.normal,
                   color: r.place == 1
                       ? Colors.amber.shade800
@@ -623,8 +866,11 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                               ? Colors.brown
                               : null,
                 ),
-              )),
-              DataCell(Row(
+              ),
+            ),
+            SizedBox(
+              width: actionsW,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
@@ -634,16 +880,15 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                   ),
                   if (!isNarrow && r.result != null)
                     IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          size: 18, color: Colors.red.shade400),
+                      icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
                       onPressed: () => _deleteResult(r),
                       tooltip: 'Видалити',
                     ),
                 ],
-              )),
-            ],
-          );
-        }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1083,6 +1328,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
   bool _wasVisible = true; // starts visible on this tab
   _ParticipantSortKey _sortKey = _ParticipantSortKey.number;
   bool _sortAsc = true;
+  int? _hoveredRow;
 
   @override
   bool get wantKeepAlive => true;
@@ -1368,7 +1614,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
       children: [
         Text(
           'Всі учасники (${_rows.length})',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
@@ -1392,7 +1638,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
                     itemCount: _rows.length,
                     separatorBuilder: (_, __) => Divider(
                       height: 1, color: Colors.grey.shade200),
-                    itemBuilder: (context, i) => _buildRow(_rows[i]),
+                    itemBuilder: (context, i) => _buildRow(_rows[i], i),
                   ),
                 ),
               ],
@@ -1411,15 +1657,15 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
 
   Widget _buildHeader() {
     final st = TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.bold,
-      color: Colors.grey.shade700,
+      fontSize: 14,
+      fontWeight: FontWeight.w800,
+      color: Colors.grey.shade900,
     );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+        color: Colors.grey.shade200,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade400, width: 1.5)),
       ),
       child: Row(
         children: [
@@ -1529,20 +1775,27 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
     return SizedBox(width: width, child: content);
   }
 
-  Widget _buildRow(_ParticipantRowState row) {
+  Widget _buildRow(_ParticipantRowState row, int index) {
     final allowed = AthleticsCategory.allowedCategoriesFor(row.entry.autoCategory);
     // Defensive: if a stored override is no longer allowed (e.g. rules changed),
     // include it in the items so the dropdown can still display the value.
     final items = {...allowed, row.selectedCategory}.toList();
     final overridden = row.selectedCategory != row.entry.autoCategory;
+    final isHovered = _hoveredRow == index;
 
     return Focus(
       canRequestFocus: false,
       onFocusChange: (hasFocus) {
         if (!hasFocus) _saveRow(row);
       },
-      child: Container(
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hoveredRow = index),
+        onExit: (_) {
+          if (_hoveredRow == index) setState(() => _hoveredRow = null);
+        },
+        child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        color: isHovered ? Colors.indigo.shade100 : null,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -1657,6 +1910,7 @@ class _AllParticipantsViewState extends ConsumerState<_AllParticipantsView>
             ),
           ],
         ),
+      ),
       ),
     );
   }

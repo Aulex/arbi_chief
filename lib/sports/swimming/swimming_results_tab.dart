@@ -103,6 +103,9 @@ class _SwimmingResultsTabState extends ConsumerState<SwimmingResultsTab>
   }
 }
 
+/// Sortable columns in the per-category swimming results view.
+enum _CategorySortKey { name, team, time, place }
+
 /// Shows the results list for a single swimming category with add/edit/delete.
 class _CategoryResultsView extends ConsumerStatefulWidget {
   final int tId;
@@ -119,6 +122,9 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     with AutomaticKeepAliveClientMixin {
   List<RankedSwimmingResult> _standings = [];
   bool _loading = true;
+  int? _hoveredRow;
+  _CategorySortKey _sortKey = _CategorySortKey.place;
+  bool _sortAsc = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -388,29 +394,37 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
 
         return Column(
           children: [
-            // Header with add button
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            // Header: title (max left) | buttons (max right)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  '${widget.category.fullName} — 50 м в/стиль',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                FilledButton.icon(
-                  onPressed: _showBulkImportDialog,
-                  icon: const Icon(Icons.upload_file, size: 18),
-                  label: const Text('Імпорт'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade400,
+                Expanded(
+                  child: Text(
+                    '${widget.category.fullName} — 50 м в/стиль (${_standings.length})',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-                FilledButton.icon(
-                  onPressed: _addResult,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Додати'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _showBulkImportDialog,
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: const Text('Імпорт'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.indigo.shade400,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _addResult,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Додати'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -445,41 +459,188 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
     );
   }
 
+  void _toggleSort(_CategorySortKey key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = true;
+      }
+    });
+  }
+
+  List<RankedSwimmingResult> _sortedStandings() {
+    int cmpInt(int? a, int? b) {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a.compareTo(b);
+    }
+    int cmpStr(String? a, String? b) {
+      final ae = a == null || a.trim().isEmpty;
+      final be = b == null || b.trim().isEmpty;
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      return a!.toLowerCase().compareTo(b!.toLowerCase());
+    }
+    final sorted = List<RankedSwimmingResult>.from(_standings);
+    sorted.sort((a, b) {
+      int r;
+      switch (_sortKey) {
+        case _CategorySortKey.name:
+          r = cmpStr(a.playerName, b.playerName);
+          break;
+        case _CategorySortKey.team:
+          r = cmpStr(a.teamName, b.teamName);
+          break;
+        case _CategorySortKey.time:
+          r = cmpInt(a.result.totalDsec, b.result.totalDsec);
+          break;
+        case _CategorySortKey.place:
+          r = cmpInt(
+            a.place > 0 ? a.place : null,
+            b.place > 0 ? b.place : null,
+          );
+          break;
+      }
+      if (r != 0) return _sortAsc ? r : -r;
+      return cmpStr(a.playerName, b.playerName);
+    });
+    return sorted;
+  }
+
   Widget _buildResultsTable(double availableWidth, bool isNarrow) {
     final isRelay = widget.category == SwimmingCategory.relay;
+    final sorted = _sortedStandings();
+    final headerStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w800,
+      color: Colors.grey.shade900,
+    );
+    final cellStyle = const TextStyle(fontSize: 13);
+
+    final actionsW = isNarrow ? 48.0 : 96.0;
+    final placeW = 56.0;
+    final timeW = 120.0;
+    final hPad = isNarrow ? 8.0 : 16.0;
+
+    Widget headerCell(
+      String text, {
+      double? width,
+      int? flex,
+      TextAlign align = TextAlign.left,
+      required _CategorySortKey sortBy,
+    }) {
+      final isActive = _sortKey == sortBy;
+      final activeStyle = isActive
+          ? headerStyle.copyWith(color: Colors.indigo.shade700)
+          : headerStyle;
+      final mainAxis = align == TextAlign.center
+          ? MainAxisAlignment.center
+          : align == TextAlign.right
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start;
+      final wrapped = InkWell(
+        onTap: () => _toggleSort(sortBy),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 12),
+          child: Row(
+            mainAxisAlignment: mainAxis,
+            children: [
+              Flexible(
+                child: Text(text,
+                    style: activeStyle,
+                    textAlign: align,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  _sortAsc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                  size: 18,
+                  color: Colors.indigo.shade700,
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+      if (flex != null) return Expanded(flex: flex, child: wrapped);
+      return SizedBox(width: width, child: wrapped);
+    }
 
     return SizedBox(
       width: availableWidth,
-      child: DataTable(
-        columnSpacing: isNarrow ? 12 : 24,
-        horizontalMargin: isNarrow ? 8 : 24,
-        headingRowColor: WidgetStatePropertyAll(Colors.grey.shade100),
-        columns: [
-          const DataColumn(
-              label:
-                  Text('М', style: TextStyle(fontWeight: FontWeight.bold))),
-          if (!isRelay)
-            const DataColumn(
-                label: Text('ПІБ',
-                    style: TextStyle(fontWeight: FontWeight.bold))),
-          const DataColumn(
-              label: Text('Команда',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          const DataColumn(
-              label: Text('Час',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          const DataColumn(
-              label:
-                  Text('', style: TextStyle(fontWeight: FontWeight.bold))),
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade400, width: 1.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                headerCell('М', width: placeW, align: TextAlign.center, sortBy: _CategorySortKey.place),
+                if (!isRelay) headerCell('ПІБ', flex: 3, sortBy: _CategorySortKey.name),
+                headerCell('Команда', flex: 2, sortBy: _CategorySortKey.team),
+                headerCell('Час', width: timeW, align: TextAlign.center, sortBy: _CategorySortKey.time),
+                SizedBox(width: actionsW),
+              ],
+            ),
+          ),
+          for (int i = 0; i < sorted.length; i++)
+            _buildResultRow(i, sorted[i], isRelay, placeW, timeW, actionsW, hPad, isNarrow, cellStyle),
         ],
-        rows: _standings.map((r) {
-          return DataRow(
-            cells: [
-              DataCell(Text(
+      ),
+    );
+  }
+
+  Widget _buildResultRow(
+    int index,
+    RankedSwimmingResult r,
+    bool isRelay,
+    double placeW,
+    double timeW,
+    double actionsW,
+    double hPad,
+    bool isNarrow,
+    TextStyle cellStyle,
+  ) {
+    final isHovered = _hoveredRow == index;
+
+    Widget cell({double? width, int? flex, required Widget child, AlignmentGeometry align = Alignment.centerLeft}) {
+      final wrapped = Padding(
+        padding: EdgeInsets.symmetric(horizontal: hPad / 2, vertical: 10),
+        child: Align(alignment: align, child: child),
+      );
+      if (flex != null) return Expanded(flex: flex, child: wrapped);
+      return SizedBox(width: width, child: wrapped);
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRow = index),
+      onExit: (_) {
+        if (_hoveredRow == index) setState(() => _hoveredRow = null);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isHovered ? Colors.indigo.shade100 : null,
+          border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 1)),
+        ),
+        child: Row(
+          children: [
+            cell(
+              width: placeW,
+              align: Alignment.center,
+              child: Text(
                 '${r.place}',
                 style: TextStyle(
-                  fontWeight:
-                      r.place <= 3 ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                  fontWeight: r.place <= 3 ? FontWeight.bold : FontWeight.normal,
                   color: r.place == 1
                       ? Colors.amber.shade800
                       : r.place == 2
@@ -488,15 +649,22 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                               ? Colors.brown
                               : null,
                 ),
-              )),
-              if (!isRelay) DataCell(Text(r.playerName ?? '')),
-              DataCell(Text(r.teamName ?? '')),
-              DataCell(Text(
+              ),
+            ),
+            if (!isRelay)
+              cell(flex: 3, child: Text(r.playerName ?? '', style: cellStyle, overflow: TextOverflow.ellipsis)),
+            cell(flex: 2, child: Text(r.teamName ?? '', style: cellStyle, overflow: TextOverflow.ellipsis)),
+            cell(
+              width: timeW,
+              align: Alignment.center,
+              child: Text(
                 r.result.timeFormatted,
-                style:
-                    const TextStyle(fontFamily: 'monospace', fontSize: 14),
-              )),
-              DataCell(Row(
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+              ),
+            ),
+            SizedBox(
+              width: actionsW,
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
@@ -506,16 +674,15 @@ class _CategoryResultsViewState extends ConsumerState<_CategoryResultsView>
                   ),
                   if (!isNarrow)
                     IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          size: 18, color: Colors.red.shade400),
+                      icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400),
                       onPressed: () => _deleteResult(r),
                       tooltip: 'Видалити',
                     ),
                 ],
-              )),
-            ],
-          );
-        }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
