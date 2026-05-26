@@ -16,7 +16,7 @@ class ArmWrestlingAllPlayersTab extends ConsumerStatefulWidget {
       _ArmWrestlingAllPlayersTabState();
 }
 
-enum _SortKey { number, name, team, weight, category, place }
+enum _SortKey { number, name, team, weight, category }
 
 class _Row {
   final int playerId;
@@ -174,10 +174,11 @@ class _ArmWrestlingAllPlayersTabState
           break;
         case _SortKey.category:
           r = a.categoryId.compareTo(b.categoryId);
-          if (r == 0) r = a.place.compareTo(b.place);
-          break;
-        case _SortKey.place:
-          r = a.place.compareTo(b.place);
+          if (r == 0) {
+            final an = a.parsedNumber ?? a.savedNumber ?? 9999;
+            final bn = b.parsedNumber ?? b.savedNumber ?? 9999;
+            r = an.compareTo(bn);
+          }
           break;
       }
       if (r != 0) return _sortAsc ? r : -r;
@@ -272,11 +273,9 @@ class _ArmWrestlingAllPlayersTabState
 
   // --- layout ---
 
-  static const double _wPlace = 44;
   static const double _wNumber = 56;
   static const double _wWeight = 70;
   static const double _wCategory = 130;
-  static const double _wScore = 50;
   static const double _wStatus = 28;
 
   @override
@@ -359,12 +358,6 @@ class _ArmWrestlingAllPlayersTabState
       child: Row(
         children: [
           _sortableHeader(
-              width: _wPlace,
-              label: 'М',
-              style: st,
-              key: _SortKey.place,
-              align: TextAlign.center),
-          _sortableHeader(
               width: _wNumber,
               label: '№',
               style: st,
@@ -386,20 +379,6 @@ class _ArmWrestlingAllPlayersTabState
               style: st,
               key: _SortKey.category,
               align: TextAlign.center),
-          SizedBox(
-            width: _wScore,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-              child: Text('П', style: st, textAlign: TextAlign.center),
-            ),
-          ),
-          SizedBox(
-            width: _wScore,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-              child: Text('Пор', style: st, textAlign: TextAlign.center),
-            ),
-          ),
           const SizedBox(width: _wStatus),
         ],
       ),
@@ -452,11 +431,6 @@ class _ArmWrestlingAllPlayersTabState
 
   Widget _buildRow(_Row row, int index) {
     final isHovered = _hoveredRow == index;
-    final placeColor = row.place == 1
-        ? Colors.amber.shade700
-        : (row.place == 2
-            ? Colors.grey.shade600
-            : (row.place == 3 ? Colors.brown.shade400 : Colors.black87));
     return Focus(
       canRequestFocus: false,
       onFocusChange: (hasFocus) {
@@ -473,15 +447,6 @@ class _ArmWrestlingAllPlayersTabState
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: _wPlace,
-                child: Text(
-                  '${row.place}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, color: placeColor),
-                ),
-              ),
               SizedBox(
                 width: _wNumber,
                 child: Padding(
@@ -570,22 +535,6 @@ class _ArmWrestlingAllPlayersTabState
                     },
                   ),
                 ),
-              ),
-              SizedBox(
-                width: _wScore,
-                child: Text('${row.wins}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: row.wins > 0 ? Colors.green.shade700 : null)),
-              ),
-              SizedBox(
-                width: _wScore,
-                child: Text('${row.losses}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: row.losses > 0 ? Colors.red.shade700 : null)),
               ),
               SizedBox(
                 width: _wStatus,
