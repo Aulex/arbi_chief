@@ -19,10 +19,15 @@ import 'dart:math' as math;
 /// Which half of the bracket a match belongs to.
 enum BracketSide { winners, losers, grandFinal, grandFinalReset }
 
-/// A single played match. `winnerPlayerId == null` means the result is not
-/// yet recorded. Both players are non-null for an actual head-to-head; one
-/// can be null if it is a pending slot (waiting on an upstream match) or a
-/// bye slot.
+/// A single match. `winnerPlayerId == null` means the result is not yet
+/// recorded. A slot's player can be:
+///   • a real player id (`playerAId != null`)
+///   • a bye (`playerAId == null` and `isAByeSlot == true`) — the upstream
+///     match was a bye / had no real player, so this slot is permanently
+///     empty. The opponent auto-advances.
+///   • pending (`playerAId == null` and `isAByeSlot == false`) — the
+///     upstream match has not yet been decided. No auto-advance, the
+///     slot is not clickable yet.
 class BracketMatch {
   final String id;                // stable slot id: "W1.1", "L2.1", "GF", "GFR"
   final BracketSide side;
@@ -30,6 +35,8 @@ class BracketMatch {
   final int slot;                 // 1-based within (side, round)
   final int? playerAId;
   final int? playerBId;
+  final bool isAByeSlot;
+  final bool isBByeSlot;
   final int? winnerPlayerId;
   /// Backing CMP_EVENT id, if this match has been entered into the DB.
   final int? eventId;
@@ -44,17 +51,39 @@ class BracketMatch {
     required this.slot,
     this.playerAId,
     this.playerBId,
+    this.isAByeSlot = false,
+    this.isBByeSlot = false,
     this.winnerPlayerId,
     this.eventId,
     this.eventOrderIndex = 0,
   });
 
-  bool get isReady => playerAId != null && playerBId != null;
+  /// Both sides have real players → match is playable.
+  bool get isPlayable => playerAId != null && playerBId != null;
+
+  /// A bye match: exactly one side is a bye slot, the other is a real
+  /// player. The real player auto-advances; no result is recorded.
+  bool get isByeAdvancement =>
+      (isAByeSlot && playerBId != null && !isBByeSlot) ||
+      (isBByeSlot && playerAId != null && !isAByeSlot);
+
   bool get isDecided => winnerPlayerId != null;
+
   int? get loserPlayerId {
-    if (!isDecided || !isReady) return null;
+    if (!isPlayable || !isDecided) return null;
     return winnerPlayerId == playerAId ? playerBId : playerAId;
   }
+}
+
+/// A slot in a bracket round — used internally during building. Outside
+/// callers only see BracketMatch.
+class _Slot {
+  final int? playerId;
+  final bool isBye;
+  const _Slot._(this.playerId, this.isBye);
+  const _Slot.player(int id) : this._(id, false);
+  const _Slot.bye() : this._(null, true);
+  const _Slot.pending() : this._(null, false);
 }
 
 /// Input to bracket generation: the result of a CMP_EVENT match between
@@ -159,125 +188,100 @@ Bracket buildBracket({
     );
   }
 
-  // Round up to next power of two; pad with byes (null).
+  // Round up to next power of two; pad with byes.
   int bracketSize = 1;
   while (bracketSize < seededPlayerIds.length) bracketSize <<= 1;
   if (bracketSize < 2) bracketSize = 2;
 
   final positions = seedPositions(bracketSize);
-  // seeds[i] = player at bracket position i (0-based).
   final seeds = List<int?>.filled(bracketSize, null);
   for (int i = 0; i < bracketSize; i++) {
-    final seedRank = positions[i]; // 1-based
+    final seedRank = positions[i];
     if (seedRank <= seededPlayerIds.length) {
       seeds[i] = seededPlayerIds[seedRank - 1];
     }
   }
 
-  // Index raw matches by unordered pair, preserving order for repeats (GF + GFR).
+  // Index raw matches by unordered pair, preserving DB insertion order so
+  // GF and GFR can be told apart.
   final byPair = <String, List<RawMatch>>{};
-  int orderCounter = 0;
   final orderedRaw = [...rawMatches];
   for (final m in orderedRaw) {
     final key = _pairKey(m.playerAId, m.playerBId);
     byPair.putIfAbsent(key, () => []).add(m);
-    orderCounter++;
   }
-  // Within each pair list, preserve the order the matches arrived.
 
   final matches = <String, BracketMatch>{};
   final winnersRounds = (math.log(bracketSize) / math.ln2).round();
 
   // --- WINNERS BRACKET ---
-  // Round 1 pairings: consecutive pairs from the seed list.
-  final List<List<int?>> roundWinners = []; // roundWinners[r-1] = players advancing into round r+1
-  final List<List<int?>> roundLosers = [];  // roundLosers[r-1] = losers of round r (parallel)
+  // Tracked per round: winners[] and losers[] as _Slot lists so we can
+  // distinguish "real player advanced" from "bye pass-through" from
+  // "pending upstream".
+  final List<List<_Slot>> wRoundWinners = [];
+  final List<List<_Slot>> wRoundLosers = [];
 
-  // Build W round 1 from seed pairs
-  final w1Pairs = <List<int?>>[];
+  List<List<_Slot>> currentRoundPairs = [];
   for (int i = 0; i < bracketSize; i += 2) {
-    w1Pairs.add([seeds[i], seeds[i + 1]]);
+    currentRoundPairs.add([
+      seeds[i] == null ? const _Slot.bye() : _Slot.player(seeds[i]!),
+      seeds[i + 1] == null ? const _Slot.bye() : _Slot.player(seeds[i + 1]!),
+    ]);
   }
 
-  List<List<int?>> currentRoundPairs = w1Pairs;
   for (int r = 1; r <= winnersRounds; r++) {
-    final winners = <int?>[];
-    final losers = <int?>[];
+    final winners = <_Slot>[];
+    final losers = <_Slot>[];
     for (int s = 0; s < currentRoundPairs.length; s++) {
       final pair = currentRoundPairs[s];
-      final a = pair[0];
-      final b = pair[1];
-      final slotId = 'W$r.${s + 1}';
-      int? winner;
-      int? loser;
-      int? eventId;
-      int eventOrder = 0;
-      // Bye handling: if exactly one side is null, the other auto-advances.
-      if (a == null && b != null) {
-        winner = b;
-      } else if (b == null && a != null) {
-        winner = a;
-      } else if (a != null && b != null) {
-        final raws = byPair[_pairKey(a, b)] ?? const [];
-        if (raws.isNotEmpty) {
-          final raw = raws.removeAt(0);
-          winner = raw.winnerPlayerId;
-          eventId = raw.eventId;
-          eventOrder = orderedRaw.indexOf(raw);
-        }
-      }
-      if (winner != null && a != null && b != null) {
-        loser = (winner == a) ? b : a;
-      } else if (winner != null && (a == null || b == null)) {
-        // bye: no loser
-        loser = null;
-      }
-
-      matches[slotId] = BracketMatch(
-        id: slotId,
+      final result = _emitMatch(
+        matches: matches,
+        byPair: byPair,
+        orderedRaw: orderedRaw,
+        slotId: 'W$r.${s + 1}',
         side: BracketSide.winners,
         round: r,
         slot: s + 1,
-        playerAId: a,
-        playerBId: b,
-        winnerPlayerId: winner,
-        eventId: eventId,
-        eventOrderIndex: eventOrder,
+        a: pair[0],
+        b: pair[1],
       );
-      winners.add(winner);
-      losers.add(loser);
+      winners.add(result.$1);
+      losers.add(result.$2);
     }
-    roundWinners.add(winners);
-    roundLosers.add(losers);
+    wRoundWinners.add(winners);
+    wRoundLosers.add(losers);
 
     if (r < winnersRounds) {
-      // Build next round's pairs from this round's winners.
-      final next = <List<int?>>[];
+      final next = <List<_Slot>>[];
       for (int i = 0; i < winners.length; i += 2) {
-        next.add([winners[i], winners.length > i + 1 ? winners[i + 1] : null]);
+        next.add([
+          winners[i],
+          i + 1 < winners.length ? winners[i + 1] : const _Slot.bye(),
+        ]);
       }
       currentRoundPairs = next;
     }
   }
 
   // --- LOSERS BRACKET ---
-  // Standard layout: for k winners-rounds, losers has 2*(k-1) rounds.
-  // Odd L rounds pair the previous L round's winners with each other.
-  // Even L rounds pair an L-round winner with a fresh W-round loser.
-  // Exception: L round 1 pairs the W round 1 losers directly.
+  // Layout for k winners-rounds: 2*(k-1) L-rounds.
+  // Odd L rounds pair losers/winners of the previous L round (or W1 for L1).
+  // Even L rounds pair previous-L-round winners with fresh W-round losers.
   final losersRounds = math.max(0, 2 * (winnersRounds - 1));
-  final List<List<int?>> lRoundWinners = [];
+  final List<List<_Slot>> lRoundWinners = [];
 
-  // L round 1: pair W round 1 losers in consecutive pairs.
   if (losersRounds >= 1) {
-    final w1Losers = roundLosers[0];
-    final pairs = <List<int?>>[];
+    final w1Losers = wRoundLosers[0];
+    final pairs = <List<_Slot>>[];
     for (int i = 0; i < w1Losers.length; i += 2) {
-      pairs.add([w1Losers[i], i + 1 < w1Losers.length ? w1Losers[i + 1] : null]);
+      pairs.add([
+        w1Losers[i],
+        i + 1 < w1Losers.length ? w1Losers[i + 1] : const _Slot.bye(),
+      ]);
     }
-    final winners = <int?>[];
+    final winners = <_Slot>[];
     for (int s = 0; s < pairs.length; s++) {
-      winners.add(_emitMatch(
+      final res = _emitMatch(
         matches: matches,
         byPair: byPair,
         orderedRaw: orderedRaw,
@@ -287,36 +291,39 @@ Bracket buildBracket({
         slot: s + 1,
         a: pairs[s][0],
         b: pairs[s][1],
-      ));
+      );
+      winners.add(res.$1);
     }
     lRoundWinners.add(winners);
   }
 
-  // Subsequent L rounds
   for (int r = 2; r <= losersRounds; r++) {
-    final pairs = <List<int?>>[];
+    final pairs = <List<_Slot>>[];
     if (r.isEven) {
-      // Even round: pair previous L winners with fresh W losers (from W round r/2 + 1).
-      final wRoundIndex = r ~/ 2; // 1-based W round index whose losers drop here
-      final wLosers = (wRoundIndex < roundLosers.length) ? roundLosers[wRoundIndex] : <int?>[];
-      final prevLWinners = lRoundWinners.isNotEmpty ? lRoundWinners.last : const <int?>[];
-      // Pair L-bracket survivor i with W-loser i.
+      final wRoundIndex = r ~/ 2; // 0-based: 1 → roundLosers[1] (W2)
+      final wLosers = wRoundIndex < wRoundLosers.length
+          ? wRoundLosers[wRoundIndex]
+          : const <_Slot>[];
+      final prevLWinners = lRoundWinners.isNotEmpty ? lRoundWinners.last : const <_Slot>[];
       final n = math.max(prevLWinners.length, wLosers.length);
       for (int i = 0; i < n; i++) {
-        final a = i < prevLWinners.length ? prevLWinners[i] : null;
-        final b = i < wLosers.length ? wLosers[i] : null;
-        pairs.add([a, b]);
+        pairs.add([
+          i < prevLWinners.length ? prevLWinners[i] : const _Slot.bye(),
+          i < wLosers.length ? wLosers[i] : const _Slot.bye(),
+        ]);
       }
     } else {
-      // Odd round (>1): pair previous L round winners with each other.
       final prev = lRoundWinners.last;
       for (int i = 0; i < prev.length; i += 2) {
-        pairs.add([prev[i], i + 1 < prev.length ? prev[i + 1] : null]);
+        pairs.add([
+          prev[i],
+          i + 1 < prev.length ? prev[i + 1] : const _Slot.bye(),
+        ]);
       }
     }
-    final winners = <int?>[];
+    final winners = <_Slot>[];
     for (int s = 0; s < pairs.length; s++) {
-      winners.add(_emitMatch(
+      final res = _emitMatch(
         matches: matches,
         byPair: byPair,
         orderedRaw: orderedRaw,
@@ -326,67 +333,50 @@ Bracket buildBracket({
         slot: s + 1,
         a: pairs[s][0],
         b: pairs[s][1],
-      ));
+      );
+      winners.add(res.$1);
     }
     lRoundWinners.add(winners);
   }
 
   // --- GRAND FINAL ---
-  final wChampion = roundWinners.isNotEmpty ? roundWinners.last.firstOrNull : null;
+  final wChampion = wRoundWinners.isNotEmpty ? wRoundWinners.last.firstOrNull : null;
   final lChampion = lRoundWinners.isNotEmpty ? lRoundWinners.last.firstOrNull : null;
   int? gfWinner;
   int? gfLoser;
   if (wChampion != null && lChampion != null) {
-    final raws = byPair[_pairKey(wChampion, lChampion)] ?? const [];
-    int? gfEventId;
-    int gfOrder = 0;
-    if (raws.isNotEmpty) {
-      final raw = raws.removeAt(0);
-      gfWinner = raw.winnerPlayerId;
-      gfEventId = raw.eventId;
-      gfOrder = orderedRaw.indexOf(raw);
-      if (gfWinner != null) {
-        gfLoser = (gfWinner == wChampion) ? lChampion : wChampion;
-      }
-    }
-    matches['GF'] = BracketMatch(
-      id: 'GF',
+    _emitMatch(
+      matches: matches,
+      byPair: byPair,
+      orderedRaw: orderedRaw,
+      slotId: 'GF',
       side: BracketSide.grandFinal,
       round: 1,
       slot: 1,
-      playerAId: wChampion,
-      playerBId: lChampion,
-      winnerPlayerId: gfWinner,
-      eventId: gfEventId,
-      eventOrderIndex: gfOrder,
+      a: wChampion,
+      b: lChampion,
     );
+    final gf = matches['GF']!;
+    gfWinner = gf.winnerPlayerId;
+    gfLoser = gf.loserPlayerId;
 
-    // Bracket reset: only if the LB champion won the first GF.
-    if (gfWinner == lChampion) {
-      final extraRaws = byPair[_pairKey(wChampion, lChampion)] ?? const [];
-      int? rWinner;
-      int? rEventId;
-      int rOrder = 0;
-      if (extraRaws.isNotEmpty) {
-        final raw = extraRaws.removeAt(0);
-        rWinner = raw.winnerPlayerId;
-        rEventId = raw.eventId;
-        rOrder = orderedRaw.indexOf(raw);
-      }
-      matches['GFR'] = BracketMatch(
-        id: 'GFR',
+    // Bracket reset: only played if the LB winner won the first GF.
+    if (gfWinner != null && lChampion.playerId != null && gfWinner == lChampion.playerId) {
+      _emitMatch(
+        matches: matches,
+        byPair: byPair,
+        orderedRaw: orderedRaw,
+        slotId: 'GFR',
         side: BracketSide.grandFinalReset,
         round: 1,
         slot: 1,
-        playerAId: wChampion,
-        playerBId: lChampion,
-        winnerPlayerId: rWinner,
-        eventId: rEventId,
-        eventOrderIndex: rOrder,
+        a: wChampion,
+        b: lChampion,
       );
-      if (rWinner != null) {
-        gfWinner = rWinner;
-        gfLoser = (rWinner == wChampion) ? lChampion : wChampion;
+      final gfr = matches['GFR']!;
+      if (gfr.isDecided) {
+        gfWinner = gfr.winnerPlayerId;
+        gfLoser = gfr.loserPlayerId;
       } else {
         gfWinner = null;
         gfLoser = null;
@@ -394,16 +384,13 @@ Bracket buildBracket({
     }
   }
 
-  // --- RANKING ---
   final ranking = _computeRanking(
-    seeds: seeds,
     matches: matches,
     winnersRounds: winnersRounds,
     losersRounds: losersRounds,
     gfWinner: gfWinner,
     gfLoser: gfLoser,
-    lChampion: lChampion,
-    wChampion: wChampion,
+    wChampion: wChampion?.playerId,
   );
 
   return Bracket(
@@ -415,7 +402,11 @@ Bracket buildBracket({
   );
 }
 
-int? _emitMatch({
+/// Emits one match and returns `(winnerSlot, loserSlot)` for the next round.
+///
+/// Auto-advance fires only when the opposite side is a true bye slot.
+/// A `_Slot.pending()` opposite never triggers auto-advance.
+(_Slot, _Slot) _emitMatch({
   required Map<String, BracketMatch> matches,
   required Map<String, List<RawMatch>> byPair,
   required List<RawMatch> orderedRaw,
@@ -423,18 +414,18 @@ int? _emitMatch({
   required BracketSide side,
   required int round,
   required int slot,
-  required int? a,
-  required int? b,
+  required _Slot a,
+  required _Slot b,
 }) {
   int? winner;
   int? eventId;
   int eventOrder = 0;
-  if (a == null && b != null) {
-    winner = b;
-  } else if (b == null && a != null) {
-    winner = a;
-  } else if (a != null && b != null) {
-    final raws = byPair[_pairKey(a, b)] ?? const [];
+  if (a.isBye && b.playerId != null) {
+    winner = b.playerId;
+  } else if (b.isBye && a.playerId != null) {
+    winner = a.playerId;
+  } else if (a.playerId != null && b.playerId != null) {
+    final raws = byPair[_pairKey(a.playerId!, b.playerId!)] ?? const [];
     if (raws.isNotEmpty) {
       final raw = raws.removeAt(0);
       winner = raw.winnerPlayerId;
@@ -447,13 +438,42 @@ int? _emitMatch({
     side: side,
     round: round,
     slot: slot,
-    playerAId: a,
-    playerBId: b,
+    playerAId: a.playerId,
+    playerBId: b.playerId,
+    isAByeSlot: a.isBye,
+    isBByeSlot: b.isBye,
     winnerPlayerId: winner,
     eventId: eventId,
     eventOrderIndex: eventOrder,
   );
-  return winner;
+
+  // Determine winner & loser slots for downstream rounds.
+  _Slot winnerSlot;
+  _Slot loserSlot;
+  if (a.isBye && b.isBye) {
+    winnerSlot = const _Slot.bye();
+    loserSlot = const _Slot.bye();
+  } else if (a.isBye) {
+    // b auto-advanced; no loser.
+    winnerSlot = b;
+    loserSlot = const _Slot.bye();
+  } else if (b.isBye) {
+    winnerSlot = a;
+    loserSlot = const _Slot.bye();
+  } else if (a.playerId == null || b.playerId == null) {
+    // Upstream is pending → this match is also pending.
+    winnerSlot = const _Slot.pending();
+    loserSlot = const _Slot.pending();
+  } else if (winner != null) {
+    final loserId = winner == a.playerId ? b.playerId! : a.playerId!;
+    winnerSlot = _Slot.player(winner);
+    loserSlot = _Slot.player(loserId);
+  } else {
+    // Both sides set but no result yet.
+    winnerSlot = const _Slot.pending();
+    loserSlot = const _Slot.pending();
+  }
+  return (winnerSlot, loserSlot);
 }
 
 String _pairKey(int a, int b) {
@@ -465,17 +485,14 @@ String _pairKey(int a, int b) {
 /// Derive final places from bracket state. Players are placed by elimination
 /// round (later elimination = better place), and the GF winner takes 1st.
 List<int> _computeRanking({
-  required List<int?> seeds,
   required Map<String, BracketMatch> matches,
   required int winnersRounds,
   required int losersRounds,
   required int? gfWinner,
   required int? gfLoser,
-  required int? lChampion,
   required int? wChampion,
 }) {
-  // Build "eliminated in round R of side X" map by scanning all matches.
-  final eliminationOrder = <int, int>{}; // playerId → ordering value (lower = eliminated earlier)
+  final eliminationOrder = <int, int>{};
 
   void elim(int? pid, int orderKey) {
     if (pid == null) return;
@@ -484,17 +501,12 @@ List<int> _computeRanking({
     }
   }
 
-  // Degenerate 2-player bracket: no losers bracket, no GF. The W1.1
-  // loser is the runner-up directly.
+  // Degenerate 2-player bracket: no L bracket, no GF.
   if (losersRounds == 0) {
     final w11 = matches['W1.1'];
-    if (w11 != null && w11.isDecided) {
-      elim(w11.loserPlayerId, 1000);
-    }
+    if (w11 != null && w11.isDecided) elim(w11.loserPlayerId, 1000);
   }
 
-  // Losers in winners bracket are NOT eliminated — they drop to losers.
-  // Players are eliminated when they lose in losers bracket, GF, or GFR.
   for (int r = 1; r <= losersRounds; r++) {
     int slot = 1;
     while (true) {
@@ -506,19 +518,15 @@ List<int> _computeRanking({
   }
   final gf = matches['GF'];
   final gfr = matches['GFR'];
-  // Determine 2nd place (loser of the decisive final).
   if (gfr != null) {
     if (gfr.isDecided) elim(gfr.loserPlayerId, 1000);
     if (gf != null && gf.isDecided && gf.loserPlayerId != null && !eliminationOrder.containsKey(gf.loserPlayerId)) {
-      // The GF loser, if not the GFR loser, was eliminated in GFR (since it's the same two players).
       elim(gf.loserPlayerId, 1000);
     }
   } else if (gf != null && gf.isDecided) {
     elim(gf.loserPlayerId, 1000);
   }
 
-  // Sort all known eliminated players by their elimination order (descending).
-  // Higher elim order = eliminated later = better place.
   final eliminated = eliminationOrder.entries.toList()
     ..sort((a, b) => b.value.compareTo(a.value));
 

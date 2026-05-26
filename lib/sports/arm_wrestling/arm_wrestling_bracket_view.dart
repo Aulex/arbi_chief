@@ -103,7 +103,7 @@ class _BodyState extends ConsumerState<_Body> {
   }
 
   Future<void> _setWinner(BracketMatch match, int winnerPlayerId) async {
-    if (!match.isReady) return;
+    if (!match.isPlayable) return;
     final tournamentSvc = ref.read(tournamentServiceProvider);
     int? eventId = match.eventId;
     eventId ??= await tournamentSvc.createGame(
@@ -385,6 +385,14 @@ class _BodyState extends ConsumerState<_Body> {
     );
   }
 
+  // Vertical layout constants for bracket columns. _matchH is approximate —
+  // a real card is ~52–60 px tall depending on whether the team line shows.
+  // Centering uses an "expected pair gap" so later rounds line up with the
+  // midpoint of the two upstream matches.
+  static const double _matchH = 56;
+  static const double _matchGap = 8;
+  static const double _matchPitch = _matchH + _matchGap; // total stride per slot
+
   Widget _bracketHalf({
     required String title,
     required MaterialColor color,
@@ -392,6 +400,8 @@ class _BodyState extends ConsumerState<_Body> {
     required String sidePrefix,
   }) {
     final rounds = roundsByIndex.keys.toList()..sort();
+    final firstRoundCount =
+        roundsByIndex[rounds.first]?.length ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -410,6 +420,11 @@ class _BodyState extends ConsumerState<_Body> {
                 '$sidePrefix$r',
                 roundsByIndex[r]!,
                 color,
+                // Each subsequent round's match groups twice as many round-1
+                // slots, so the vertical pitch and leading offset double.
+                slotPitchMultiplier:
+                    _multiplierFor(rounds.length, rounds.indexOf(r), firstRoundCount,
+                        roundsByIndex[r]!.length),
               ),
           ],
         ),
@@ -417,7 +432,27 @@ class _BodyState extends ConsumerState<_Body> {
     );
   }
 
-  Widget _roundColumn(String label, List<BracketMatch> matches, MaterialColor color) {
+  /// How many round-1 "slot heights" one match in this round covers.
+  ///
+  /// For the W bracket this is `2^(roundIndex-1)`. For the L bracket the
+  /// per-round count alternates (odd rounds halve, even rounds keep), so
+  /// derive it from `firstRoundCount / thisRoundCount`.
+  double _multiplierFor(int totalRounds, int roundIdx, int firstCount, int thisCount) {
+    if (thisCount <= 0) return 1;
+    return firstCount / thisCount;
+  }
+
+  Widget _roundColumn(
+    String label,
+    List<BracketMatch> matches,
+    MaterialColor color, {
+    double slotPitchMultiplier = 1,
+  }) {
+    // Leading offset before the first card so it lines up with the centre
+    // of the corresponding pair in round 1.
+    final leadingPad = (slotPitchMultiplier - 1) * _matchPitch / 2;
+    // Between consecutive cards in this round.
+    final betweenPad = slotPitchMultiplier * _matchPitch - _matchH;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Column(
@@ -435,11 +470,11 @@ class _BodyState extends ConsumerState<_Body> {
               ),
             ),
           ),
-          for (final m in matches)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _matchCard(m, color),
-            ),
+          SizedBox(height: leadingPad),
+          for (int i = 0; i < matches.length; i++) ...[
+            if (i > 0) SizedBox(height: betweenPad),
+            _matchCard(matches[i], color),
+          ],
         ],
       ),
     );
@@ -471,16 +506,24 @@ class _BodyState extends ConsumerState<_Body> {
   }
 
   Widget _matchPlayerRow(BracketMatch m, int? pid, {required bool isA, required MaterialColor color}) {
-    final isBye = pid == null && m.isReady == false;
+    final isByeSlot = isA ? m.isAByeSlot : m.isBByeSlot;
+    final isPending = pid == null && !isByeSlot;
     final isWinner = m.isDecided && pid != null && pid == m.winnerPlayerId;
     final isLoser = m.isDecided && pid != null && pid != m.winnerPlayerId;
-    final name = pid != null ? (_nameByPid[pid] ?? '—') : '...';
+    final name = pid != null
+        ? (_nameByPid[pid] ?? '—')
+        : (isByeSlot ? 'Bye' : 'Очікування…');
     final team = pid != null ? (_teamByPid[pid] ?? '') : '';
-    final canSelect = m.isReady && pid != null;
+    // Clickable only when the match is fully playable (two real players)
+    // and this row's player is real. Bye advancements and pending slots
+    // are not clickable.
+    final canSelect = m.isPlayable && pid != null;
 
     return InkWell(
       onTap: canSelect ? () => _setWinner(m, pid) : null,
-      onLongPress: m.isDecided ? () => _clearMatch(m) : null,
+      onLongPress: m.isDecided && !m.isByeAdvancement
+          ? () => _clearMatch(m)
+          : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
@@ -501,11 +544,16 @@ class _BodyState extends ConsumerState<_Body> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isBye ? 'Bye' : name,
+                    name,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: isWinner ? FontWeight.bold : FontWeight.w500,
-                      color: isLoser ? Colors.grey.shade500 : Colors.black87,
+                      color: isLoser
+                          ? Colors.grey.shade500
+                          : (isPending || isByeSlot
+                              ? Colors.grey.shade400
+                              : Colors.black87),
+                      fontStyle: (isPending || isByeSlot) ? FontStyle.italic : null,
                       decoration: isLoser ? TextDecoration.lineThrough : null,
                     ),
                     overflow: TextOverflow.ellipsis,
