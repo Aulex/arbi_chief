@@ -431,26 +431,30 @@ class _ArmWrestlingAllPlayersTabState
 
   Widget _buildRow(_Row row, int index) {
     final isHovered = _hoveredRow == index;
-    return Focus(
-      canRequestFocus: false,
-      onFocusChange: (hasFocus) {
-        if (!hasFocus) _saveRow(row);
+    // No outer Focus wrapper around the whole row — that swallowed the
+    // dropdown's tap (focus moving out to the overlay triggered _saveRow
+    // and an associated rebuild). Each editable text field gets its own
+    // Focus listener so the dropdown stays untouched.
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRow = index),
+      onExit: (_) {
+        if (_hoveredRow == index) setState(() => _hoveredRow = null);
       },
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hoveredRow = index),
-        onExit: (_) {
-          if (_hoveredRow == index) setState(() => _hoveredRow = null);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          color: isHovered ? Colors.indigo.shade100 : null,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: _wNumber,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        color: isHovered ? Colors.indigo.shade100 : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: _wNumber,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Focus(
+                  canRequestFocus: false,
+                  onFocusChange: (hasFocus) {
+                    if (!hasFocus) _saveRow(row);
+                  },
                   child: TextField(
                     controller: row.numberC,
                     keyboardType: TextInputType.number,
@@ -473,6 +477,7 @@ class _ArmWrestlingAllPlayersTabState
                   ),
                 ),
               ),
+            ),
               Expanded(
                 flex: 3,
                 child: Padding(
@@ -496,21 +501,27 @@ class _ArmWrestlingAllPlayersTabState
                 width: _wWeight,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: TextField(
-                    controller: row.weightC,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                      border: OutlineInputBorder(),
+                  child: Focus(
+                    canRequestFocus: false,
+                    onFocusChange: (hasFocus) {
+                      if (!hasFocus) _saveRow(row);
+                    },
+                    child: TextField(
+                      controller: row.weightC,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                        LengthLimitingTextInputFormatter(6),
+                      ],
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ),
                 ),
@@ -555,7 +566,6 @@ class _ArmWrestlingAllPlayersTabState
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }
