@@ -387,7 +387,7 @@ class _BodyState extends ConsumerState<_Body> {
 
   Widget _bracketHalf({
     required String title,
-    required Color color,
+    required MaterialColor color,
     required Map<int, List<BracketMatch>> roundsByIndex,
     required String sidePrefix,
   }) {
