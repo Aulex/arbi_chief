@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../viewmodels/player_viewmodel.dart';
 import '../../viewmodels/team_viewmodel.dart';
+import '../../viewmodels/tournament_viewmodel.dart';
 import 'kettlebell_providers.dart';
 import 'kettlebell_scoring.dart';
 
@@ -108,6 +109,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
   Map<int, String> _categories = {};
   Map<int, double> _weights = {};
   Map<int, double> _kbWeights = {};
+  Map<int, int> _numbers = {};
   int? _hoveredRow;
 
   @override
@@ -142,6 +144,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
     final categories = await kbSvc.getPlayerCategories(widget.tId);
     final weights = await kbSvc.getPlayerWeights(widget.tId);
     final kbWeights = await kbSvc.getKettlebellWeights(widget.tId);
+    final numbers = await ref.read(tournamentServiceProvider).getPlayerNumbers(widget.tId);
 
     // Ensure every player with a body weight has a derived category if missing.
     for (final entry in weights.entries) {
@@ -155,6 +158,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
       _categories = categories;
       _weights = weights;
       _kbWeights = kbWeights;
+      _numbers = numbers;
       _loading = false;
     });
   }
@@ -178,7 +182,10 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
       builder: (ctx) => StatefulBuilder(builder: (ctx, setST) {
         return AlertDialog(
           title: Text('Результат\n$playerName', style: const TextStyle(fontSize: 16)),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
               controller: placeCtrl,
               keyboardType: TextInputType.number,
@@ -210,7 +217,9 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ),
-          ]),
+              ]),
+            ),
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
             ElevatedButton(
@@ -233,9 +242,11 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
       }),
     );
 
-    placeCtrl.dispose();
-    weightCtrl.dispose();
-    kbWeightCtrl.dispose();
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      placeCtrl.dispose();
+      weightCtrl.dispose();
+      kbWeightCtrl.dispose();
+    });
     if (result != null) {
       final svc = ref.read(kettlebellServiceProvider);
       await svc.savePlayerPlace(tId: widget.tId, playerId: playerId, teamId: teamId, place: result.place);
@@ -305,6 +316,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
                 final category = _categories[p.playerId];
                 final weight = _weights[p.playerId];
                 final kbWeight = _kbWeights[p.playerId];
+                final number = _numbers[p.playerId];
                 return MouseRegion(
                   onEnter: (_) => setState(() => _hoveredRow = i),
                   onExit: (_) => setState(() => _hoveredRow = null),
@@ -315,6 +327,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       child: Row(children: [
                         SizedBox(width: 50, child: Text(place?.toString() ?? '-', style: TextStyle(fontWeight: place != null ? FontWeight.bold : FontWeight.normal, fontSize: 16))),
+                        SizedBox(width: 50, child: Text(number?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600))),
                         Expanded(flex: 2, child: Text(p.playerName)),
                         Expanded(flex: 1, child: Text(category ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
                         SizedBox(width: 60, child: Text(weight != null ? weight.toStringAsFixed(1) : '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center)),
@@ -338,6 +351,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: const Row(children: [
           SizedBox(width: 50, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 50, child: Text('№', style: TextStyle(fontWeight: FontWeight.bold))),
           Expanded(flex: 2, child: Text('Гравець', style: TextStyle(fontWeight: FontWeight.bold))),
           Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(width: 60, child: Text('Вага', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
