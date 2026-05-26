@@ -793,17 +793,19 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                       children: [
                         const Text('Формат:', style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(width: 12),
-                        ChoiceChip(
-                          label: const Text('ПІБ + Команда'),
-                          selected: format == 0,
-                          onSelected: (v) => setST(() => format = 0),
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          label: const Text('ПІ + Команда'),
-                          selected: format == 1,
-                          onSelected: (v) => setST(() => format = 1),
-                        ),
+                        if (!isKettlebell) ...[
+                          ChoiceChip(
+                            label: const Text('ПІБ + Команда'),
+                            selected: format == 0,
+                            onSelected: (v) => setST(() => format = 0),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('ПІ + Команда'),
+                            selected: format == 1,
+                            onSelected: (v) => setST(() => format = 1),
+                          ),
+                        ],
                         if (isArm) ...[
                           const SizedBox(width: 8),
                           ChoiceChip(
