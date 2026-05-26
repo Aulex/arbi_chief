@@ -15,6 +15,28 @@ const kettlebellWeightCoefficients = <int, double>{
   32: 1.25,
 };
 
+/// Lookup the rule-book coefficient for a given gear weight in kg.
+/// Returns 0 when the weight is missing or not one of the standard
+/// values (8/16/24/32) so a player without a declared gear weight
+/// stays unranked instead of being scored against an arbitrary default.
+double kettlebellCoefficient(double? gearWeightKg) {
+  if (gearWeightKg == null) return 0;
+  return kettlebellWeightCoefficients[gearWeightKg.round()] ?? 0;
+}
+
+/// Compute the total score: (rightReps + leftReps) * coefficient(gear).
+/// Returns 0 when both rep counts are zero or null.
+double kettlebellTotalScore({
+  required int? rightReps,
+  required int? leftReps,
+  required double? gearWeightKg,
+}) {
+  final r = rightReps ?? 0;
+  final l = leftReps ?? 0;
+  if (r == 0 && l == 0) return 0;
+  return (r + l) * kettlebellCoefficient(gearWeightKg);
+}
+
 /// Map athlete body weight (kg) to a body-weight category label.
 /// Mirrors arm wrestling brackets: ≤70, ≤80, ≤90, ≤100, >100.
 String kettlebellCategoryFromBodyWeight(double w) {

@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 18,
+      version: 19,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -368,6 +368,43 @@ class DatabaseService {
             'attr_entity_type': 2,
             'attr_t_type': 10,
           });
+        }
+        if (oldVersion < 19) {
+          // Kettlebell-specific player-team attributes:
+          //   22 — right-hand reps
+          //   23 — left-hand reps
+          //   24 — gear (kettlebell) weight, replaces transitional reuse of attr_id=18.
+          await db.insert('CMP_ATTR', {
+            'attr_id': 22,
+            'attr_name': 'Ривки правою рукою',
+            'attr_data_type': 'INTEGER',
+            'attr_entity_type': 2,
+            'attr_t_type': 13,
+          });
+          await db.insert('CMP_ATTR', {
+            'attr_id': 23,
+            'attr_name': 'Ривки лівою рукою',
+            'attr_data_type': 'INTEGER',
+            'attr_entity_type': 2,
+            'attr_t_type': 13,
+          });
+          await db.insert('CMP_ATTR', {
+            'attr_id': 24,
+            'attr_name': 'Вага гирі',
+            'attr_data_type': 'REAL',
+            'attr_entity_type': 2,
+            'attr_t_type': 13,
+          });
+          // Move any kettlebell gear weight rows that were temporarily stored
+          // under attr_id=18 in CMP_PLAYER_TEAM_ATTR_VALUE to attr_id=24.
+          // Athletics' attr_id=18 ("Вікові коефіцієнти") lives at the
+          // tournament level (different table), so no athletics rows are
+          // touched here.
+          await db.update(
+            'CMP_PLAYER_TEAM_ATTR_VALUE',
+            {'attr_id': 24},
+            where: 'attr_id = 18',
+          );
         }
       },
       onCreate: (db, version) async {
@@ -800,6 +837,28 @@ class DatabaseService {
           'attr_data_type': 'INTEGER',
           'attr_entity_type': 2,
           'attr_t_type': 10,
+        });
+        // Kettlebell rep counts and gear weight (NEW in v19)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 22,
+          'attr_name': 'Ривки правою рукою',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': 2,
+          'attr_t_type': 13,
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': 23,
+          'attr_name': 'Ривки лівою рукою',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': 2,
+          'attr_t_type': 13,
+        });
+        await db.insert('CMP_ATTR', {
+          'attr_id': 24,
+          'attr_name': 'Вага гирі',
+          'attr_data_type': 'REAL',
+          'attr_entity_type': 2,
+          'attr_t_type': 13,
         });
 
         await db.insert('CMP_ATTR_DICT', {

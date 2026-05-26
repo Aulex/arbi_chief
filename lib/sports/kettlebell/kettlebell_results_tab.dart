@@ -110,7 +110,14 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
   Map<int, double> _weights = {};
   Map<int, double> _kbWeights = {};
   Map<int, int> _numbers = {};
+  Map<int, ({int right, int left})> _reps = {};
   int? _hoveredRow;
+
+  double _totalFor(int playerId) => kettlebellTotalScore(
+        rightReps: _reps[playerId]?.right,
+        leftReps: _reps[playerId]?.left,
+        gearWeightKg: _kbWeights[playerId],
+      );
 
   @override
   bool get wantKeepAlive => true;
@@ -145,6 +152,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
     final weights = await kbSvc.getPlayerWeights(widget.tId);
     final kbWeights = await kbSvc.getKettlebellWeights(widget.tId);
     final numbers = await ref.read(tournamentServiceProvider).getPlayerNumbers(widget.tId);
+    final reps = await kbSvc.getPlayerReps(widget.tId);
 
     // Ensure every player with a body weight has a derived category if missing.
     for (final entry in weights.entries) {
@@ -159,77 +167,165 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
       _weights = weights;
       _kbWeights = kbWeights;
       _numbers = numbers;
+      _reps = reps;
       _loading = false;
     });
   }
 
+  /// Recompute and persist places for every player whose body-weight category
+  /// matches [category]. Higher total score → lower place number. Players in
+  /// the category without a valid total have any old place removed.
+  Future<void> _recomputePlacesForCategory(String category) async {
+    final svc = ref.read(kettlebellServiceProvider);
+    final teamByPlayer = {for (final p in _players) p.playerId: p.teamId};
+
+    final candidates = <({int playerId, double total})>[];
+    final unranked = <int>[];
+    for (final p in _players) {
+      if (_categories[p.playerId] != category) continue;
+      final total = _totalFor(p.playerId);
+      if (total > 0) {
+        candidates.add((playerId: p.playerId, total: total));
+      } else {
+        unranked.add(p.playerId);
+      }
+    }
+    candidates.sort((a, b) => b.total.compareTo(a.total));
+
+    for (var i = 0; i < candidates.length; i++) {
+      final c = candidates[i];
+      final teamId = teamByPlayer[c.playerId];
+      if (teamId == null) continue;
+      await svc.savePlayerPlace(
+        tId: widget.tId,
+        playerId: c.playerId,
+        teamId: teamId,
+        place: i + 1,
+      );
+    }
+    for (final pid in unranked) {
+      await svc.clearPlayerPlace(tId: widget.tId, playerId: pid);
+    }
+  }
+
   Future<void> _editResult(
     int playerId,
-    int teamId,
     String playerName,
-    int? currentPlace,
     String? currentCategory,
     double? currentWeight,
     double? currentKbWeight,
+    int? currentRight,
+    int? currentLeft,
   ) async {
-    final placeCtrl = TextEditingController(text: currentPlace?.toString() ?? '');
+    final rightCtrl = TextEditingController(text: (currentRight ?? 0) == 0 ? '' : currentRight.toString());
+    final leftCtrl = TextEditingController(text: (currentLeft ?? 0) == 0 ? '' : currentLeft.toString());
     final weightCtrl = TextEditingController(text: currentWeight?.toStringAsFixed(1) ?? '');
     final kbWeightCtrl = TextEditingController(text: currentKbWeight?.toStringAsFixed(0) ?? '');
-    String derivedCategory = currentCategory ?? (currentWeight != null ? kettlebellCategoryFromBodyWeight(currentWeight) : '');
+    String derivedCategory =
+        currentCategory ?? (currentWeight != null ? kettlebellCategoryFromBodyWeight(currentWeight) : '');
 
-    final result = await showDialog<({int place, String category, double? weight, double? kbWeight})?>(
+    double previewTotal() {
+      final r = int.tryParse(rightCtrl.text) ?? 0;
+      final l = int.tryParse(leftCtrl.text) ?? 0;
+      final kw = double.tryParse(kbWeightCtrl.text.replaceAll(',', '.'));
+      return kettlebellTotalScore(rightReps: r, leftReps: l, gearWeightKg: kw);
+    }
+
+    final result = await showDialog<
+        ({
+          int right,
+          int left,
+          String category,
+          double? weight,
+          double? kbWeight,
+        })?>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setST) {
         return AlertDialog(
           title: Text('Результат\n$playerName', style: const TextStyle(fontSize: 16)),
           content: SizedBox(
-            width: 360,
+            width: 380,
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: placeCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Зайняте місце (1, 2, 3...)', border: OutlineInputBorder()),
-              autofocus: true,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: weightCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Вага спортсмена (кг)', border: OutlineInputBorder()),
-              onChanged: (v) {
-                final w = double.tryParse(v.replaceAll(',', '.'));
-                setST(() => derivedCategory = w != null ? kettlebellCategoryFromBodyWeight(w) : '');
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: kbWeightCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Вага гирі (кг)', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                derivedCategory.isEmpty ? 'Категорія: —' : 'Категорія: $derivedCategory',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: rightCtrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Ривки правою',
+                        border: OutlineInputBorder(),
+                      ),
+                      autofocus: true,
+                      onChanged: (_) => setST(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: leftCtrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Ривки лівою',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setST(() {}),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: weightCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Вага спортсмена (кг)',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) {
+                    final w = double.tryParse(v.replaceAll(',', '.'));
+                    setST(() =>
+                        derivedCategory = w != null ? kettlebellCategoryFromBodyWeight(w) : '');
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: kbWeightCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Вага гирі (кг)',
+                    border: OutlineInputBorder(),
+                    helperText: 'Коефіцієнти: 8→0.35, 16→0.55, 24→1.0, 32→1.25',
+                  ),
+                  onChanged: (_) => setST(() {}),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Категорія: ${derivedCategory.isEmpty ? '—' : derivedCategory}\n'
+                    'Сума: ${previewTotal().toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
               ]),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Скасувати'),
+            ),
             ElevatedButton(
               onPressed: () {
-                final place = int.tryParse(placeCtrl.text);
+                final r = int.tryParse(rightCtrl.text) ?? 0;
+                final l = int.tryParse(leftCtrl.text) ?? 0;
                 final w = double.tryParse(weightCtrl.text.replaceAll(',', '.'));
                 final kw = double.tryParse(kbWeightCtrl.text.replaceAll(',', '.'));
-                if (place == null) return;
                 Navigator.pop(ctx, (
-                  place: place,
+                  right: r,
+                  left: l,
                   category: w != null ? kettlebellCategoryFromBodyWeight(w) : derivedCategory,
                   weight: w,
                   kbWeight: kw,
@@ -243,23 +339,46 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
     );
 
     Future<void>.delayed(const Duration(milliseconds: 400), () {
-      placeCtrl.dispose();
+      rightCtrl.dispose();
+      leftCtrl.dispose();
       weightCtrl.dispose();
       kbWeightCtrl.dispose();
     });
     if (result != null) {
       final svc = ref.read(kettlebellServiceProvider);
-      await svc.savePlayerPlace(tId: widget.tId, playerId: playerId, teamId: teamId, place: result.place);
       if (result.weight != null) {
-        await svc.savePlayerWeight(playerId: playerId, tId: widget.tId, weight: result.weight!);
+        await svc.savePlayerWeight(
+          playerId: playerId,
+          tId: widget.tId,
+          weight: result.weight!,
+        );
       }
       if (result.category.isNotEmpty) {
-        await svc.savePlayerCategory(playerId: playerId, tId: widget.tId, category: result.category);
+        await svc.savePlayerCategory(
+          playerId: playerId,
+          tId: widget.tId,
+          category: result.category,
+        );
       }
       if (result.kbWeight != null) {
-        await svc.saveKettlebellWeight(playerId: playerId, tId: widget.tId, kettlebellWeight: result.kbWeight!);
+        await svc.saveKettlebellWeight(
+          playerId: playerId,
+          tId: widget.tId,
+          kettlebellWeight: result.kbWeight!,
+        );
       }
+      await svc.savePlayerReps(
+        playerId: playerId,
+        tId: widget.tId,
+        rightReps: result.right,
+        leftReps: result.left,
+      );
+      // Reload local state so the recompute sees fresh numbers, then rerank.
       await _loadData();
+      if (result.category.isNotEmpty) {
+        await _recomputePlacesForCategory(result.category);
+        await _loadData();
+      }
     }
   }
 
@@ -317,22 +436,36 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
                 final weight = _weights[p.playerId];
                 final kbWeight = _kbWeights[p.playerId];
                 final number = _numbers[p.playerId];
+                final reps = _reps[p.playerId];
+                final total = _totalFor(p.playerId);
                 return MouseRegion(
                   onEnter: (_) => setState(() => _hoveredRow = i),
                   onExit: (_) => setState(() => _hoveredRow = null),
                   child: InkWell(
-                    onTap: () => _editResult(p.playerId, p.teamId, p.playerName, place, category, weight, kbWeight),
+                    onTap: () => _editResult(
+                      p.playerId,
+                      p.playerName,
+                      category,
+                      weight,
+                      kbWeight,
+                      reps?.right,
+                      reps?.left,
+                    ),
                     child: Container(
                       color: _hoveredRow == i ? Colors.indigo.shade50 : null,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       child: Row(children: [
                         if (filter != null)
                           SizedBox(width: 50, child: Text(place?.toString() ?? '-', style: TextStyle(fontWeight: place != null ? FontWeight.bold : FontWeight.normal, fontSize: 16))),
-                        SizedBox(width: 50, child: Text(number?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600))),
+                        SizedBox(width: 40, child: Text(number?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600))),
                         Expanded(flex: 2, child: Text(p.playerName)),
-                        Expanded(flex: 1, child: Text(category ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
-                        SizedBox(width: 60, child: Text(weight != null ? weight.toStringAsFixed(1) : '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center)),
-                        SizedBox(width: 60, child: Text(kbWeight != null ? '${kbWeight.toStringAsFixed(0)} кг' : '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center)),
+                        if (filter == null)
+                          Expanded(flex: 1, child: Text(category ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
+                        SizedBox(width: 56, child: Text(weight != null ? weight.toStringAsFixed(1) : '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center)),
+                        SizedBox(width: 50, child: Text(kbWeight != null ? '${kbWeight.toStringAsFixed(0)}' : '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center)),
+                        SizedBox(width: 40, child: Text((reps?.right ?? 0) == 0 ? '' : '${reps!.right}', textAlign: TextAlign.center)),
+                        SizedBox(width: 40, child: Text((reps?.left ?? 0) == 0 ? '' : '${reps!.left}', textAlign: TextAlign.center)),
+                        SizedBox(width: 60, child: Text(total > 0 ? total.toStringAsFixed(2) : '', style: const TextStyle(fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
                         Expanded(flex: 2, child: Text(p.teamName, style: TextStyle(color: Colors.grey.shade700))),
                         Icon(Icons.edit, size: 16, color: Colors.indigo.shade300),
                       ]),
@@ -353,11 +486,15 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
         child: Row(children: [
           if (showPlace)
             const SizedBox(width: 50, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
-          const SizedBox(width: 50, child: Text('№', style: TextStyle(fontWeight: FontWeight.bold))),
+          const SizedBox(width: 40, child: Text('№', style: TextStyle(fontWeight: FontWeight.bold))),
           const Expanded(flex: 2, child: Text('Гравець', style: TextStyle(fontWeight: FontWeight.bold))),
-          const Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
-          const SizedBox(width: 60, child: Text('Вага', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-          const SizedBox(width: 60, child: Text('Гиря', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          if (!showPlace)
+            const Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
+          const SizedBox(width: 56, child: Text('Вага', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          const SizedBox(width: 50, child: Text('Гиря', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          const SizedBox(width: 40, child: Text('Пр', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          const SizedBox(width: 40, child: Text('Лів', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          const SizedBox(width: 60, child: Text('Сума', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
           const Expanded(flex: 2, child: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
           const SizedBox(width: 16),
         ]),
