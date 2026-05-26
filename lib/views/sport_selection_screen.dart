@@ -31,6 +31,7 @@ class _SportSelectionScreenState extends ConsumerState<SportSelectionScreen> {
     'Велоспорт',
     'Футзал',
     'Армрестлінг',
+    'Гирьовий спорт',
   };
 
   /// Desired display order (excluding Спортивне орієнтування).
