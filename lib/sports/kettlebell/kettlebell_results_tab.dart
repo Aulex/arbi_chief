@@ -310,7 +310,7 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
               itemCount: filtered.length + 1,
               separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.shade200),
               itemBuilder: (ctx, i) {
-                if (i == 0) return _buildHeader();
+                if (i == 0) return _buildHeader(showPlace: filter != null);
                 final p = filtered[i - 1];
                 final place = _places[p.playerId];
                 final category = _categories[p.playerId];
@@ -326,7 +326,8 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
                       color: _hoveredRow == i ? Colors.indigo.shade50 : null,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       child: Row(children: [
-                        SizedBox(width: 50, child: Text(place?.toString() ?? '-', style: TextStyle(fontWeight: place != null ? FontWeight.bold : FontWeight.normal, fontSize: 16))),
+                        if (filter != null)
+                          SizedBox(width: 50, child: Text(place?.toString() ?? '-', style: TextStyle(fontWeight: place != null ? FontWeight.bold : FontWeight.normal, fontSize: 16))),
                         SizedBox(width: 50, child: Text(number?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w600))),
                         Expanded(flex: 2, child: Text(p.playerName)),
                         Expanded(flex: 1, child: Text(category ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
@@ -346,18 +347,19 @@ class _KettlebellPlayersListState extends ConsumerState<_KettlebellPlayersList>
     );
   }
 
-  Widget _buildHeader() => Container(
+  Widget _buildHeader({required bool showPlace}) => Container(
         color: Colors.grey.shade100,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: const Row(children: [
-          SizedBox(width: 50, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 50, child: Text('№', style: TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(flex: 2, child: Text('Гравець', style: TextStyle(fontWeight: FontWeight.bold))),
-          Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 60, child: Text('Вага', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-          SizedBox(width: 60, child: Text('Гиря', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-          Expanded(flex: 2, child: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 16),
+        child: Row(children: [
+          if (showPlace)
+            const SizedBox(width: 50, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
+          const SizedBox(width: 50, child: Text('№', style: TextStyle(fontWeight: FontWeight.bold))),
+          const Expanded(flex: 2, child: Text('Гравець', style: TextStyle(fontWeight: FontWeight.bold))),
+          const Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
+          const SizedBox(width: 60, child: Text('Вага', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          const SizedBox(width: 60, child: Text('Гиря', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+          const Expanded(flex: 2, child: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))),
+          const SizedBox(width: 16),
         ]),
       );
 }
