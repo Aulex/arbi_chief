@@ -16,6 +16,7 @@ import '../sports/volleyball/volleyball_scoring.dart' as vb_scoring;
 import '../sports/tug_of_war/tug_of_war_scoring.dart' as tow_scoring;
 import '../sports/arm_wrestling/arm_wrestling_scoring.dart' as aw_scoring;
 import '../sports/arm_wrestling/arm_wrestling_all_players_tab.dart';
+import '../sports/arm_wrestling/arm_wrestling_bracket_view.dart';
 
 import '../sports/swimming/swimming_scoring.dart' as swimming_scoring;
 import '../sports/cycling/cycling_scoring.dart' as cycling_scoring;
@@ -1714,7 +1715,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
               if (_isArmWrestling)
                 ArmWrestlingAllPlayersTab(tId: widget.tId),
               for (int i = 1; i <= widget.config.boardCount; i++)
-                _buildBoardTab(i),
+                if (_isArmWrestling)
+                  ArmWrestlingBracketView(tId: widget.tId, categoryId: i)
+                else
+                  _buildBoardTab(i),
               if (!_isArmWrestling)
                 _buildTeamsTab(),
             ],
