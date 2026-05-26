@@ -28,6 +28,20 @@ class TugOfWarService {
     });
   }
 
+  /// Save a no-show result. The no-show team gets 0 pts; opponent wins (2 pts).
+  /// [noShowEntityId] is the entity_id of the team that did not show up.
+  Future<void> saveNoShow({required int eventId, required int teamAEntityId, required int teamBEntityId, required int noShowEntityId}) async {
+    final db = await _dbService.database;
+    final aNoShow = noShowEntityId == teamAEntityId;
+    final eventResult = aNoShow ? 'N:W' : 'W:N';
+    await db.transaction((txn) async {
+      await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+      await txn.insert('CMP_SUBEVENT', {'ev_id': eventId, 'entity_id': teamAEntityId, 'se_result': aNoShow ? 0.0 : 1.0, 'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_ta_r'});
+      await txn.insert('CMP_SUBEVENT', {'ev_id': eventId, 'entity_id': teamBEntityId, 'se_result': aNoShow ? 1.0 : 0.0, 'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_tb_r'});
+      await txn.update('CMP_EVENT', {'event_result': eventResult}, where: 'event_id = ?', whereArgs: [eventId]);
+    });
+  }
+
   Future<List<({int eventId, int teamAEntityId, int teamBEntityId, int? teamAId, int? teamBId, String? eventResult})>> getTeamGamesForTournament(int tId) async {
     final db = await _dbService.database;
     final events = await db.query('CMP_EVENT', where: 't_id = ? AND et_id = 2', whereArgs: [tId], orderBy: 'event_id');
@@ -88,6 +102,46 @@ class TugOfWarService {
         'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_tw_$teamId',
       });
     }
+  }
+
+  /// Mark/unmark a team as removed from the tournament (2nd no-show or
+  /// unsporting conduct). Removed teams' results are annulled.
+  /// Stored in CMP_TEAM_ATTR attr_id=17 (1 = removed).
+  Future<void> setTeamRemoved(int tId, int teamId, bool removed) async {
+    final db = await _dbService.database;
+    final existing = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND team_id = ? AND attr_id = 17',
+      whereArgs: [tId, teamId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'CMP_TEAM_ATTR',
+        {'attr_value': removed ? '1' : '0'},
+        where: 'ta_id = ?',
+        whereArgs: [existing.first['ta_id']],
+      );
+    } else if (removed) {
+      await db.insert('CMP_TEAM_ATTR', {
+        'team_id': teamId,
+        't_id': tId,
+        'attr_id': 17,
+        'attr_value': '1',
+        'sync_uid': '${DateTime.now().microsecondsSinceEpoch}_tr_$teamId',
+      });
+    }
+  }
+
+  /// Returns set of teamId's that have been removed from the tournament.
+  Future<Set<int>> getRemovedTeams(int tId) async {
+    final db = await _dbService.database;
+    final rows = await db.query(
+      'CMP_TEAM_ATTR',
+      where: 't_id = ? AND attr_id = 17 AND attr_value = ?',
+      whereArgs: [tId, '1'],
+    );
+    return rows.map((r) => r['team_id'] as int).toSet();
   }
 
   /// Get team weights for a tournament. Returns Map<teamId, weightKg>.

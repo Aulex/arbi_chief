@@ -253,7 +253,7 @@ const tugOfWarConfig = SportTypeConfig(
   scoringStrategy: ScoringStrategy.matchPoints,
   pointsWin: 2.0,
   pointsDraw: 0.0,
-  pointsLoss: 0.0,
+  pointsLoss: 1.0,
   pointsNoShow: 0.0,
 );
 
