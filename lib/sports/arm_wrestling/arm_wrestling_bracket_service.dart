@@ -109,6 +109,33 @@ class ArmWrestlingBracketService {
     return (players: players, raws: raws);
   }
 
+  /// Delete every event whose two participants are both in [categoryId].
+  /// Re-running the bracket from scratch (re-seeding included) becomes
+  /// possible once this returns.
+  Future<int> resetCategory(int tId, int categoryId) async {
+    final loaded = await loadCategory(tId, categoryId);
+    final eventIds = loaded.raws.map((r) => r.eventId).toList();
+    if (eventIds.isEmpty) return 0;
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      for (final eid in eventIds) {
+        await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eid]);
+        await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eid]);
+      }
+    });
+    return eventIds.length;
+  }
+
+  /// Clear the recorded winner for a single match (delete the CMP_EVENT row)
+  /// so the slot returns to "not yet played".
+  Future<void> deleteMatch(int eventId) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      await txn.delete('CMP_SUBEVENT', where: 'ev_id = ?', whereArgs: [eventId]);
+      await txn.delete('CMP_EVENT', where: 'event_id = ?', whereArgs: [eventId]);
+    });
+  }
+
   /// Swap participant numbers between two players (drag-and-drop reseeding).
   /// If a side has no number yet, it borrows the other side's pre-existing
   /// number; missing numbers on both sides are no-ops.

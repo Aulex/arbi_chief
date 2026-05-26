@@ -120,9 +120,9 @@ class _BodyState extends ConsumerState<_Body> {
 
   Future<void> _clearMatch(BracketMatch match) async {
     if (match.eventId == null) return;
-    final tournamentSvc = ref.read(tournamentServiceProvider);
-    await tournamentSvc.saveResultForPlayer(match.eventId!, match.playerAId!, null);
-    await tournamentSvc.saveResultForPlayer(match.eventId!, match.playerBId!, null);
+    // Fully delete the event so downstream rounds revert to "Очікування…".
+    final svc = ref.read(armWrestlingBracketServiceProvider);
+    await svc.deleteMatch(match.eventId!);
     widget.onChanged();
     ref.invalidate(armWrestlingStandingsProvider(widget.tId));
   }
@@ -305,12 +305,31 @@ class _BodyState extends ConsumerState<_Body> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Сітка (Double elimination)',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.indigo.shade900,
-                )),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Сітка (Double elimination)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo.shade900,
+                      )),
+                ),
+                if (_anyMatchPlayed)
+                  TextButton.icon(
+                    onPressed: _confirmResetBracket,
+                    icon: const Icon(Icons.restart_alt, size: 16),
+                    label: const Text('Скинути сітку',
+                        style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(height: 4),
             Text(
               _bracketBlurb(widget.data.bracket),
@@ -325,6 +344,35 @@ class _BodyState extends ConsumerState<_Body> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmResetBracket() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Скинути сітку?'),
+        content: const Text(
+          'Усі результати матчів цієї категорії будуть видалені. '
+          'Посів можна буде змінити заново. Цю дію не можна скасувати.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Скасувати'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Скинути', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final svc = ref.read(armWrestlingBracketServiceProvider);
+    await svc.resetCategory(widget.tId, widget.categoryId);
+    widget.onChanged();
+    ref.invalidate(armWrestlingStandingsProvider(widget.tId));
   }
 
   String _bracketBlurb(Bracket bracket) {
@@ -368,7 +416,10 @@ class _BodyState extends ConsumerState<_Body> {
       }
     }
 
-    return Column(
+    // Layout: W bracket on top, L bracket below it (stacked vertically), and
+    // the grand final column sits at the right of both, vertically centred
+    // between them — the typical double-elim diagram shape.
+    final wAndLStack = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (wByRound.isNotEmpty)
@@ -377,24 +428,72 @@ class _BodyState extends ConsumerState<_Body> {
             color: Colors.indigo,
             roundsByIndex: wByRound,
             sidePrefix: 'W',
+            // W rounds double in slot-height each round (R1=1, R2=2, R3=4 …).
+            multiplier: (r) => (1 << (r - 1)).toDouble(),
           ),
-        const SizedBox(height: 16),
+        if (wByRound.isNotEmpty && lByRound.isNotEmpty)
+          const SizedBox(height: 24),
         if (lByRound.isNotEmpty)
           _bracketHalf(
             title: 'Нижня сітка',
             color: Colors.deepOrange,
             roundsByIndex: lByRound,
             sidePrefix: 'L',
+            // L rounds: pairs of rounds keep the same slot-height, then double
+            // (L1=L2=1, L3=L4=2, L5=L6=4, …).
+            multiplier: (r) => (1 << ((r - 1) ~/ 2)).toDouble(),
           ),
-        if (gf != null) ...[
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _roundColumn('Великий фінал', [gf], Colors.purple),
-              if (gfr != null) _roundColumn('Перегравання', [gfr], Colors.purple),
-            ],
+      ],
+    );
+
+    if (gf == null) return wAndLStack;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          wAndLStack,
+          const SizedBox(width: 16),
+          _gfColumn(gf, gfr),
+        ],
+      ),
+    );
+  }
+
+  Widget _gfColumn(BracketMatch gf, BracketMatch? gfr) {
+    final color = Colors.purple;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+          child: Text(
+            'Великий фінал',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: color.shade700,
+              letterSpacing: 0.5,
+            ),
           ),
+        ),
+        _matchCard(gf, color),
+        if (gfr != null) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Text(
+              'Перегравання',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: color.shade700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          _matchCard(gfr, color),
         ],
       ],
     );
@@ -413,6 +512,7 @@ class _BodyState extends ConsumerState<_Body> {
     required MaterialColor color,
     required Map<int, List<BracketMatch>> roundsByIndex,
     required String sidePrefix,
+    required double Function(int round) multiplier,
   }) {
     final rounds = roundsByIndex.keys.toList()..sort();
     return Column(
@@ -433,11 +533,7 @@ class _BodyState extends ConsumerState<_Body> {
                 '$sidePrefix$r',
                 roundsByIndex[r]!,
                 color,
-                // Each next W round covers twice as many slot-heights of the
-                // first round (R1=1, R2=2, R3=4 …). For L bracket use the
-                // same doubling pattern — close enough visually, even
-                // though L round sizes alternate strictly.
-                slotPitchMultiplier: (1 << (r - 1)).toDouble(),
+                slotPitchMultiplier: multiplier(r),
               ),
           ],
         ),
@@ -509,12 +605,37 @@ class _BodyState extends ConsumerState<_Body> {
                 offset: const Offset(0, 1)),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
           children: [
-            _matchPlayerRow(m, m.playerAId, isA: true, color: color),
-            Divider(height: 1, color: color.shade100),
-            _matchPlayerRow(m, m.playerBId, isA: false, color: color),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _matchPlayerRow(m, m.playerAId, isA: true, color: color),
+                Divider(height: 1, color: color.shade100),
+                _matchPlayerRow(m, m.playerBId, isA: false, color: color),
+              ],
+            ),
+            // Small × clear button — only on decided real-vs-real matches.
+            if (m.isDecided && !m.isByeAdvancement && m.eventId != null)
+              Positioned(
+                top: 2,
+                right: 2,
+                child: Tooltip(
+                  message: 'Скасувати результат',
+                  child: InkWell(
+                    onTap: () => _clearMatch(m),
+                    customBorder: const CircleBorder(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.close,
+                        size: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
