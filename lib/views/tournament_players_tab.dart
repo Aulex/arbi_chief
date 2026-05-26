@@ -9,6 +9,8 @@ import '../sports/arm_wrestling/arm_wrestling_providers.dart';
 import '../sports/arm_wrestling/arm_wrestling_scoring.dart';
 import '../sports/cycling/cycling_model.dart';
 import '../sports/cycling/cycling_providers.dart';
+import '../sports/kettlebell/kettlebell_providers.dart';
+import '../sports/kettlebell/kettlebell_scoring.dart';
 import '../viewmodels/player_viewmodel.dart';
 import '../viewmodels/team_viewmodel.dart';
 import '../viewmodels/tournament_viewmodel.dart';
@@ -536,8 +538,11 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     _focusNode.unfocus();
     final textC = TextEditingController();
     final isArm = widget.tType == 9;
-    // 0: ПІБ + Команда, 1: ПІ + Команда, 2: Армрестлінг (ПІБ + Команда + Вага)
-    int format = isArm ? 2 : 0;
+    final isKettlebell = widget.tType == 13;
+    // 0: ПІБ + Команда, 1: ПІ + Команда,
+    // 2: Армрестлінг (ПІБ + Команда + Вага),
+    // 3: Гирьовий спорт (ПІБ + Команда + Вага + Гиря + Номер)
+    int format = isKettlebell ? 3 : (isArm ? 2 : 0);
     bool importing = false;
     String? error;
 
@@ -550,12 +555,77 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
     List<_ParsedTeamPlayer> parseText(String text, int fmt) {
       final usesAgeCats = _usesAgeCategories;
       final isArmFmt = fmt == 2;
+      final isKbFmt = fmt == 3;
       final nameWords = fmt == 1 ? 2 : 3;
       text = text.replaceAll(RegExp(r'[\u00A0\u2000-\u200B\u200C\u200D\u202F\u205F\u2060\u3000\uFEFF]'), ' ');
       final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
       final result = <_ParsedTeamPlayer>[];
 
       for (final line in lines) {
+        if (isKbFmt) {
+          // Kettlebell: Прізвище Ім'я По батькові [TAB/;] Команда [TAB/;] Вага [TAB/;] Гиря [TAB/;] Номер
+          // Номер опціональний.
+          final fields = line
+              .split(RegExp(r'\t|;'))
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+          String nameBlock;
+          String teamName;
+          String? bodyWeightStr;
+          String? kbWeightStr;
+          String? numStr;
+          if (fields.length >= 5) {
+            nameBlock = fields[0];
+            numStr = fields.last;
+            kbWeightStr = fields[fields.length - 2];
+            bodyWeightStr = fields[fields.length - 3];
+            teamName = fields.sublist(1, fields.length - 3).join(' ');
+          } else if (fields.length == 4) {
+            nameBlock = fields[0];
+            kbWeightStr = fields.last;
+            bodyWeightStr = fields[2];
+            teamName = fields[1];
+          } else {
+            final w = line.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+            if (w.length < 6) continue;
+            nameBlock = w.sublist(0, 3).join(' ');
+            final tail = w.last;
+            final tailIsInt = !tail.contains('.') && !tail.contains(',') && int.tryParse(tail) != null;
+            final tailVal = int.tryParse(tail);
+            if (w.length >= 7 && tailIsInt && tailVal != null && tailVal < 100) {
+              numStr = tail;
+              kbWeightStr = w[w.length - 2];
+              bodyWeightStr = w[w.length - 3];
+              teamName = w.sublist(3, w.length - 3).join(' ');
+            } else {
+              kbWeightStr = tail;
+              bodyWeightStr = w[w.length - 2];
+              teamName = w.sublist(3, w.length - 2).join(' ');
+            }
+          }
+          final nameParts = nameBlock.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+          if (nameParts.length < 2 || teamName.isEmpty) continue;
+          final surname = nameParts[0];
+          final name = nameParts[1];
+          final lastname = nameParts.length > 2 ? nameParts.sublist(2).join(' ') : '';
+          final bodyWeight = double.tryParse(bodyWeightStr.replaceAll(',', '.'));
+          final kbWeight = double.tryParse(kbWeightStr.replaceAll(',', '.'));
+          if (bodyWeight == null || bodyWeight <= 0) continue;
+          if (kbWeight == null || kbWeight <= 0) continue;
+          final number = numStr != null ? int.tryParse(numStr) : null;
+          result.add(_ParsedTeamPlayer(
+            teamName: teamName,
+            surname: surname,
+            name: name,
+            lastname: lastname,
+            weight: bodyWeight,
+            kettlebellWeight: kbWeight,
+            category: kettlebellCategoryFromBodyWeight(bodyWeight),
+            playerNumber: number,
+          ));
+          continue;
+        }
         if (isArmFmt) {
           // Arm wrestling: \u041F\u0440\u0456\u0437\u0432\u0438\u0449\u0435 \u0406\u043C'\u044F \u041F\u043E \u0431\u0430\u0442\u044C\u043A\u043E\u0432\u0456 [TAB/;] \u041A\u043E\u043C\u0430\u043D\u0434\u0430 [TAB/;] \u0412\u0430\u0433\u0430 [TAB/;] \u041D\u043E\u043C\u0435\u0440
           // \u041D\u043E\u043C\u0435\u0440 \u0454 \u043E\u043F\u0446\u0456\u043E\u043D\u0430\u043B\u044C\u043D\u0438\u043C \u2014 \u044F\u043A\u0449\u043E \u0447\u0438\u0441\u043B\u043E \u0432 \u043A\u0456\u043D\u0446\u0456 \u0432\u0438\u0433\u043B\u044F\u0434\u0430\u0454 \u044F\u043A \u0432\u0430\u0433\u0430 (\u043C\u0430\u0454 \u043A\u0440\u0430\u043F\u043A\u0443
@@ -742,6 +812,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                             onSelected: (v) => setST(() => format = 2),
                           ),
                         ],
+                        if (isKettlebell) ...[
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Гирьовий спорт (ПІБ + Команда + Вага + Гиря + №)'),
+                            selected: format == 3,
+                            onSelected: (v) => setST(() => format = 3),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -750,6 +828,10 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                         if (format == 2) {
                           return 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вага (кг)  Номер — через TAB/;. '
                               'Номер опціональний. Вагова категорія визначається автоматично (≤70, ≤80, ≤90, ≤100, >100).';
+                        }
+                        if (format == 3) {
+                          return 'Кожен рядок: Прізвище  Ім\'я  По батькові  Команда  Вага спортсмена (кг)  Вага гирі (кг)  Номер — через TAB/;. '
+                              'Номер опціональний. Категорія визначається автоматично за вагою спортсмена (≤70, ≤80, ≤90, ≤100, >100).';
                         }
                         final namePart = format == 0
                             ? 'Прізвище  Ім\'я  По батькові'
@@ -821,9 +903,14 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                               if (p.yob != null) '${p.yob}',
                                               if (p.category != null) p.category!,
                                               if (p.playerNumber != null) '№${p.playerNumber}',
-                                              if (p.weight != null)
+                                              if (p.weight != null && p.kettlebellWeight == null)
                                                 '${p.weight!.toStringAsFixed(1)} кг → '
                                                 '${WeightCategory.fromId(armCategoryFromWeight(p.weight!))?.label ?? ''}',
+                                              if (p.weight != null && p.kettlebellWeight != null)
+                                                '${p.weight!.toStringAsFixed(1)} кг → '
+                                                '${kettlebellCategoryFromBodyWeight(p.weight!)}',
+                                              if (p.kettlebellWeight != null)
+                                                'гиря ${p.kettlebellWeight!.toStringAsFixed(0)} кг',
                                             ].join(', ');
                                             return '${i + 1}. ${p.surname} ${p.name} ${p.lastname} ($extra)';
                                           }(),
@@ -1003,6 +1090,34 @@ class TournamentPlayersTabState extends ConsumerState<TournamentPlayersTab> {
                                           p.tempId!,
                                           armCategoryFromWeight(p.weight!),
                                         );
+                                      }
+                                    }
+
+                                    // Kettlebell: save body weight, kettlebell gear weight,
+                                    // and auto-derive body-weight category.
+                                    if (format == 3) {
+                                      final kbSvc = ref.read(kettlebellServiceProvider);
+                                      for (final p in allValidPlayers) {
+                                        if (p.tempId == null) continue;
+                                        if (p.weight != null) {
+                                          await kbSvc.savePlayerWeight(
+                                            playerId: p.tempId!,
+                                            tId: widget.tId,
+                                            weight: p.weight!,
+                                          );
+                                          await kbSvc.savePlayerCategory(
+                                            playerId: p.tempId!,
+                                            tId: widget.tId,
+                                            category: kettlebellCategoryFromBodyWeight(p.weight!),
+                                          );
+                                        }
+                                        if (p.kettlebellWeight != null) {
+                                          await kbSvc.saveKettlebellWeight(
+                                            playerId: p.tempId!,
+                                            tId: widget.tId,
+                                            kettlebellWeight: p.kettlebellWeight!,
+                                          );
+                                        }
                                       }
                                     }
 
@@ -1829,6 +1944,7 @@ class _ParsedTeamPlayer {
   final String? category;
   final int? playerNumber;
   final double? weight;
+  final double? kettlebellWeight;
   int? tempId;
 
   _ParsedTeamPlayer({
@@ -1840,6 +1956,7 @@ class _ParsedTeamPlayer {
     this.category,
     this.playerNumber,
     this.weight,
+    this.kettlebellWeight,
   });
 }
 

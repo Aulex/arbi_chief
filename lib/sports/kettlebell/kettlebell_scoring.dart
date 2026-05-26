@@ -15,6 +15,16 @@ const kettlebellWeightCoefficients = <int, double>{
   32: 1.25,
 };
 
+/// Map athlete body weight (kg) to a body-weight category label.
+/// Mirrors arm wrestling brackets: ≤70, ≤80, ≤90, ≤100, >100.
+String kettlebellCategoryFromBodyWeight(double w) {
+  if (w <= 70) return 'до 70 кг';
+  if (w <= 80) return 'до 80 кг';
+  if (w <= 90) return 'до 90 кг';
+  if (w <= 100) return 'до 100 кг';
+  return 'понад 100 кг';
+}
+
 class KettlebellStanding {
   final int teamId;
   final String teamName;
