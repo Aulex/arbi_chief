@@ -313,12 +313,7 @@ class _BodyState extends ConsumerState<_Body> {
                 )),
             const SizedBox(height: 4),
             Text(
-              'Натисніть на ім\'я учасника, щоб відмітити його переможцем '
-              'матчу (довге натискання — скасувати результат). Програш у верхній '
-              'сітці переводить у нижню; програш у нижній або у фіналі — '
-              'вибуття. «— без суперника —» означає що у цьому матчі лише один '
-              'учасник: він автоматично переходить далі. «Очікування…» — слот, '
-              'який займе переможець попереднього матчу.',
+              _bracketBlurb(widget.data.bracket),
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 12),
@@ -332,8 +327,27 @@ class _BodyState extends ConsumerState<_Body> {
     );
   }
 
+  String _bracketBlurb(Bracket bracket) {
+    final real = bracket.realPlayerCount;
+    final size = bracket.seeds.length;
+    final byes = size - real;
+    final hint =
+        'Натисніть на ім\'я учасника, щоб відмітити його переможцем матчу '
+        '(довге натискання — скасувати результат). Програш у верхній сітці '
+        'переводить у нижню; програш у нижній або у фіналі — вибуття. '
+        '«Очікування…» — слот, який займе переможець попереднього матчу.';
+    if (byes > 0) {
+      return 'Учасників: $real, розмір сітки: $size (округлено до степеня 2). '
+          'Топ-$byes посівів проходять перший раунд без бою і одразу '
+          'потрапляють у другий. $hint';
+    }
+    return 'Учасників: $real, розмір сітки: $size. $hint';
+  }
+
   Widget _buildBracketColumns(Bracket bracket) {
-    // Group matches by (side, round).
+    // Group matches by (side, round). Hide bye-advancement matches in W1
+    // entirely — they aren't really matches, just markers that the top
+    // seeds skip round 1. The bye-advanced player appears directly in W2.
     final wByRound = <int, List<BracketMatch>>{};
     final lByRound = <int, List<BracketMatch>>{};
     BracketMatch? gf;
@@ -341,9 +355,11 @@ class _BodyState extends ConsumerState<_Body> {
     for (final m in bracket.inOrder) {
       switch (m.side) {
         case BracketSide.winners:
+          if (m.round == 1 && m.isByeAdvancement) continue;
           wByRound.putIfAbsent(m.round, () => []).add(m);
           break;
         case BracketSide.losers:
+          if (m.isByeAdvancement) continue;
           lByRound.putIfAbsent(m.round, () => []).add(m);
           break;
         case BracketSide.grandFinal:
@@ -402,8 +418,6 @@ class _BodyState extends ConsumerState<_Body> {
     required String sidePrefix,
   }) {
     final rounds = roundsByIndex.keys.toList()..sort();
-    final firstRoundCount =
-        roundsByIndex[rounds.first]?.length ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -422,26 +436,16 @@ class _BodyState extends ConsumerState<_Body> {
                 '$sidePrefix$r',
                 roundsByIndex[r]!,
                 color,
-                // Each subsequent round's match groups twice as many round-1
-                // slots, so the vertical pitch and leading offset double.
-                slotPitchMultiplier:
-                    _multiplierFor(rounds.length, rounds.indexOf(r), firstRoundCount,
-                        roundsByIndex[r]!.length),
+                // Each next W round covers twice as many slot-heights of the
+                // first round (R1=1, R2=2, R3=4 …). For L bracket use the
+                // same doubling pattern — close enough visually, even
+                // though L round sizes alternate strictly.
+                slotPitchMultiplier: (1 << (r - 1)).toDouble(),
               ),
           ],
         ),
       ],
     );
-  }
-
-  /// How many round-1 "slot heights" one match in this round covers.
-  ///
-  /// For the W bracket this is `2^(roundIndex-1)`. For the L bracket the
-  /// per-round count alternates (odd rounds halve, even rounds keep), so
-  /// derive it from `firstRoundCount / thisRoundCount`.
-  double _multiplierFor(int totalRounds, int roundIdx, int firstCount, int thisCount) {
-    if (thisCount <= 0) return 1;
-    return firstCount / thisCount;
   }
 
   Widget _roundColumn(
