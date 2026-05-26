@@ -345,9 +345,8 @@ class _BodyState extends ConsumerState<_Body> {
   }
 
   Widget _buildBracketColumns(Bracket bracket) {
-    // Group matches by (side, round). Hide bye-advancement matches in W1
-    // entirely — they aren't really matches, just markers that the top
-    // seeds skip round 1. The bye-advanced player appears directly in W2.
+    // Group matches by (side, round). All matches are rendered as cards,
+    // including bye-advancements — visually clearer to see every slot.
     final wByRound = <int, List<BracketMatch>>{};
     final lByRound = <int, List<BracketMatch>>{};
     BracketMatch? gf;
@@ -355,11 +354,9 @@ class _BodyState extends ConsumerState<_Body> {
     for (final m in bracket.inOrder) {
       switch (m.side) {
         case BracketSide.winners:
-          if (m.round == 1 && m.isByeAdvancement) continue;
           wByRound.putIfAbsent(m.round, () => []).add(m);
           break;
         case BracketSide.losers:
-          if (m.isByeAdvancement) continue;
           lByRound.putIfAbsent(m.round, () => []).add(m);
           break;
         case BracketSide.grandFinal:

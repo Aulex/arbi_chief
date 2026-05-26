@@ -70,10 +70,11 @@ class ArmWrestlingBracketService {
     final raws = <RawMatch>[];
     if (ids.isNotEmpty) {
       final eventRows = await db.rawQuery('''
-        SELECT e.event_id, e.event_result,
+        SELECT e.event_id,
                p1.player_id AS p1_id,
                p2.player_id AS p2_id,
-               se1.es_id AS se1_state, se2.es_id AS se2_state
+               se1.se_result AS se1_result,
+               se2.se_result AS se2_result
         FROM CMP_EVENT e
         JOIN CMP_SUBEVENT se1 ON se1.ev_id = e.event_id
         JOIN CMP_SUBEVENT se2 ON se2.ev_id = e.event_id AND se2.entity_id > se1.entity_id
@@ -86,14 +87,16 @@ class ArmWrestlingBracketService {
         final p1 = r['p1_id'] as int;
         final p2 = r['p2_id'] as int;
         if (!ids.contains(p1) || !ids.contains(p2)) continue;
-        // es_id 4 = "вийшов" / completed-with-result, 1 = won, 2 = lost,
-        // 3 = draw. For arm wrestling there are no draws — we read the
-        // winner directly from the subevent state.
-        final s1 = r['se1_state'] as int?;
-        final s2 = r['se2_state'] as int?;
+        // se_result is the score for that subevent's player. Arm wrestling
+        // has no draws, so winner = whichever side has 1.0.
+        final s1 = (r['se1_result'] as num?)?.toDouble();
+        final s2 = (r['se2_result'] as num?)?.toDouble();
         int? winner;
-        if (s1 == 1 && s2 == 2) winner = p1;
-        else if (s2 == 1 && s1 == 2) winner = p2;
+        if (s1 == 1.0 && (s2 == null || s2 == 0.0)) {
+          winner = p1;
+        } else if (s2 == 1.0 && (s1 == null || s1 == 0.0)) {
+          winner = p2;
+        }
         raws.add(RawMatch(
           eventId: r['event_id'] as int,
           playerAId: p1,
