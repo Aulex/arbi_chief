@@ -313,10 +313,12 @@ class _BodyState extends ConsumerState<_Body> {
                 )),
             const SizedBox(height: 4),
             Text(
-              'Натисніть на учасника всередині матчу, щоб відмітити перемогу. '
-              'Програш у верхній сітці переводить у нижню; програш у нижній '
-              'або у фіналі — вибуття. У великому фіналі можливий перегравання '
-              '(якщо переможе представник нижньої сітки).',
+              'Натисніть на ім\'я учасника, щоб відмітити його переможцем '
+              'матчу (довге натискання — скасувати результат). Програш у верхній '
+              'сітці переводить у нижню; програш у нижній або у фіналі — '
+              'вибуття. «— без суперника —» означає що у цьому матчі лише один '
+              'учасник: він автоматично переходить далі. «Очікування…» — слот, '
+              'який займе переможець попереднього матчу.',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 12),
@@ -481,26 +483,39 @@ class _BodyState extends ConsumerState<_Body> {
   }
 
   Widget _matchCard(BracketMatch m, MaterialColor color) {
-    return Container(
-      width: 200,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: color.shade200, width: 1),
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 3,
-              offset: const Offset(0, 1)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _matchPlayerRow(m, m.playerAId, isA: true, color: color),
-          Divider(height: 1, color: color.shade100),
-          _matchPlayerRow(m, m.playerBId, isA: false, color: color),
-        ],
+    // Material ancestor required for InkWell to splash *and* for its
+    // hit-test to behave reliably inside nested scroll views.
+    final borderColor = m.isPlayable && !m.isDecided
+        ? color.shade400   // ready-to-play matches get a stronger outline
+        : color.shade200;
+    return Material(
+      type: MaterialType.card,
+      color: Colors.white,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: 200,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: borderColor,
+            width: m.isPlayable && !m.isDecided ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 3,
+                offset: const Offset(0, 1)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _matchPlayerRow(m, m.playerAId, isA: true, color: color),
+            Divider(height: 1, color: color.shade100),
+            _matchPlayerRow(m, m.playerBId, isA: false, color: color),
+          ],
+        ),
       ),
     );
   }
@@ -512,18 +527,26 @@ class _BodyState extends ConsumerState<_Body> {
     final isLoser = m.isDecided && pid != null && pid != m.winnerPlayerId;
     final name = pid != null
         ? (_nameByPid[pid] ?? '—')
-        : (isByeSlot ? 'Bye' : 'Очікування…');
+        : (isByeSlot ? '— без суперника —' : 'Очікування…');
     final team = pid != null ? (_teamByPid[pid] ?? '') : '';
     // Clickable only when the match is fully playable (two real players)
     // and this row's player is real. Bye advancements and pending slots
     // are not clickable.
     final canSelect = m.isPlayable && pid != null;
+    final tooltip = canSelect
+        ? 'Натисніть, щоб обрати $name переможцем'
+        : (m.isByeAdvancement
+            ? 'Прохід без бою: ${_nameByPid[m.winnerPlayerId ?? -1] ?? '—'} переходить далі'
+            : null);
 
-    return InkWell(
+    final row = InkWell(
       onTap: canSelect ? () => _setWinner(m, pid) : null,
       onLongPress: m.isDecided && !m.isByeAdvancement
           ? () => _clearMatch(m)
           : null,
+      mouseCursor: canSelect ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      hoverColor: canSelect ? color.shade50 : null,
+      splashColor: canSelect ? color.shade100 : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
@@ -574,6 +597,7 @@ class _BodyState extends ConsumerState<_Body> {
         ),
       ),
     );
+    return tooltip != null ? Tooltip(message: tooltip, child: row) : row;
   }
 
   Widget _buildRankingSection() {
