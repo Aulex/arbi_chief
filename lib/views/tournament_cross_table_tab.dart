@@ -15,6 +15,7 @@ import '../sports/streetball/streetball_scoring.dart' as sb_scoring;
 import '../sports/volleyball/volleyball_scoring.dart' as vb_scoring;
 import '../sports/tug_of_war/tug_of_war_scoring.dart' as tow_scoring;
 import '../sports/arm_wrestling/arm_wrestling_scoring.dart' as aw_scoring;
+import '../sports/arm_wrestling/arm_wrestling_all_players_tab.dart';
 
 import '../sports/swimming/swimming_scoring.dart' as swimming_scoring;
 import '../sports/cycling/cycling_scoring.dart' as cycling_scoring;
@@ -70,8 +71,10 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
   @override
   void initState() {
     super.initState();
+    // Arm wrestling: "Усі гравці" sub-tab + 5 weight categories (no Teams tab).
+    // Other sports: per-board cross-tables + "Команди" tab.
     _tabController = TabController(
-      length: widget.config.boardCount + (_isArmWrestling ? 0 : 1),
+      length: widget.config.boardCount + 1,
       vsync: this,
     );
     _loadData();
@@ -1690,6 +1693,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
                 tabAlignment: TabAlignment.start,
                 labelPadding: const EdgeInsets.symmetric(horizontal: 16),
                 tabs: [
+                  if (_isArmWrestling)
+                    const Tab(text: 'Усі гравці', height: 36),
                   for (int i = 1; i <= widget.config.boardCount; i++)
                     Tab(text: _isArmWrestling
                         ? (aw_scoring.WeightCategory.fromId(i)?.label ?? widget.config.shortTabLabel(i))
@@ -1706,6 +1711,8 @@ class _CrossTableTabState extends ConsumerState<CrossTableTab>
           child: TabBarView(
             controller: _tabController,
             children: [
+              if (_isArmWrestling)
+                ArmWrestlingAllPlayersTab(tId: widget.tId),
               for (int i = 1; i <= widget.config.boardCount; i++)
                 _buildBoardTab(i),
               if (!_isArmWrestling)

@@ -1,325 +1,611 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../viewmodels/tournament_viewmodel.dart';
 import 'arm_wrestling_providers.dart';
 import 'arm_wrestling_scoring.dart';
 
-/// "Усі гравці" tab: per-category standings with player number, weight,
-/// wins/losses. Mirrors the cycling all-participants pattern.
-class ArmWrestlingAllPlayersTab extends ConsumerWidget {
+/// Flat all-players view — one row per player across every weight category,
+/// modelled on the cycling "Всі учасники" tab.
+class ArmWrestlingAllPlayersTab extends ConsumerStatefulWidget {
   final int tId;
   const ArmWrestlingAllPlayersTab({super.key, required this.tId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(armWrestlingStandingsProvider(tId));
-    return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text('Помилка: $e')),
-      data: (bundle) => _Body(tId: tId, bundle: bundle),
-    );
+  ConsumerState<ArmWrestlingAllPlayersTab> createState() =>
+      _ArmWrestlingAllPlayersTabState();
+}
+
+enum _SortKey { number, name, team, weight, category, place }
+
+class _Row {
+  final int playerId;
+  final String fullName;
+  final String teamName;
+  final int teamId;
+  final int categoryId;
+  final int place;
+  final int wins;
+  final int losses;
+  final int gamesPlayed;
+  final TextEditingController numberC;
+  final TextEditingController weightC;
+  int? savedNumber;
+  String savedWeight;
+  bool saving = false;
+  String? error;
+
+  _Row({
+    required this.playerId,
+    required this.fullName,
+    required this.teamName,
+    required this.teamId,
+    required this.categoryId,
+    required this.place,
+    required this.wins,
+    required this.losses,
+    required this.gamesPlayed,
+    required int? number,
+    required double? weight,
+  })  : numberC = TextEditingController(text: number != null ? '$number' : ''),
+        weightC = TextEditingController(
+            text: weight != null ? weight.toStringAsFixed(1) : ''),
+        savedNumber = number,
+        savedWeight = weight != null ? weight.toStringAsFixed(1) : '';
+
+  int? get parsedNumber {
+    final t = numberC.text.trim();
+    if (t.isEmpty) return null;
+    return int.tryParse(t);
+  }
+
+  double? get parsedWeight {
+    final t = weightC.text.trim().replaceAll(',', '.');
+    if (t.isEmpty) return null;
+    return double.tryParse(t);
+  }
+
+  bool get isDirty {
+    if (parsedNumber != savedNumber) return true;
+    if (weightC.text.trim() != savedWeight) return true;
+    return false;
+  }
+
+  void dispose() {
+    numberC.dispose();
+    weightC.dispose();
   }
 }
 
-class _Body extends ConsumerWidget {
-  final int tId;
-  final ArmWrestlingStandingsBundle bundle;
-  const _Body({required this.tId, required this.bundle});
+class _ArmWrestlingAllPlayersTabState
+    extends ConsumerState<ArmWrestlingAllPlayersTab>
+    with AutomaticKeepAliveClientMixin {
+  List<_Row> _rows = [];
+  bool _loading = true;
+  _SortKey _sortKey = _SortKey.category;
+  bool _sortAsc = true;
+  int? _hoveredRow;
+  ProviderSubscription<AsyncValue<ArmWrestlingStandingsBundle>>? _sub;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasAnyPlayers = bundle.categoryStandings.values.any((l) => l.isNotEmpty);
-    if (!hasAnyPlayers) {
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = ref.listenManual<AsyncValue<ArmWrestlingStandingsBundle>>(
+      armWrestlingStandingsProvider(widget.tId),
+      (_, next) {
+        next.whenData(_rebuildFromBundle);
+      },
+      fireImmediately: true,
+    );
+  }
+
+  @override
+  void dispose() {
+    _sub?.close();
+    for (final r in _rows) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  void _rebuildFromBundle(ArmWrestlingStandingsBundle bundle) {
+    final oldRows = _rows;
+    final rows = <_Row>[];
+    for (final cat in WeightCategory.values) {
+      final standings = bundle.categoryStandings[cat.id] ?? const [];
+      for (final s in standings) {
+        rows.add(_Row(
+          playerId: s.playerId,
+          fullName: s.playerName,
+          teamName: s.teamName,
+          teamId: s.teamId,
+          categoryId: cat.id,
+          place: s.place,
+          wins: s.wins,
+          losses: s.losses,
+          gamesPlayed: s.gamesPlayed,
+          number: s.playerNumber,
+          weight: s.weight ?? bundle.playerWeights[s.playerId],
+        ));
+      }
+    }
+    _sort(rows);
+    setState(() {
+      _rows = rows;
+      _loading = false;
+    });
+    for (final r in oldRows) {
+      r.dispose();
+    }
+  }
+
+  void _sort(List<_Row> rows) {
+    int cmpInt(int? a, int? b) {
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a.compareTo(b);
+    }
+    int cmpStr(String a, String b) {
+      final ae = a.trim().isEmpty;
+      final be = b.trim().isEmpty;
+      if (ae && be) return 0;
+      if (ae) return 1;
+      if (be) return -1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    }
+    rows.sort((a, b) {
+      int r;
+      switch (_sortKey) {
+        case _SortKey.number:
+          r = cmpInt(a.parsedNumber ?? a.savedNumber, b.parsedNumber ?? b.savedNumber);
+          break;
+        case _SortKey.name:
+          r = cmpStr(a.fullName, b.fullName);
+          break;
+        case _SortKey.team:
+          r = cmpStr(a.teamName, b.teamName);
+          break;
+        case _SortKey.weight:
+          r = (a.parsedWeight ?? -1).compareTo(b.parsedWeight ?? -1);
+          break;
+        case _SortKey.category:
+          r = a.categoryId.compareTo(b.categoryId);
+          if (r == 0) r = a.place.compareTo(b.place);
+          break;
+        case _SortKey.place:
+          r = a.place.compareTo(b.place);
+          break;
+      }
+      if (r != 0) return _sortAsc ? r : -r;
+      return a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase());
+    });
+  }
+
+  void _toggleSort(_SortKey key) {
+    setState(() {
+      if (_sortKey == key) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortKey = key;
+        _sortAsc = true;
+      }
+      _sort(_rows);
+    });
+  }
+
+  Future<void> _saveRow(_Row row) async {
+    if (!row.isDirty || row.saving) return;
+    setState(() {
+      row.saving = true;
+      row.error = null;
+    });
+    final svc = ref.read(armWrestlingServiceProvider);
+    final tournamentSvc = ref.read(tournamentServiceProvider);
+    try {
+      // Number
+      if (row.parsedNumber != row.savedNumber) {
+        final n = row.parsedNumber;
+        if (n != null && n > 0) {
+          await tournamentSvc.savePlayerNumber(
+              playerId: row.playerId, tId: widget.tId, number: n);
+        } else if (row.numberC.text.trim().isEmpty) {
+          await tournamentSvc.clearPlayerNumber(
+              playerId: row.playerId, tId: widget.tId);
+        } else {
+          setState(() {
+            row.saving = false;
+            row.error = 'Невірний номер';
+          });
+          return;
+        }
+        row.savedNumber = n;
+      }
+      // Weight + auto-recompute category
+      final weightText = row.weightC.text.trim();
+      if (weightText != row.savedWeight) {
+        final w = row.parsedWeight;
+        if (w != null && w > 0) {
+          await svc.savePlayerWeight(
+              playerId: row.playerId, tId: widget.tId, weight: w);
+          final newCat = _categoryFromWeight(w);
+          if (newCat != row.categoryId) {
+            await svc.setWeightCategory(widget.tId, row.playerId, newCat);
+          }
+          row.savedWeight = w.toStringAsFixed(1);
+          // Refresh bundle (place + category may have changed).
+          ref.invalidate(armWrestlingStandingsProvider(widget.tId));
+        } else if (weightText.isEmpty) {
+          row.savedWeight = '';
+        } else {
+          setState(() {
+            row.saving = false;
+            row.error = 'Невірна вага';
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => row.error = 'Помилка: $e');
+    } finally {
+      if (mounted) setState(() => row.saving = false);
+    }
+  }
+
+  static int _categoryFromWeight(double w) {
+    if (w <= 70) return WeightCategory.under70.id;
+    if (w <= 80) return WeightCategory.under80.id;
+    if (w <= 90) return WeightCategory.under90.id;
+    if (w <= 100) return WeightCategory.under100.id;
+    return WeightCategory.over100.id;
+  }
+
+  Future<void> _setCategory(_Row row, int catId) async {
+    final svc = ref.read(armWrestlingServiceProvider);
+    await svc.setWeightCategory(widget.tId, row.playerId, catId);
+    ref.invalidate(armWrestlingStandingsProvider(widget.tId));
+  }
+
+  // --- layout ---
+
+  static const double _wPlace = 44;
+  static const double _wNumber = 56;
+  static const double _wWeight = 70;
+  static const double _wCategory = 130;
+  static const double _wScore = 50;
+  static const double _wStatus = 28;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_rows.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.fitness_center, size: 48, color: Colors.grey.shade400),
-              const SizedBox(height: 12),
-              Text(
-                'Немає учасників із призначеною ваговою категорією.\n'
-                'Імпортуйте гравців із колонкою «Вага» або призначте категорії вручну.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.fitness_center, size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              'Немає учасників із призначеною ваговою категорією.\n'
+              'Імпортуйте гравців із колонкою «Вага» або призначте категорії вручну.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+          ],
         ),
       );
     }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    return Padding(
+      padding: const EdgeInsets.all(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ..._buildWarnings(context, ref),
-          for (final cat in WeightCategory.values) ...[
-            _buildCategory(context, ref, cat),
-            const SizedBox(height: 12),
-          ],
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildWarnings(BuildContext context, WidgetRef ref) {
-    final out = <Widget>[];
-    for (final entry in bundle.validation.entries) {
-      final v = entry.value;
-      if (v.isValid || v.count == 0) continue;
-      out.add(Card(
-        color: Colors.orange.shade50,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.orange.shade200),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${v.label}: ${v.count} учасник(ів) — менше $minParticipantsForCategory. '
-                  '${entry.key == WeightCategory.over100.id ? 'Категорія не проводиться.' : 'Учасники мають перейти у важчу категорію.'}',
-                  style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
-                ),
-              ),
-              if (entry.key != WeightCategory.over100.id)
-                TextButton(
-                  onPressed: () async {
-                    final svc = ref.read(armWrestlingServiceProvider);
-                    await svc.redistributeCategories(tId);
-                    ref.invalidate(armWrestlingStandingsProvider(tId));
-                  },
-                  child: const Text('Перемістити'),
-                ),
-            ],
+          Text(
+            'Всі учасники (${_rows.length})',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-        ),
-      ));
-      out.add(const SizedBox(height: 8));
-    }
-    return out;
-  }
-
-  Widget _buildCategory(BuildContext context, WidgetRef ref, WeightCategory cat) {
-    final standings = bundle.categoryStandings[cat.id] ?? const <ArmWrestlingStanding>[];
-    final v = bundle.validation[cat.id];
-    final isValid = v?.isValid ?? false;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: isValid ? Colors.grey.shade300 : Colors.red.shade200),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: isValid ? Colors.indigo : Colors.grey.shade400,
-                  child: Text('${cat.id}',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 8),
-                Text(cat.label,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                Text('(${standings.length} учасн.)',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                if (!isValid && standings.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(4),
+          const SizedBox(height: 6),
+          Text(
+            'Редагуйте номер та вагу прямо у таблиці. Зміна ваги автоматично '
+            'оновлює вагову категорію.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: Colors.grey.shade300, width: 1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: _rows.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: Colors.grey.shade200),
+                      itemBuilder: (context, i) => _buildRow(_rows[i], i),
                     ),
-                    child: Text('Не проводиться',
-                        style: TextStyle(fontSize: 11, color: Colors.red.shade700)),
                   ),
                 ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (standings.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text('Немає учасників',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-              )
-            else
-              _StandingsTable(tId: tId, standings: standings, weights: bundle.playerWeights),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StandingsTable extends ConsumerWidget {
-  final int tId;
-  final List<ArmWrestlingStanding> standings;
-  final Map<int, double> weights;
-  const _StandingsTable({required this.tId, required this.standings, required this.weights});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Table(
-      columnWidths: const {
-        0: FixedColumnWidth(36),  // Place
-        1: FixedColumnWidth(48),  // Number
-        2: FlexColumnWidth(3),    // Player
-        3: FlexColumnWidth(2),    // Team
-        4: FixedColumnWidth(70),  // Weight
-        5: FixedColumnWidth(50),  // Wins
-        6: FixedColumnWidth(50),  // Losses
-        7: FixedColumnWidth(50),  // Games
-      },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      children: [
-        TableRow(
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-          ),
-          children: [
-            _headerCell('М'),
-            _headerCell('№', align: TextAlign.center),
-            _headerCell('Учасник'),
-            _headerCell('Команда'),
-            _headerCell('Вага', align: TextAlign.center),
-            _headerCell('П', align: TextAlign.center),
-            _headerCell('Пор', align: TextAlign.center),
-            _headerCell('Ігри', align: TextAlign.center),
-          ],
-        ),
-        for (final s in standings)
-          TableRow(
-            decoration: BoxDecoration(
-              color: s.place <= 3
-                  ? Colors.amber.withOpacity(0.05 * (4 - s.place))
-                  : null,
-            ),
-            children: [
-              _dataCell('${s.place}', fontWeight: FontWeight.bold),
-              _dataCell(
-                s.playerNumber != null ? '${s.playerNumber}' : '—',
-                align: TextAlign.center,
-                color: s.playerNumber != null ? null : Colors.grey.shade400,
               ),
-              _dataCell(s.playerName),
-              _dataCell(s.teamName),
-              GestureDetector(
-                onTap: () =>
-                    _editWeight(context, ref, s.playerId, s.playerName, weights[s.playerId]),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        weights[s.playerId] != null
-                            ? weights[s.playerId]!.toStringAsFixed(1)
-                            : '-',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: weights[s.playerId] != null ? null : Colors.grey.shade400,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(Icons.edit, size: 12, color: Colors.indigo.shade300),
-                    ],
-                  ),
-                ),
-              ),
-              _dataCell('${s.wins}',
-                  align: TextAlign.center,
-                  color: s.wins > 0 ? Colors.green.shade700 : null),
-              _dataCell('${s.losses}',
-                  align: TextAlign.center,
-                  color: s.losses > 0 ? Colors.red.shade700 : null),
-              _dataCell('${s.gamesPlayed}', align: TextAlign.center),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Future<void> _editWeight(BuildContext context, WidgetRef ref, int playerId,
-      String playerName, double? currentWeight) async {
-    final ctrl = TextEditingController(text: currentWeight?.toStringAsFixed(1) ?? '');
-    final result = await showDialog<double?>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Вага\n$playerName', style: const TextStyle(fontSize: 16)),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-          decoration: const InputDecoration(labelText: 'Вага (кг)', border: OutlineInputBorder()),
-          autofocus: true,
-          onSubmitted: (_) {
-            final w = double.tryParse(ctrl.text);
-            if (w != null && w > 0) Navigator.pop(ctx, w);
-          },
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
-          ElevatedButton(
-            onPressed: () {
-              final w = double.tryParse(ctrl.text);
-              if (w != null && w > 0) Navigator.pop(ctx, w);
-            },
-            child: const Text('Зберегти'),
+            ),
           ),
         ],
       ),
     );
-    ctrl.dispose();
-    if (result != null) {
-      final svc = ref.read(armWrestlingServiceProvider);
-      await svc.savePlayerWeight(playerId: playerId, tId: tId, weight: result);
-      ref.invalidate(armWrestlingStandingsProvider(tId));
-    }
   }
 
-  Widget _headerCell(String text, {TextAlign align = TextAlign.left}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-      child: Text(
-        text,
-        textAlign: align,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Colors.grey.shade700,
-        ),
+  Widget _buildHeader() {
+    final st = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w800,
+      color: Colors.grey.shade900,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        border:
+            Border(bottom: BorderSide(color: Colors.grey.shade400, width: 1.5)),
+      ),
+      child: Row(
+        children: [
+          _sortableHeader(
+              width: _wPlace,
+              label: 'М',
+              style: st,
+              key: _SortKey.place,
+              align: TextAlign.center),
+          _sortableHeader(
+              width: _wNumber,
+              label: '№',
+              style: st,
+              key: _SortKey.number,
+              align: TextAlign.center),
+          _sortableHeader(
+              flex: 3, label: 'ПІБ', style: st, key: _SortKey.name),
+          _sortableHeader(
+              flex: 2, label: 'Команда', style: st, key: _SortKey.team),
+          _sortableHeader(
+              width: _wWeight,
+              label: 'Вага',
+              style: st,
+              key: _SortKey.weight,
+              align: TextAlign.center),
+          _sortableHeader(
+              width: _wCategory,
+              label: 'Категорія',
+              style: st,
+              key: _SortKey.category,
+              align: TextAlign.center),
+          SizedBox(
+            width: _wScore,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Text('П', style: st, textAlign: TextAlign.center),
+            ),
+          ),
+          SizedBox(
+            width: _wScore,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+              child: Text('Пор', style: st, textAlign: TextAlign.center),
+            ),
+          ),
+          const SizedBox(width: _wStatus),
+        ],
       ),
     );
   }
 
-  Widget _dataCell(String text,
-      {TextAlign align = TextAlign.left,
-      FontWeight fontWeight = FontWeight.normal,
-      Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-      child: Text(
-        text,
-        textAlign: align,
-        style: TextStyle(fontSize: 13, fontWeight: fontWeight, color: color),
+  Widget _sortableHeader({
+    double? width,
+    int? flex,
+    required String label,
+    required TextStyle style,
+    required _SortKey key,
+    TextAlign align = TextAlign.left,
+  }) {
+    final isActive = _sortKey == key;
+    final content = InkWell(
+      onTap: () => _toggleSort(key),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(
+          mainAxisAlignment: align == TextAlign.center
+              ? MainAxisAlignment.center
+              : MainAxisAlignment.start,
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: isActive
+                    ? style.copyWith(color: Colors.indigo.shade700)
+                    : style,
+                textAlign: align,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isActive) ...[
+              const SizedBox(width: 2),
+              Icon(
+                _sortAsc ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                size: 16,
+                color: Colors.indigo.shade700,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (flex != null) return Expanded(flex: flex, child: content);
+    return SizedBox(width: width, child: content);
+  }
+
+  Widget _buildRow(_Row row, int index) {
+    final isHovered = _hoveredRow == index;
+    final placeColor = row.place == 1
+        ? Colors.amber.shade700
+        : (row.place == 2
+            ? Colors.grey.shade600
+            : (row.place == 3 ? Colors.brown.shade400 : Colors.black87));
+    return Focus(
+      canRequestFocus: false,
+      onFocusChange: (hasFocus) {
+        if (!hasFocus) _saveRow(row);
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hoveredRow = index),
+        onExit: (_) {
+          if (_hoveredRow == index) setState(() => _hoveredRow = null);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          color: isHovered ? Colors.indigo.shade100 : null,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: _wPlace,
+                child: Text(
+                  '${row.place}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, color: placeColor),
+                ),
+              ),
+              SizedBox(
+                width: _wNumber,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: TextField(
+                    controller: row.numberC,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(5),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo.shade700,
+                      fontSize: 14,
+                    ),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(row.fullName,
+                      style: const TextStyle(fontSize: 13),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(row.teamName,
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade700),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ),
+              SizedBox(
+                width: _wWeight,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: TextField(
+                    controller: row.weightC,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: _wCategory,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    isDense: true,
+                    isExpanded: true,
+                    value: row.categoryId,
+                    items: WeightCategory.values
+                        .map((c) => DropdownMenuItem(
+                              value: c.id,
+                              child: Text(c.label,
+                                  style: const TextStyle(fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null || v == row.categoryId) return;
+                      _setCategory(row, v);
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: _wScore,
+                child: Text('${row.wins}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: row.wins > 0 ? Colors.green.shade700 : null)),
+              ),
+              SizedBox(
+                width: _wScore,
+                child: Text('${row.losses}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: row.losses > 0 ? Colors.red.shade700 : null)),
+              ),
+              SizedBox(
+                width: _wStatus,
+                child: row.saving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : row.error != null
+                        ? Tooltip(
+                            message: row.error!,
+                            child: Icon(Icons.error_outline,
+                                size: 18, color: Colors.red.shade400),
+                          )
+                        : const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

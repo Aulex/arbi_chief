@@ -11,7 +11,6 @@ import '../sports/swimming/swimming_team_standings_tab.dart';
 import '../sports/volleyball/volleyball_cross_table_tab.dart';
 import '../sports/volleyball/volleyball_group_management_tab.dart';
 import '../sports/arm_wrestling/arm_wrestling_team_standings_tab.dart';
-import '../sports/arm_wrestling/arm_wrestling_all_players_tab.dart';
 import '../sports/futsal/futsal_cross_table_tab.dart';
 import '../sports/futsal/futsal_group_management_tab.dart';
 import '../sports/basketball/basketball_cross_table_tab.dart';
@@ -67,7 +66,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
 
   int get _currentTabCount {
     if (_isSwimming) return 5;
-    if (_isArmWrestling) return 6;
+    if (_isArmWrestling) return 5;
     if (widget.tournament.t_type == 10) return 5; // Athletics
     if (widget.tournament.t_type == 12) return 5; // Cycling
     if (widget.tournament.t_type == 8) return 5; // Powerlifting
@@ -219,10 +218,9 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (_isArmWrestling) {
-      tabCount = 6;
+      tabCount = 5;
       tabs = const [
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Таблиця')])),
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.list_alt_outlined, size: 18), SizedBox(width: 6), Text('Усі гравці')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
@@ -230,7 +228,6 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
       ];
       tabViews = [
         CrossTableTab(tId: widget.tournament.t_id!, tournamentName: widget.tournament.t_name, config: _sportConfig, tType: widget.tournament.t_type),
-        ArmWrestlingAllPlayersTab(tId: widget.tournament.t_id!),
         ArmWrestlingTeamStandingsTab(tId: widget.tournament.t_id!),
         TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),
