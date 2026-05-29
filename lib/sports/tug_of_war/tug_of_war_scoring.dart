@@ -7,12 +7,17 @@
 ///   2nd no-show or unsporting conduct → team is removed; all its results
 ///   are annulled and it gets no place in the final table.
 ///
-/// Tie-breakers: head-to-head, then smaller total team weight.
+/// Tie-breakers (in order): result in head-to-head meetings among the tied
+/// teams, then smaller total team weight.
 ///
 /// Match results are stored in the existing `event_result` text column using
 /// these encodings:
 ///   "1:0" / "0:1"  – normal win/loss
 ///   "W:N" / "N:W"  – win by opponent no-show (N = no-show side)
+
+/// Number of no-shows that, per the regulation, mandates removal from the
+/// tournament (all results annulled, no final place).
+const int kNoShowRemovalThreshold = 2;
 
 class TugOfWarStanding {
   final int teamId;
@@ -38,6 +43,12 @@ class TugOfWarStanding {
     this.isRemoved = false,
     this.rank = 0,
   });
+
+  /// True when the team has reached the no-show count that the regulation says
+  /// requires removal from the tournament. Surfaced in the UI as a reminder;
+  /// removal itself stays a deliberate arbiter action.
+  bool get mustBeRemovedForNoShows =>
+      !isRemoved && noShows >= kNoShowRemovalThreshold;
 }
 
 ({int aPts, int bPts, bool aWin, bool bWin, bool aNoShow, bool bNoShow})? _decode(String detail) {
@@ -108,53 +119,75 @@ List<TugOfWarStanding> calculateStandings({
     }
   }
 
-  final result = standings.values.toList();
+  final all = standings.values.toList();
+  final active = all.where((s) => !s.isRemoved).toList();
+  final removed = all.where((s) => s.isRemoved).toList();
 
-  result.sort((a, b) {
-    if (a.isRemoved != b.isRemoved) return a.isRemoved ? 1 : -1;
-    final ptsCmp = b.matchPoints.compareTo(a.matchPoints);
-    if (ptsCmp != 0) return ptsCmp;
+  // Order active teams by points, then resolve equal-point groups using a
+  // head-to-head mini-table (transitive, correct for 3+ way ties), then by
+  // lower total weight, then name.
+  active.sort((a, b) => b.matchPoints.compareTo(a.matchPoints));
 
-    final h2h = _getH2HPoints(a, b, games);
-    if (h2h != 0) return -h2h;
-
-    if (a.teamWeight != b.teamWeight) {
-      if (a.teamWeight == null) return 1;
-      if (b.teamWeight == null) return -1;
-      return a.teamWeight!.compareTo(b.teamWeight!);
+  final ordered = <TugOfWarStanding>[];
+  int i = 0;
+  while (i < active.length) {
+    int j = i;
+    while (j < active.length && active[j].matchPoints == active[i].matchPoints) {
+      j++;
     }
-
-    return a.teamName.compareTo(b.teamName);
-  });
-
-  for (int i = 0; i < result.length; i++) {
-    if (result[i].isRemoved) {
-      result[i].rank = 0;
-    } else {
-      result[i].rank = i + 1;
+    final group = active.sublist(i, j);
+    if (group.length > 1) {
+      final h2h = _h2hPointsWithin(group, games);
+      group.sort((a, b) {
+        final ha = h2h[a.teamId] ?? 0;
+        final hb = h2h[b.teamId] ?? 0;
+        if (ha != hb) return hb.compareTo(ha);
+        if (a.teamWeight != b.teamWeight) {
+          if (a.teamWeight == null) return 1;
+          if (b.teamWeight == null) return -1;
+          return a.teamWeight!.compareTo(b.teamWeight!);
+        }
+        return a.teamName.compareTo(b.teamName);
+      });
     }
+    ordered.addAll(group);
+    i = j;
+  }
+
+  removed.sort((a, b) => a.teamName.compareTo(b.teamName));
+
+  final result = [...ordered, ...removed];
+  for (int k = 0; k < result.length; k++) {
+    result[k].rank = result[k].isRemoved ? 0 : k + 1;
   }
 
   return result;
 }
 
-int _getH2HPoints(TugOfWarStanding a, TugOfWarStanding b, Map<(int, int), String> games) {
-  if (a.entityId == null || b.entityId == null) return 0;
-  final ab = games[(a.entityId!, b.entityId!)];
-  final ba = games[(b.entityId!, a.entityId!)];
+/// Head-to-head points each team earned in games played *only against other
+/// members of the tied group*. Each pair is counted once.
+Map<int, int> _h2hPointsWithin(
+  List<TugOfWarStanding> group,
+  Map<(int, int), String> games,
+) {
+  final entityToTeam = <int, int>{
+    for (final s in group)
+      if (s.entityId != null) s.entityId!: s.teamId,
+  };
+  final pts = <int, int>{for (final s in group) s.teamId: 0};
+  final seen = <(int, int)>{};
 
-  int aPts = 0;
-  int bPts = 0;
+  for (final entry in games.entries) {
+    final (a, b) = entry.key;
+    if (!entityToTeam.containsKey(a) || !entityToTeam.containsKey(b)) continue;
+    final key = a < b ? (a, b) : (b, a);
+    if (seen.contains(key)) continue;
+    seen.add(key);
 
-  void add(String? detail, bool isAB) {
-    if (detail == null) return;
-    final r = _decode(detail);
-    if (r == null) return;
-    if (isAB) { aPts += r.aPts; bPts += r.bPts; }
-    else { aPts += r.bPts; bPts += r.aPts; }
+    final r = _decode(entry.value);
+    if (r == null) continue;
+    pts[entityToTeam[a]!] = pts[entityToTeam[a]!]! + r.aPts;
+    pts[entityToTeam[b]!] = pts[entityToTeam[b]!]! + r.bPts;
   }
-
-  add(ab, true);
-  add(ba, false);
-  return aPts - bPts;
+  return pts;
 }

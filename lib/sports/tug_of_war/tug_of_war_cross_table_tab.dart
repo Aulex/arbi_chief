@@ -102,7 +102,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
                 TableRow(decoration: BoxDecoration(color: Colors.grey.shade100), children: [_hc('#'), _hc('Команда'), _hc('Вага, кг'), for (int j = 0; j < n; j++) _hc('${_teams[j].teamNumber ?? j + 1}'), _hc('О'), _hc('В'), Container(height: 36, decoration: BoxDecoration(color: Colors.black, border: Border.all(color: Colors.black, width: 0.5))), _hc('Команда'), _hc('Очки'), _hc('Місце')]),
                 for (int i = 0; i < n; i++) TableRow(decoration: BoxDecoration(color: _removedTeams.contains(_teams[i].teamId) ? Colors.red.shade50 : (_hoveredRow == i ? Colors.indigo.shade50 : null)), children: [
                   _dc('${_teams[i].teamNumber ?? i + 1}', bold: true),
-                  _teamNameCell(_teams[i]),
+                  _teamNameCell(_teams[i], flagNoShow: standingsByTeam[_teams[i].teamId]?.mustBeRemovedForNoShows ?? false),
                   _weightCell(_teams[i].teamId),
                   for (int j = 0; j < n; j++) _gc(i, j),
                   _dc('${standingsByTeam[_teams[i].teamId]?.matchPoints ?? 0}', bold: true),
@@ -220,7 +220,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
   void _confirmClear() { showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('Очистити результати?'), content: const Text('Видалити всі результати поєдинків?'), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red), onPressed: () { Navigator.pop(ctx); _clearAll(); }, child: const Text('Очистити', style: TextStyle(color: Colors.white)))])); }
   Future<void> _clearAll() async { final svc = ref.read(tugOfWarServiceProvider); for (final id in _games.values.map((g) => g.eventId).toSet()) { await svc.deleteTeamGame(id); } await _loadData(); }
 
-  Widget _teamNameCell(({int teamId, String teamName, int? teamNumber, int? entityId}) t) {
+  Widget _teamNameCell(({int teamId, String teamName, int? teamNumber, int? entityId}) t, {bool flagNoShow = false}) {
     final removed = _removedTeams.contains(t.teamId);
     return InkWell(
       onTap: () => _showTeamMenu(t),
@@ -228,7 +228,8 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
         height: 36, alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(children: [
-          if (removed) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.block, size: 14, color: Colors.red.shade700)),
+          if (removed) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.block, size: 14, color: Colors.red.shade700))
+          else if (flagNoShow) Padding(padding: const EdgeInsets.only(right: 4), child: Tooltip(message: 'Друга неявка — за правилами команду слід зняти з турніру', child: Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade800))),
           Expanded(child: Text(t.teamName, style: TextStyle(
             fontSize: 12,
             decoration: removed ? TextDecoration.lineThrough : null,
