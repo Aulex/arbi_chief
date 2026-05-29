@@ -153,6 +153,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
       onExit: clickable ? (_) => setState(() { _hoveredRow = null; _hoveredCol = null; }) : null,
       cursor: clickable ? SystemMouseCursors.click : SystemMouseCursors.basic,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: clickable ? () => _showResultDialog(tA, tB, game) : null,
         child: Container(height: 36, alignment: Alignment.center,
           color: bg ?? (_hoveredCol == j && _hoveredRow == i ? Colors.indigo.shade50 : null),
@@ -268,6 +269,7 @@ class _TugOfWarCrossTableTabState extends ConsumerState<TugOfWarCrossTableTab> {
     final w = _teamWeights[teamId];
     final over = w != null && w > _maxTeamWeight;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => _editWeight(teamId, w),
       child: Container(
         height: 36, alignment: Alignment.center,
