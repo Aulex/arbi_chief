@@ -55,7 +55,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 19,
+      version: 20,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -405,6 +405,16 @@ class DatabaseService {
             {'attr_id': 24},
             where: 'attr_id = 18',
           );
+        }
+        if (oldVersion < 20) {
+          // Жереб (lot / start order) for powerlifting (player-team level).
+          await db.insert('CMP_ATTR', {
+            'attr_id': 25,
+            'attr_name': 'Жереб',
+            'attr_data_type': 'INTEGER',
+            'attr_entity_type': 2,
+            'attr_t_type': 8,
+          });
         }
       },
       onCreate: (db, version) async {
@@ -859,6 +869,14 @@ class DatabaseService {
           'attr_data_type': 'REAL',
           'attr_entity_type': 2,
           'attr_t_type': 13,
+        });
+        // Жереб (lot / start order) for powerlifting (NEW in v20)
+        await db.insert('CMP_ATTR', {
+          'attr_id': 25,
+          'attr_name': 'Жереб',
+          'attr_data_type': 'INTEGER',
+          'attr_entity_type': 2,
+          'attr_t_type': 8,
         });
 
         await db.insert('CMP_ATTR_DICT', {

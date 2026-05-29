@@ -21,6 +21,7 @@ import '../sports/tug_of_war/tug_of_war_cross_table_tab.dart';
 import '../sports/athletics/athletics_results_tab.dart';
 import '../sports/athletics/athletics_team_standings_tab.dart';
 import '../sports/powerlifting/powerlifting_results_tab.dart';
+import '../sports/powerlifting/powerlifting_individual_standings_tab.dart';
 import '../sports/powerlifting/powerlifting_team_standings_tab.dart';
 import '../sports/cycling/cycling_results_tab.dart';
 import '../sports/cycling/cycling_team_standings_tab.dart';
@@ -69,7 +70,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
     if (_isArmWrestling) return 5;
     if (widget.tournament.t_type == 10) return 5; // Athletics
     if (widget.tournament.t_type == 12) return 5; // Cycling
-    if (widget.tournament.t_type == 8) return 5; // Powerlifting
+    if (widget.tournament.t_type == 8) return 6; // Powerlifting
     if (widget.tournament.t_type == 13) return 5; // Kettlebell
     if (_isVolleyball) return _volleyballTeamCount >= 9 ? 5 : 4;
     if (_isBasketball) return _basketballTeamCount >= 9 ? 5 : 4;
@@ -274,9 +275,10 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
         TournamentAddScreen(tournament: widget.tournament, isEditMode: true),
       ];
     } else if (widget.tournament.t_type == 8) { // Powerlifting
-      tabCount = 5;
+      tabCount = 6;
       tabs = const [
-        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.pool_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.fitness_center_outlined, size: 18), SizedBox(width: 6), Text('Результати')])),
+        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.emoji_events_outlined, size: 18), SizedBox(width: 6), Text('Особистий залік')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.leaderboard_outlined, size: 18), SizedBox(width: 6), Text('Командний залік')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.people_outline, size: 18), SizedBox(width: 6), Text('Гравці')])),
         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.groups_outlined, size: 18), SizedBox(width: 6), Text('Команди')])),
@@ -284,6 +286,7 @@ class _TournamentEditScreenState extends ConsumerState<TournamentEditScreen>
       ];
       tabViews = [
         PowerliftingResultsTab(tId: widget.tournament.t_id!),
+        PowerliftingIndividualStandingsTab(tId: widget.tournament.t_id!),
         PowerliftingTeamStandingsTab(tId: widget.tournament.t_id!),
         TournamentPlayersTab(tId: widget.tournament.t_id!, tType: widget.tournament.t_type),
         TournamentTeamsTab(tournament: widget.tournament, config: _sportConfig),

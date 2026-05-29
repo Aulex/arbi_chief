@@ -1,160 +1,355 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../viewmodels/player_viewmodel.dart';
-import '../../viewmodels/team_viewmodel.dart';
+import 'powerlifting_data.dart';
 import 'powerlifting_providers.dart';
+import 'powerlifting_scoring.dart';
+import 'powerlifting_service.dart';
 
 class PowerliftingResultsTab extends ConsumerStatefulWidget {
   final int tId;
   const PowerliftingResultsTab({super.key, required this.tId});
 
   @override
-  ConsumerState<PowerliftingResultsTab> createState() => _PowerliftingResultsTabState();
+  ConsumerState<PowerliftingResultsTab> createState() =>
+      _PowerliftingResultsTabState();
 }
 
-class _PowerliftingResultsTabState extends ConsumerState<PowerliftingResultsTab> {
+class _PowerliftingResultsTabState
+    extends ConsumerState<PowerliftingResultsTab> {
   bool _loading = true;
-  List<({int playerId, String playerName, int teamId, String teamName})> _players = [];
-  Map<int, int> _places = {};
-  Map<int, String> _categories = {};
-  Map<int, double> _weights = {};
+  List<PowerliftingAthlete> _athletes = [];
+  Map<int, Map<String, ({double kg, bool good})>> _attempts = {};
   int? _hoveredRow;
 
   @override
-  void initState() { super.initState(); _loadData(); }
-
-  Future<void> _loadData() async {
-    final playerSvc = ref.read(playerServiceProvider);
-    final teamSvc = ref.read(teamServiceProvider);
-    final plSvc = ref.read(powerliftingServiceProvider);
-
-    final playerTeamsMap = await teamSvc.getPlayerTeamsMap(widget.tId);
-    final allPlayers = await playerSvc.getAllPlayers();
-
-    final playersList = <({int playerId, String playerName, int teamId, String teamName})>[];
-    for (final entry in playerTeamsMap.entries) {
-      final pId = entry.key;
-      final team = entry.value;
-      final pInfo = allPlayers.where((p) => p.player_id == pId).firstOrNull;
-      if (pInfo != null) {
-        final name = '${pInfo.player_surname ?? ''} ${pInfo.player_name ?? ''} ${pInfo.player_lastname ?? ''}'.trim();
-        playersList.add((playerId: pId, playerName: name, teamId: team.team_id!, teamName: team.team_name));
-      }
-    }
-
-    final places = await plSvc.getPlayerPlaces(widget.tId);
-    final categories = await plSvc.getPlayerCategories(widget.tId);
-    final weights = await plSvc.getPlayerWeights(widget.tId);
-    setState(() { _players = playersList; _places = places; _categories = categories; _weights = weights; _loading = false; });
+  void initState() {
+    super.initState();
+    _loadData();
   }
 
-  Future<void> _editResult(int playerId, int teamId, String playerName, int? currentPlace, String? currentCategory, double? currentWeight) async {
-    final placeCtrl = TextEditingController(text: currentPlace?.toString() ?? '');
-    final catCtrl = TextEditingController(text: currentCategory ?? '');
-    final weightCtrl = TextEditingController(text: currentWeight?.toStringAsFixed(1) ?? '');
-    final existingCategories = _categories.values.toSet().toList()..sort();
+  Future<void> _loadData() async {
+    final plSvc = ref.read(powerliftingServiceProvider);
+    final athletes = await loadPowerliftingAthletesW(ref, widget.tId);
+    final attempts = await plSvc.getAttempts(widget.tId);
+    if (!mounted) return;
+    setState(() {
+      _athletes = athletes;
+      _attempts = attempts;
+      _loading = false;
+    });
+  }
 
-    final result = await showDialog<({int place, String category, double? weight})?>(
+  Future<void> _editResult(PowerliftingAthlete a) async {
+    final attempts = _attempts[a.playerId] ?? {};
+    final catCtrl = ValueNotifier<String?>(
+        kPowerliftingCategories.contains(a.category) ? a.category : null);
+    final weightCtrl = TextEditingController(
+        text: a.bodyWeight > 0 ? a.bodyWeight.toStringAsFixed(1) : '');
+    final lotCtrl =
+        TextEditingController(text: a.lot > 0 ? a.lot.toString() : '');
+
+    final kgCtrls = <String, TextEditingController>{};
+    final goodFlags = <String, bool>{};
+    for (final key in PowerliftingService.allAttemptKeys) {
+      final at = attempts[key];
+      kgCtrls[key] = TextEditingController(
+          text: at != null ? _fmt(at.kg) : '');
+      goodFlags[key] = at?.good ?? true;
+    }
+
+    Widget liftSection(String title, List<String> keys) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 4),
+          child: Text(title,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        ...keys.asMap().entries.map((e) {
+          final key = e.value;
+          return StatefulBuilder(builder: (ctx, setRow) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                SizedBox(
+                    width: 70,
+                    child: Text('Підхід ${e.key + 1}',
+                        style: const TextStyle(fontSize: 13))),
+                SizedBox(
+                  width: 90,
+                  child: TextField(
+                    controller: kgCtrls[key],
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'кг',
+                        border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ChoiceChip(
+                  label: const Text('✓'),
+                  selected: goodFlags[key]!,
+                  selectedColor: Colors.green.shade200,
+                  onSelected: (_) => setRow(() => goodFlags[key] = true),
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('✗'),
+                  selected: !goodFlags[key]!,
+                  selectedColor: Colors.red.shade200,
+                  onSelected: (_) => setRow(() => goodFlags[key] = false),
+                ),
+              ]),
+            );
+          });
+        }),
+      ]);
+    }
+
+    final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Результат\n$playerName', style: const TextStyle(fontSize: 16)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: placeCtrl, keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(labelText: 'Зайняте місце (1, 2, 3...)', border: OutlineInputBorder()), autofocus: true),
-          const SizedBox(height: 12),
-          Autocomplete<String>(
-            initialValue: catCtrl.value,
-            optionsBuilder: (v) => v.text.isEmpty ? existingCategories : existingCategories.where((c) => c.toLowerCase().contains(v.text.toLowerCase())),
-            fieldViewBuilder: (ctx, ctrl, focusNode, onSubmit) {
-              ctrl.text = catCtrl.text;
-              return TextField(controller: ctrl, focusNode: focusNode,
-                decoration: const InputDecoration(labelText: 'Вагова категорія', hintText: 'напр. до 75 кг', border: OutlineInputBorder()),
-                onChanged: (v) => catCtrl.text = v);
-            },
-            onSelected: (v) => catCtrl.text = v,
+        title: Text(a.playerName, style: const TextStyle(fontSize: 16)),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              ValueListenableBuilder<String?>(
+                valueListenable: catCtrl,
+                builder: (ctx, value, _) => DropdownButtonFormField<String>(
+                  value: value,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Вагова категорія',
+                      border: OutlineInputBorder()),
+                  items: kPowerliftingCategories
+                      .map((c) =>
+                          DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => catCtrl.value = v,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: weightCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Власна вага (кг)',
+                        border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 110,
+                  child: TextField(
+                    controller: lotCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                        labelText: 'Жереб', border: OutlineInputBorder()),
+                  ),
+                ),
+              ]),
+              liftSection('Присідання', PowerliftingService.squatKeys),
+              liftSection('Жим лежачи', PowerliftingService.benchKeys),
+              liftSection('Станова тяга', PowerliftingService.deadliftKeys),
+            ]),
           ),
-          const SizedBox(height: 12),
-          TextField(controller: weightCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Вага спортсмена (кг)', border: OutlineInputBorder())),
-        ]),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Скасувати')),
-          ElevatedButton(onPressed: () {
-            final place = int.tryParse(placeCtrl.text);
-            if (place != null) Navigator.pop(ctx, (place: place, category: catCtrl.text.trim(), weight: double.tryParse(weightCtrl.text)));
-          }, child: const Text('Зберегти')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Скасувати')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Зберегти')),
         ],
       ),
     );
 
-    placeCtrl.dispose(); catCtrl.dispose(); weightCtrl.dispose();
-    if (result != null) {
+    if (saved == true) {
       final svc = ref.read(powerliftingServiceProvider);
-      await svc.savePlayerPlace(tId: widget.tId, playerId: playerId, teamId: teamId, place: result.place);
-      if (result.category.isNotEmpty) {
-        await svc.savePlayerCategory(playerId: playerId, tId: widget.tId, category: result.category);
+      if (catCtrl.value != null) {
+        await svc.savePlayerCategory(
+            playerId: a.playerId, tId: widget.tId, category: catCtrl.value!);
       }
-      if (result.weight != null) {
-        await svc.savePlayerWeight(playerId: playerId, tId: widget.tId, weight: result.weight!);
+      final weight = double.tryParse(weightCtrl.text.replaceAll(',', '.'));
+      if (weight != null) {
+        await svc.savePlayerWeight(
+            playerId: a.playerId, tId: widget.tId, weight: weight);
+      }
+      final lot = int.tryParse(lotCtrl.text);
+      if (lot != null) {
+        await svc.savePlayerLot(
+            playerId: a.playerId, tId: widget.tId, lot: lot);
+      }
+      for (final key in PowerliftingService.allAttemptKeys) {
+        final kg = double.tryParse(kgCtrls[key]!.text.replaceAll(',', '.')) ?? 0;
+        await svc.saveAttempt(
+            tId: widget.tId,
+            playerId: a.playerId,
+            attemptKey: key,
+            kg: kg,
+            good: goodFlags[key]!);
       }
       await _loadData();
     }
+
+    catCtrl.dispose();
+    weightCtrl.dispose();
+    lotCtrl.dispose();
+    for (final c in kgCtrls.values) {
+      c.dispose();
+    }
   }
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_players.isEmpty) return const Center(child: Text('Додайте гравців для введення результатів'));
+    if (_athletes.isEmpty) {
+      return const Center(
+          child: Text('Додайте гравців для введення результатів'));
+    }
 
-    final sortedPlayers = List.of(_players)..sort((a, b) {
-      final pA = _places[a.playerId], pB = _places[b.playerId];
-      if (pA != null && pB != null) return pA.compareTo(pB);
-      if (pA != null) return -1;
-      if (pB != null) return 1;
-      return a.playerName.compareTo(b.playerName);
-    });
+    final sorted = List.of(_athletes)
+      ..sort((a, b) {
+        final catA = kPowerliftingCategories.indexOf(a.category);
+        final catB = kPowerliftingCategories.indexOf(b.category);
+        if (catA != catB) return (catA == -1 ? 99 : catA).compareTo(catB == -1 ? 99 : catB);
+        return b.total.compareTo(a.total);
+      });
 
-    return Card(elevation: 0, shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey.shade300, width: 1), borderRadius: BorderRadius.circular(8)),
-      child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Text('Особисті результати', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const Spacer(), IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+          side: BorderSide(color: Colors.grey.shade300, width: 1),
+          borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Text('Особисті результати',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          ]),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView.separated(
+              itemCount: sorted.length + 1,
+              separatorBuilder: (ctx, i) =>
+                  Divider(height: 1, color: Colors.grey.shade200),
+              itemBuilder: (ctx, i) {
+                if (i == 0) return _buildHeader();
+                final a = sorted[i - 1];
+                return MouseRegion(
+                  onEnter: (_) => setState(() => _hoveredRow = i),
+                  onExit: (_) => setState(() => _hoveredRow = null),
+                  child: InkWell(
+                    onTap: () => _editResult(a),
+                    child: Container(
+                      color: _hoveredRow == i ? Colors.indigo.shade50 : null,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      child: Row(children: [
+                        Expanded(flex: 3, child: Text(a.playerName)),
+                        Expanded(
+                            flex: 2,
+                            child: Text(a.teamName,
+                                style: TextStyle(color: Colors.grey.shade700))),
+                        SizedBox(
+                            width: 80,
+                            child: Text(a.category,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600))),
+                        SizedBox(
+                            width: 48,
+                            child: Text(a.bodyWeight > 0 ? _fmt(a.bodyWeight) : '',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 12))),
+                        _liftCell(a.bestSquat),
+                        _liftCell(a.bestBench),
+                        _liftCell(a.bestDeadlift),
+                        SizedBox(
+                            width: 60,
+                            child: Text(
+                                a.squatValid ? _fmt(a.total) : '—',
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold))),
+                        const SizedBox(width: 8),
+                        Icon(Icons.edit, size: 16, color: Colors.indigo.shade300),
+                      ]),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ]),
-        const SizedBox(height: 12),
-        Expanded(child: ListView.separated(
-          itemCount: sortedPlayers.length + 1,
-          separatorBuilder: (ctx, i) => Divider(height: 1, color: Colors.grey.shade200),
-          itemBuilder: (ctx, i) {
-            if (i == 0) return _buildHeader();
-            final p = sortedPlayers[i - 1];
-            final place = _places[p.playerId];
-            final category = _categories[p.playerId];
-            final weight = _weights[p.playerId];
-            return MouseRegion(
-              onEnter: (_) => setState(() => _hoveredRow = i), onExit: (_) => setState(() => _hoveredRow = null),
-              child: InkWell(
-                onTap: () => _editResult(p.playerId, p.teamId, p.playerName, place, category, weight),
-                child: Container(color: _hoveredRow == i ? Colors.indigo.shade50 : null, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(children: [
-                    SizedBox(width: 50, child: Text(place?.toString() ?? '-', style: TextStyle(fontWeight: place != null ? FontWeight.bold : FontWeight.normal, fontSize: 16))),
-                    Expanded(flex: 2, child: Text(p.playerName)),
-                    Expanded(flex: 1, child: Text(category ?? '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
-                    SizedBox(width: 60, child: Text(weight != null ? '${weight.toStringAsFixed(1)}' : '', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), textAlign: TextAlign.center)),
-                    Expanded(flex: 2, child: Text(p.teamName, style: TextStyle(color: Colors.grey.shade700))),
-                    Icon(Icons.edit, size: 16, color: Colors.indigo.shade300),
-                  ]))));
-          },
-        )),
-      ])));
+      ),
+    );
   }
 
-  Widget _buildHeader() => Container(color: Colors.grey.shade100, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    child: const Row(children: [SizedBox(width: 50, child: Text('Місце', style: TextStyle(fontWeight: FontWeight.bold))),
-      Expanded(flex: 2, child: Text('Гравець', style: TextStyle(fontWeight: FontWeight.bold))),
-      Expanded(flex: 1, child: Text('Категорія', style: TextStyle(fontWeight: FontWeight.bold))),
-      SizedBox(width: 60, child: Text('Вага', style: TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-      Expanded(flex: 2, child: Text('Команда', style: TextStyle(fontWeight: FontWeight.bold))), SizedBox(width: 16)]));
+  Widget _liftCell(double v) => SizedBox(
+      width: 46,
+      child: Text(v > 0 ? _fmt(v) : '0',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 12,
+              color: v > 0 ? Colors.black87 : Colors.red.shade400)));
+
+  Widget _buildHeader() => Container(
+        color: Colors.grey.shade100,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: const Row(children: [
+          Expanded(
+              flex: 3,
+              child: Text('Гравець',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(
+              flex: 2,
+              child: Text('Команда',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+              width: 80,
+              child: Text('Категорія',
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+              width: 48,
+              child: Text('Вага',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+              width: 46,
+              child: Text('Прис',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+              width: 46,
+              child: Text('Жим',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+              width: 46,
+              child: Text('Тяга',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(
+              width: 60,
+              child: Text('Сума',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 24),
+        ]),
+      );
 }
